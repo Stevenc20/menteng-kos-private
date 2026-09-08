@@ -1,0 +1,104 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Models\Property;
+use Inertia\Inertia;
+
+Route::get('/', function () {
+    $properties = Property::whereIn('status', ['AVAILABLE', 'UPCOMING_AVAILABLE', 'OCCUPIED'])
+        ->get()
+        ->map(function ($property) {
+            // For public facing, we hide details if OCCUPIED.
+            if ($property->status === 'OCCUPIED') {
+                return [
+                    'id' => $property->id,
+                    'name' => $property->name,
+                    'type' => $property->type,
+                    'status' => 'OCCUPIED',
+                ];
+            }
+            return $property;
+        });
+
+    return Inertia::render('welcome', [
+        'properties' => $properties
+    ]);
+})->name('home');
+
+// Auth Routes (Google OAuth)
+Route::get('/auth/google', [\App\Http\Controllers\AuthController::class, 'redirectToGoogle'])->name('auth.google');
+Route::get('/auth/google/callback', [\App\Http\Controllers\AuthController::class, 'handleGoogleCallback']);
+Route::post('/logout', [\App\Http\Controllers\AuthController::class, 'logout'])->name('logout');
+
+Route::get('/dashboard', function () {
+    $user = \Illuminate\Support\Facades\Auth::user();
+    if ($user && $user->role === 'ADMIN') {
+        return redirect()->route('admin.dashboard');
+    }
+    return redirect()->route('tenant.dashboard');
+})->middleware('auth')->name('dashboard');
+
+// Admin Routes
+Route::middleware(['auth'])->prefix('admin')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('admin.dashboard');
+    
+    // Properties
+    Route::get('/properties', [\App\Http\Controllers\AdminController::class, 'properties'])->name('admin.properties');
+    Route::post('/properties', [\App\Http\Controllers\AdminController::class, 'storeProperty'])->name('admin.properties.store');
+    
+    // Tenants & Invitations
+    Route::get('/tenants', [\App\Http\Controllers\AdminController::class, 'tenants'])->name('admin.tenants');
+    Route::post('/tenants/invite', [\App\Http\Controllers\AdminController::class, 'inviteTenant'])->name('admin.tenants.invite');
+
+    // Tenant Approvals & Onboarding (Phase 5)
+    Route::get('/approvals/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.approvals.show');
+    Route::post('/approvals/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveData'])->name('admin.approvals.approve');
+    Route::post('/approvals/{id}/move-in-doc', [\App\Http\Controllers\AdminController::class, 'storeMoveInDoc'])->name('admin.approvals.moveInDoc');
+    Route::post('/approvals/{id}/water-meter', [\App\Http\Controllers\AdminController::class, 'storeStartWaterMeter'])->name('admin.approvals.waterMeter');
+
+    // Admin Operations (Phase 6)
+    Route::post('/payments/{billingId}/verify', [\App\Http\Controllers\PaymentController::class, 'verifyPayment'])->name('admin.payments.verify');
+    Route::post('/tenants/{tenancyId}/water-meter', [\App\Http\Controllers\WaterMeterController::class, 'store'])->name('admin.waterMeter.store');
+
+    // Move Out & Archiving
+    Route::get('/move-out/{tenancyId}', [\App\Http\Controllers\MoveOutController::class, 'show'])->name('admin.moveOut.show');
+    Route::post('/move-out/{tenancyId}/doc', [\App\Http\Controllers\MoveOutController::class, 'storeDocumentation'])->name('admin.moveOut.storeDoc');
+    Route::post('/move-out/{tenancyId}/finalize', [\App\Http\Controllers\MoveOutController::class, 'finalize'])->name('admin.moveOut.finalize');
+});
+
+// Tenant Routes
+Route::middleware(['auth'])->prefix('tenant')->group(function () {
+    // Onboarding Wizard
+    Route::get('/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('tenant.onboarding');
+    Route::post('/onboarding/info', [\App\Http\Controllers\OnboardingController::class, 'storeInfo'])->name('tenant.onboarding.info');
+    Route::post('/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('tenant.onboarding.agreement');
+    
+    // Tenant Dashboard (Active)
+    Route::get('/dashboard', function () {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $tenancy = \App\Models\Tenancy::with('property')->where('user_id', $user->id)->first();
+        
+        if (!$tenancy || !in_array($tenancy->status, ['ACTIVE', 'NOT_CONTINUE', 'SUSPENDED'])) {
+            return redirect('/tenant/onboarding'); // Redirect to onboarding if not active
+        }
+
+        // Fetch Next Payment (Active Billing)
+        $nextBilling = \App\Models\Billing::where('tenancy_id', $tenancy->id)
+                            ->where('billing_type', 'RENT')
+                            ->orderBy('due_date', 'asc')
+                            ->first();
+
+        return Inertia\Inertia::render('Tenant/Dashboard', [
+            'tenancy' => $tenancy,
+            'nextBilling' => $nextBilling
+        ]);
+    })->name('tenant.dashboard');
+
+    // Continuation Logic (H-3)
+    Route::post('/continuation', [\App\Http\Controllers\ContinuationController::class, 'submitDecision'])->name('tenant.continuation.submit');
+
+    // Tenant Payment Proof Submission (Phase 6)
+    Route::post('/payments/{billingId}/proof', [\App\Http\Controllers\PaymentController::class, 'submitProof'])->name('tenant.payments.proof');
+});
+
+require __DIR__.'/settings.php';
