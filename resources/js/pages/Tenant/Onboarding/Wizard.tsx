@@ -33,6 +33,10 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const sigPad2 = useRef<any>(null);
     const parafPad2 = useRef<any>(null);
 
+    const inputClass = "w-full bg-white border border-neutral-300 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 transition-colors";
+    const textareaClass = "w-full bg-white border border-neutral-300 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 transition-colors min-h-[96px] resize-y";
+    const inputLabelClass = "block text-sm font-medium mb-1.5 text-neutral-700";
+
     const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(val));
 
     const dailyLatePenalty = formatRupiah(Math.round(Number(tenancy.agreed_price) / 30));
@@ -206,13 +210,13 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                         <h2 className="text-2xl font-bold tracking-tight mb-2">Informasi Pribadi (Penghuni 1)</h2>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium mb-1">Nama Lengkap Sesuai KTP</label><input type="text" value={data.ktp_1_name} onChange={e => setData('ktp_1_name', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div><label className="block text-sm font-medium mb-1">Nomor KTP (NIK)</label><input type="text" value={data.ktp_1_nik} onChange={e => setData('ktp_1_nik', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div><label className="block text-sm font-medium mb-1">Tempat Lahir</label><input type="text" value={data.ktp_1_birth_place} onChange={e => setData('ktp_1_birth_place', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div><label className="block text-sm font-medium mb-1">Tanggal Lahir</label><input type="date" value={data.ktp_1_birth_date} onChange={e => setData('ktp_1_birth_date', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div><label className="block text-sm font-medium mb-1">Pekerjaan</label><input type="text" value={data.ktp_1_job} onChange={e => setData('ktp_1_job', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div><label className="block text-sm font-medium mb-1">No. WhatsApp</label><input type="text" value={data.whatsapp} onChange={e => setData('whatsapp', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                            <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Alamat Sesuai KTP</label><textarea value={data.ktp_1_address} onChange={e => setData('ktp_1_address', e.target.value)} className="w-full border-neutral-300 rounded-lg" rows={3} required /></div>
+                            <div><label className={inputLabelClass}>Nama Lengkap Sesuai KTP</label><input type="text" placeholder="Masukkan nama lengkap sesuai KTP" value={data.ktp_1_name} onChange={e => setData('ktp_1_name', e.target.value)} className={inputClass} required /></div>
+                            <div><label className={inputLabelClass}>Nomor KTP (NIK)</label><input type="text" placeholder="Masukkan 16 digit NIK" value={data.ktp_1_nik} onChange={e => setData('ktp_1_nik', e.target.value)} className={inputClass} required /></div>
+                            <div><label className={inputLabelClass}>Tempat Lahir</label><input type="text" placeholder="Masukkan tempat lahir" value={data.ktp_1_birth_place} onChange={e => setData('ktp_1_birth_place', e.target.value)} className={inputClass} required /></div>
+                            <div><label className={inputLabelClass}>Tanggal Lahir</label><input type="date" value={data.ktp_1_birth_date} onChange={e => setData('ktp_1_birth_date', e.target.value)} className={inputClass} required /></div>
+                            <div><label className={inputLabelClass}>Pekerjaan</label><input type="text" placeholder="Masukkan pekerjaan" value={data.ktp_1_job} onChange={e => setData('ktp_1_job', e.target.value)} className={inputClass} required /></div>
+                            <div><label className={inputLabelClass}>No. WhatsApp</label><input type="text" placeholder="Contoh: 081234567890" value={data.whatsapp} onChange={e => setData('whatsapp', e.target.value)} className={inputClass} required /></div>
+                            <div className="md:col-span-2"><label className={inputLabelClass}>Alamat Sesuai KTP</label><textarea placeholder="Masukkan alamat sesuai KTP" value={data.ktp_1_address} onChange={e => setData('ktp_1_address', e.target.value)} className={textareaClass} rows={3} required /></div>
                         </div>
 
                         <div className="flex gap-3 pt-4">
@@ -248,12 +252,12 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium mb-1">Nama Lengkap</label><input type="text" value={data.ktp_2_name} onChange={e => setData('ktp_2_name', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                                <div><label className="block text-sm font-medium mb-1">Nomor KTP (NIK)</label><input type="text" value={data.ktp_2_nik} onChange={e => setData('ktp_2_nik', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                                <div><label className="block text-sm font-medium mb-1">Tempat Lahir</label><input type="text" value={data.ktp_2_birth_place} onChange={e => setData('ktp_2_birth_place', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                                <div><label className="block text-sm font-medium mb-1">Tanggal Lahir</label><input type="date" value={data.ktp_2_birth_date} onChange={e => setData('ktp_2_birth_date', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Pekerjaan</label><input type="text" value={data.ktp_2_job} onChange={e => setData('ktp_2_job', e.target.value)} className="w-full border-neutral-300 rounded-lg" required /></div>
-                                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Alamat Sesuai KTP</label><textarea value={data.ktp_2_address} onChange={e => setData('ktp_2_address', e.target.value)} className="w-full border-neutral-300 rounded-lg" rows={2} required /></div>
+                                <div><label className={inputLabelClass}>Nama Lengkap</label><input type="text" placeholder="Masukkan nama lengkap" value={data.ktp_2_name} onChange={e => setData('ktp_2_name', e.target.value)} className={inputClass} required /></div>
+                                <div><label className={inputLabelClass}>Nomor KTP (NIK)</label><input type="text" placeholder="Masukkan 16 digit NIK" value={data.ktp_2_nik} onChange={e => setData('ktp_2_nik', e.target.value)} className={inputClass} required /></div>
+                                <div><label className={inputLabelClass}>Tempat Lahir</label><input type="text" placeholder="Masukkan tempat lahir" value={data.ktp_2_birth_place} onChange={e => setData('ktp_2_birth_place', e.target.value)} className={inputClass} required /></div>
+                                <div><label className={inputLabelClass}>Tanggal Lahir</label><input type="date" value={data.ktp_2_birth_date} onChange={e => setData('ktp_2_birth_date', e.target.value)} className={inputClass} required /></div>
+                                <div className="md:col-span-2"><label className={inputLabelClass}>Pekerjaan</label><input type="text" placeholder="Masukkan pekerjaan" value={data.ktp_2_job} onChange={e => setData('ktp_2_job', e.target.value)} className={inputClass} required /></div>
+                                <div className="md:col-span-2"><label className={inputLabelClass}>Alamat Sesuai KTP</label><textarea placeholder="Masukkan alamat sesuai KTP" value={data.ktp_2_address} onChange={e => setData('ktp_2_address', e.target.value)} className={textareaClass} rows={2} required /></div>
                             </div>
 
                             <div className="flex gap-3 pt-4">
