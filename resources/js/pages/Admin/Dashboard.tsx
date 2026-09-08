@@ -3,19 +3,19 @@ import { Building2, Users, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface DashboardProps {
     stats: {
-        total_properties: number;
-        available_properties: number;
-        occupied_properties: number;
-        total_tenants: number;
+        total_rooms: number;
+        available_rooms: number;
+        occupied_rooms: number;
+        active_tenants: number;
     }
 }
 
 export default function Dashboard({ stats }: DashboardProps) {
     const statCards = [
-        { title: 'Total Unit', value: stats.total_properties, icon: Building2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-        { title: 'Unit Tersedia', value: stats.available_properties, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-        { title: 'Unit Terisi', value: stats.occupied_properties, icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
-        { title: 'Total Tenant Aktif', value: stats.total_tenants, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+        { title: 'Total Unit', value: stats.total_rooms, icon: Building2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+        { title: 'Unit Tersedia', value: stats.available_rooms, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+        { title: 'Unit Terisi', value: stats.occupied_rooms, icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
+        { title: 'Total Tenant Aktif', value: stats.active_tenants, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     ];
 
     return (
