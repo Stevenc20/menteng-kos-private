@@ -1,0 +1,15 @@
+services:
+  kos-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: menteng-kos-app
+    restart: unless-stopped
+    ports:
+      - "9002:80"
+    volumes:
+      - .:/var/www/html
+      - ./database:/var/www/html/database
+      - ./storage:/var/www/html/storage
+    environment:
+      - DB_CONNECTION=sqlite
