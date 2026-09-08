@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useForm, router, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
@@ -161,16 +160,28 @@ export default function Properties({ properties: initialProperties }: Properties
         }
 
         try {
-            const response = await axios.post(`/admin/properties/${editingProp.id}/media`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            
+            const response = await fetch(`/admin/properties/${editingProp.id}/media`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken || ''
+                },
+                body: formData
             });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text);
+            }
+
             toast.success('Media berhasil diunggah');
             setTimeout(() => {
                 window.location.reload();
             }, 1000);
         } catch (error: any) {
             console.error(error);
-            toast.error('Error: ' + JSON.stringify(error.response?.data || error.message));
+            toast.error('Error: ' + error.message);
         }
     };
 
