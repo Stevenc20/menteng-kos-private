@@ -26,6 +26,21 @@ export async function compressImage(file: File, maxWidth = 1600, quality = 0.8):
 
                 ctx.drawImage(img, 0, 0, width, height);
 
+                // Add Watermark
+                const fontSize = Math.max(16, Math.floor(height / 15));
+                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Add slight shadow for better visibility on bright images
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                
+                ctx.fillText('MENTENG KOS PRIVATE', width / 2, height / 2);
+
                 canvas.toBlob(
                     (blob) => {
                         if (!blob) {
