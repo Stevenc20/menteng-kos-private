@@ -170,6 +170,23 @@ class KtpOcrService
     }
 
     /**
+     * Clean a job value: strip short trailing OCR noise fragments
+     * (e.g. "PELAJAR/MAHASISWA se" -> "PELAJAR/MAHASISWA").
+     */
+    private function cleanJob(string $value): string
+    {
+        $job = $this->cleanName($value);
+
+        // Remove trailing single letter/noise fragment (from the line below bleeding over)
+        $job = preg_replace('/\s[A-Za-z]{1,2}$/', '', $job);
+
+        // Remove trailing dash/colon artefacts
+        $job = preg_replace('/[\s\-:]+$/', '', $job);
+
+        return trim($job) ?: '';
+    }
+
+    /**
      * Remove Tesseract stderr chatter and empty lines from the OCR text.
      */
     private function cleanLines(string $raw): array
@@ -279,7 +296,7 @@ class KtpOcrService
         for ($i = 0; $i < count($lines); $i++) {
             // Inline: "Pekerjaan : PELAJAR/MAHASISWA"
             if (preg_match('/^Pekerjaan\s*[:\-\s]+\s*(.+)$/i', $lines[$i], $m)) {
-                $job = $this->cleanName($m[1]);
+                $job = $this->cleanJob($m[1]);
                 if ($job !== '') {
                     $result['job'] = $job;
                 }
@@ -287,7 +304,7 @@ class KtpOcrService
             }
             // Label on its own line: "Pekerjaan" then value below
             if (preg_match('/^Pekerjaan\s*$/i', $lines[$i]) && isset($lines[$i + 1])) {
-                $job = $this->cleanName($lines[$i + 1]);
+                $job = $this->cleanJob($lines[$i + 1]);
                 if ($job !== '' && !preg_match('/^(Perkawinan|Agama|Kawin|Status|Alamat)/i', $job)) {
                     $result['job'] = $job;
                 }

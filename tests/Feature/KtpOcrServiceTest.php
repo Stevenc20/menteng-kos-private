@@ -108,3 +108,11 @@ it('recovers NIK when OCR misreads digits as letters', function () {
 
     expect($result['nik'])->toBe('3275011503020001');
 });
+
+it('strips trailing OCR noise from job value', function () {
+    $raw = "Pekerjaan - PELAJAR/MAHASISWA se\nKewarganegaraan: WNI";
+
+    $result = parseKtp($raw);
+
+    expect($result['job'])->toBe('PELAJAR/MAHASISWA');
+});
