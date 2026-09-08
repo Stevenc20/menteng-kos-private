@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { useForm, router } from '@inertiajs/react';
+import { useForm, router, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,10 +63,22 @@ const PRESET_FACILITIES = [
     'Akses Jalan Utama'
 ];
 
-export default function Properties({ properties }: PropertiesProps) {
+export default function Properties({ properties: initialProperties }: PropertiesProps) {
+    const { props } = usePage<any>();
+    const properties = props.properties as Property[];
     const [showModal, setShowModal] = useState(false);
     const [editingProp, setEditingProp] = useState<Property | null>(null);
     const [customFacility, setCustomFacility] = useState('');
+    
+    // Sync editingProp when properties update from server (e.g. after media upload)
+    useEffect(() => {
+        if (editingProp) {
+            const updated = properties.find((p: any) => p.id === editingProp.id);
+            if (updated && JSON.stringify(updated.media) !== JSON.stringify(editingProp.media)) {
+                setEditingProp(updated);
+            }
+        }
+    }, [properties]);
     
     // Property Form
     const { data, setData, post, put, processing, reset, errors, clearErrors } = useForm({
