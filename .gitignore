@@ -29,3 +29,6 @@ yarn-error.log
 
 # Ignore Markdown files
 *.md
+
+# Local reference documents (not part of the app)
+/reference

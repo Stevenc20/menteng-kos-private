@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SignatureCanvas from 'react-signature-canvas';
@@ -37,6 +37,24 @@ interface WizardProps {
     profile: Profile;
 }
 
+function SheetPage({ num, meteran = false, children }: { num: number; meteran?: boolean; children: ReactNode }) {
+    return (
+        <div className="relative mx-auto mb-6 w-full min-w-0 max-w-[794px] min-h-[1122px] bg-white shadow-lg border border-neutral-200">
+            <div className="flex justify-between items-start px-[9%] pt-6">
+                <span className="font-serif italic text-sm text-neutral-700">Menteng Kost</span>
+                {meteran && (
+                    <div className="border-[1.5px] border-neutral-600 px-3 py-1 text-center shrink-0">
+                        <div className="text-xs font-bold tracking-wide">START METERAN:</div>
+                        <div className="text-[9px] italic text-neutral-500">WAJIB DIISI</div>
+                    </div>
+                )}
+            </div>
+            <div className="px-[9%] pt-3 pb-16 text-sm text-neutral-800 leading-relaxed">{children}</div>
+            <div className="absolute left-0 right-0 bottom-4 text-center text-sm text-neutral-600">{num}</div>
+        </div>
+    );
+}
+
 export default function Wizard({ tenancy, profile }: WizardProps) {
     const [step, setStep] = useState(1);
     const totalSteps = 8;
@@ -46,6 +64,10 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const parafPad1 = useRef<any>(null);
     const sigPad2 = useRef<any>(null);
     const parafPad2 = useRef<any>(null);
+
+    // Rendered paraf images (drawn once, reused on all required pages)
+    const [paraf1Img, setParaf1Img] = useState('');
+    const [paraf2Img, setParaf2Img] = useState('');
 
     const p = (profile as Profile) ?? {};
 
@@ -66,9 +88,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         return `${d}-${m}-${y}`;
     };
 
-    const todayLine = () => {
+    const indonesianToday = () => {
         const t = new Date();
-        return `Jakarta, ${String(t.getDate()).padStart(2, '0')} ${monthNames[t.getMonth()]} ${t.getFullYear()}`;
+        return `${String(t.getDate()).padStart(2, '0')} ${monthNames[t.getMonth()]} ${t.getFullYear()}`;
     };
 
     // Hidden file inputs for camera (capture) and gallery (file picker) per occupant
@@ -112,6 +134,47 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         signature_2: '',
         paraf_2: '',
     });
+
+    // ─── Surat Pernyataan content (verbatim from reference PDF) ───
+    const esc = (s?: string) => (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
+
+    const occ1Name = data.ktp_1_name || '(nama penghuni 1)';
+    const occ2Name = data.ktp_2_name || '(nama penghuni 2)';
+    const sewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(tenancy.agreed_price) || 0);
+    const billingDay = tenancy.move_in_date ? tenancy.move_in_date.split('-')[2] : '';
+    const billingDayLine = billingDay ? `tanggal ${billingDay} setiap bulannya` : 'tanggal ………………………… setiap bulannya';
+
+    const birthLine = (place?: string, date?: string) => [place, formatDisplayDate(date)].filter(Boolean).join(', ');
+
+    const pasal1Text = data.has_second_occupant
+        ? `Yang menempati kos adalah <strong>${esc(occ1Name)}</strong> dan <strong>${esc(occ2Name)}</strong>, serta Tidak diperbolehkan ada orang lain yang tinggal di kos ini selain nama-nama yang tertera dalam pernyataan ini, jika melanggar maka pengelola kos berhak <strong>memutus</strong> <strong>SEWA/KONTRAK</strong> dan penghuni wajib mengosongkan kamar tanpa <strong>KOMPENSASI</strong>.`
+        : `Yang menempati kos adalah <strong>${esc(occ1Name)}</strong>, serta Tidak diperbolehkan ada orang lain yang tinggal di kos ini selain nama-nama yang tertera dalam pernyataan ini, jika melanggar maka pengelola kos berhak <strong>memutus</strong> <strong>SEWA/KONTRAK</strong> dan penghuni wajib mengosongkan kamar tanpa <strong>KOMPENSASI</strong>.`;
+
+    const peraturanCos = [
+        'Saat pertama kali menempati kosan wajib menyerahkan <strong>KTP dan KK</strong> yang akan menghuni, 1x24 jam wajib lapor <strong>RT</strong>.',
+        'Saya bertanggung jawab penuh atas <strong>kerusakan</strong> atau <strong>kehilangan</strong> fasilitas yang ada di dalam <strong>kamar kos</strong> selama <strong>masa sewa</strong>. Jika terjadi <strong>kerusakan akibat kelalaian saya</strong>, saya akan <strong>mengganti kerugian</strong> sesuai dengan <strong>nilai kerusakan</strong> yang ditentukan oleh <strong>pihak pengelola kos</strong>.',
+        'Mematuhi peraturan <strong>HUKUM</strong> yang berlaku di <strong>Indonesia</strong> dan <strong>Menjaga norma kesopanan</strong> serta <strong>kesusilaan (TIDAK BOLEH OPEN BO)</strong>. Dan <strong>tidak menimbulkan kegaduhan bagi penghuni lain</strong>.',
+        'Keluar masuk <strong>gerbang utama wajib menutup dan mengunci Kembali</strong>, dan bila diatas <strong>pukul 22.00 WIB</strong>, <strong>wajib mengembok gerbang utama!</strong>.',
+    ];
+
+    const menjagaKeamananItems = [
+        'Selain penghuni kos-an dilarang membawa <strong>tamu</strong> kedalam <strong>kamar</strong> termasuk <strong>kurir</strong> dan <strong>tamu</strong> “tidak dikenal” hanya boleh diterima diluar kamar, kecuali ada <strong>izin</strong> dari <strong>PENGELOLA KOS</strong>.',
+        '<strong>Dilarang</strong> menyewakan kamar kepada orang lain selain nama yang sudah tertera dalam <strong>SURAT PERNYATAAN</strong>, jika melanggar maka <strong>pengelola kos BERHAK memutus SEWA/KONTRAK</strong> dan penghuni wajib mengosongkan kamar serta membersihkan kamar seperti semula dan tidak menerima <strong>KOMPENSASI</strong>.',
+    ];
+
+    const biayaTerhutang = [
+        'Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>5m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.',
+        'Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>5m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.',
+        '<strong>Pembacaan meteran air</strong> akan dilakukan <strong>setiap tanggal</strong> pembayaran kos untuk masing-masing kamar.',
+    ];
+
+    const pasal5Intro = `saya menyatakan bahwa membayar biaya sewa kos sebesar <strong>Rp ${sewaNumeral}</strong> per bulan. Pembayaran dilakukan setiap bulan, 1 hari sebelum tanggal jatuh tempo, ${billingDayLine}.`;
+
+    const pasal5Denda = `Jika saya terlambat melakukan pembayaran setelah tanggal jatuh tempo, saya akan dikenakan denda sebesar <strong>${dailyLatePenalty}</strong> per hari keterlambatan sesuai dengan ketentuan yang berlaku. Maksimal denda keterlambatan <strong>2 hari, diatas 2 hari wajib mengosongkan kosan</strong>.`;
+
+    const pasal5AkhirP1 = 'Jika saya berniat untuk mengakhiri masa sewa sebelum waktu yang disepakati, saya akan memberikan pemberitahuan kepada pihak <strong>PENGELOLA KOS</strong> 5 hari';
+
+    const pasal5AkhirP2 = 'sebelumnya dan bertanggung jawab atas pembayaran sewa yang masih terhutang serta kewajiban lain, seperti: air <strong>PDAM</strong> yang <strong>telah digunakan</strong> hingga <strong>saat pengosongan dilakukan</strong>.';
 
     const nextStep = () => setStep(s => Math.min(s + 1, totalSteps));
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
@@ -231,54 +294,122 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         ));
 
     const buildStatementHTML = () => {
-        // Build agreement based on data
-        const identity1 = [
-            ['Nama Lengkap', data.ktp_1_name],
-            ['Tempat, Tgl Lahir', `${data.ktp_1_birth_place}, ${formatDisplayDate(data.ktp_1_birth_date)}`],
+        // Build agreement based on data (full 3-page layout mirroring the reference PDF)
+        const identity1: [string, string][] = [
+            ['Nama (1)', occ1Name],
+            ['Tempat, Tgl Lahir', birthLine(data.ktp_1_birth_place, data.ktp_1_birth_date)],
             ['Pekerjaan', data.ktp_1_job],
-            ['No KTP / NIK', data.ktp_1_nik],
-            ['No. WhatsApp', data.whatsapp],
             ['Alamat', data.ktp_1_address],
+            ['Nomor KTP', data.ktp_1_nik],
         ];
-        const identity2 = [
-            ['Nama Lengkap', data.ktp_2_name],
-            ['Tempat, Tgl Lahir', `${data.ktp_2_birth_place}, ${formatDisplayDate(data.ktp_2_birth_date)}`],
+        const identity2: [string, string][] = [
+            ['Nama (2)', occ2Name],
+            ['Tempat, Tgl Lahir', birthLine(data.ktp_2_birth_place, data.ktp_2_birth_date)],
             ['Pekerjaan', data.ktp_2_job],
-            ['No KTP / NIK', data.ktp_2_nik],
+            ['Alamat', data.ktp_2_address],
+            ['Nomor KTP', data.ktp_2_nik],
         ];
         const rowHtml = (r: [string, string][]) => r
-            .map(([k, v]) => `<tr><td style="width:150px;vertical-align:top;padding:3px 0;">${k}</td><td style="padding:3px 0;">: ${v}</td></tr>`)
+            .map(([k, v]) => `<tr><td style="width:150px;vertical-align:top;padding:3px 0;">${k}</td><td style="padding:3px 0;">: ${esc(v)}</td></tr>`)
             .join('');
-        const html = `
-            <div style="font-family: Georgia, 'Times New Roman', serif; line-height: 1.7; color: #333; max-width: 640px; margin: 0 auto; font-size: 14px;">
-                <h2 style="text-align: center; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px;">Surat Pernyataan Penghuni</h2>
-                <p>Yang bertanda tangan di bawah ini:</p>
-                <table style="width: 100%; margin-bottom: 20px;">
-                    ${rowHtml(identity1)}
-                </table>
-                ${data.has_second_occupant ? `
-                    <p style="margin-bottom: 8px;">Dan Penghuni Kedua:</p>
-                    <table style="width: 100%; margin-bottom: 20px;">
-                        ${rowHtml(identity2)}
-                    </table>
-                ` : ''}
-                <p style="text-align: justify;">Menyatakan setuju untuk menempati unit <strong>${tenancy.property.name}</strong> di Menteng Kos Private mulai tanggal <strong>${formatDisplayDate(tenancy.move_in_date)}</strong> dengan ketentuan sebagai berikut:</p>
-                <ol style="padding-left: 24px; margin: 16px 0;">
-                    <li style="margin-bottom: 8px;">Biaya sewa per bulan adalah <strong>${formatRupiah(tenancy.agreed_price)}</strong>.</li>
-                    <li style="margin-bottom: 8px;">Tagihan jatuh tempo dihitung per siklus 30 hari. Denda keterlambatan adalah <strong>${dailyLatePenalty} / hari</strong>.</li>
-                    <li style="margin-bottom: 8px;">Jatah air (Included Allowance) adalah <strong>5 m³ / bulan</strong>. Kelebihan pemakaian air akan dikenakan biaya tambahan sebesar <strong>Rp14.000 / m³</strong> yang akan ditambahkan ke dalam total tagihan sewa.</li>
-                    <li style="margin-bottom: 8px;">Penghuni wajib menjaga kebersihan dan tidak merusak fasilitas properti. Segala kerusakan menjadi tanggung jawab penghuni.</li>
-                </ol>
-                <p style="text-align: justify;">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya tanpa paksaan dari pihak mana pun.</p>
-                <div style="margin-top: 32px; text-align: right;">
-                    <p style="margin-bottom: 60px;">${todayLine()}</p>
-                    <p>Yang Membuat Pernyataan,</p>
-                    <p style="margin-top: 80px; font-weight: bold; text-transform: uppercase;">${data.ktp_1_name}</p>
-                    ${data.has_second_occupant ? `<p style="margin-top: 24px; font-weight: bold; text-transform: uppercase;">${data.ktp_2_name}</p>` : ''}
+
+        const meteranBox = `
+            <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
+                <div style="font-weight:bold;">START METERAN:</div>
+                <div style="font-style:italic;font-size:9px;">WAJIB DIISI</div>
+            </div>`;
+
+        const pageFrame = (num: number, inner: string, parafY?: string) => `
+            <div style="position:relative;width:100%;max-width:794px;margin:0 auto 24px;min-height:1122px;padding:22px 9% 56px;box-sizing:border-box;border:1px solid #ddd;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.65;font-size:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <span style="font-style:italic;">Menteng Kost</span>
+                    ${num === 1 ? meteranBox : ''}
                 </div>
+                ${inner}
+                <div style="position:absolute;bottom:16px;left:0;right:0;text-align:center;">${num}</div>
+                ${parafY ? `
+                    <div style="position:absolute;left:1.5%;top:${parafY};font-size:11px;">Paraf (1)</div>
+                    <div style="position:absolute;right:1.5%;top:${parafY};font-size:11px;">Paraf (2)</div>
+                ` : ''}
+            </div>`;
+
+        const p1Body = `
+            <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 18px;font-size:17px;">SURAT PERNYATAAN</h2>
+            <p>Yang bertanda tangan di bawah ini:</p>
+            <table style="width:100%;"><tbody>${rowHtml(identity1)}</tbody></table>
+            ${data.has_second_occupant ? `
+                <p style="margin:10px 0 2px;">Dan pasangan saya,</p>
+                <table style="width:100%;"><tbody>${rowHtml(identity2)}</tbody></table>
+            ` : ''}
+            <p style="margin-top:18px;">Dengan ini kami menyatakan dengan sebenar-benarnya bahwa:</p>
+            <p style="font-weight:bold;">1. Menempati Kosan</p>
+            <p style="text-align:justify;">${pasal1Text}</p>
+            <p style="font-weight:bold;">2. Kepatuhan Terhadap Peraturan Kos</p>
+            <p style="text-align:justify;">Bersedia mematuhi segala peraturan kos baik yang tertulis maupun tidak tertulis, seperti:</p>
+            <ul style="padding-left:24px;margin:4px 0;">
+                ${peraturanCos.map(t => `<li style="margin:6px 0;text-align:justify;">${t}</li>`).join('')}
+            </ul>
+            <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`;
+
+        const p2Body = `
+            <ul style="padding-left:24px;margin:0;">
+                ${menjagaKeamananItems.map(t => `<li style="margin:8px 0;text-align:justify;">${t}</li>`).join('')}
+            </ul>
+            <p style="text-align:justify;">Semua fasilitas yang ada wajib <strong>dirawat</strong> dan <strong>dijaga</strong> seperti:</p>
+            <ol style="padding-left:24px;margin:4px 0;">
+                ${[1, 2, 3, 4, 5, 6].map(n => `
+                    <li style="margin:3px 0;">${n === 6 ? '<span style="text-decoration:underline;">______________________</span> <em style="font-size:11px;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em>' : '<span style="text-decoration:underline;">______________________</span>'}</li>
+                `).join('')}
+            </ol>
+            <p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>
+            <p style="font-weight:bold;">4. Kewajiban Terhadap Biaya Yang Terhutang</p>
+            <p style="text-align:justify;">Saya sebagai penghuni kos bersedia <strong>membayar biaya yang terhutang</strong> seperti:</p>
+            <ol style="padding-left:24px;margin:4px 0;">
+                ${biayaTerhutang.map(t => `<li style="margin:6px 0;text-align:justify;">${t}</li>`).join('')}
+            </ol>
+            <p style="font-weight:bold;">5. Keterlambatan Pembayaran</p>
+            <p style="text-align:justify;">${pasal5Intro}</p>
+            <p style="text-align:justify;">${pasal5Denda}</p>
+            <p style="text-align:justify;">${pasal5AkhirP1}</p>`;
+
+        const p3Body = `
+            <p style="text-align:justify;">${pasal5AkhirP2}</p>
+            <p style="font-weight:bold;">6. Pengosongan Kamar</p>
+            <p style="font-weight:bold;">7. Peraturan Tambahan</p>
+            <p style="text-align:justify;"><span style="font-family:Wingdings;">➢</span> Saya menyadari bahwa <strong>PENGELOLA KOS</strong> berhak meminta saya untuk mengosongkan kamar kosan apabila:</p>
+            <ol style="padding-left:24px;margin:4px 0;">
+                <li style="margin:4px 0;">Saya telat melakukan pembayaran melebihi 2 hari seperti di <em><strong>point 4</strong></em> <em><strong>keterlambatan</strong></em>.</li>
+                <li style="margin:4px 0;">Saya melakukan <em><strong>PELANGGARAN BERAT</strong></em> terhadap peraturan hukum yang berlaku di Indonesia (seperti <strong>PERJUDIAN, NARKOBA</strong>, dan <strong>TINDAK PIDANA BERAT</strong> lainnya, yang DILARANG sesuai dengan <em><strong>Pasal 303 KUHP</strong></em> tentang <em><strong>perjudian</strong></em> dan <em><strong>Pasal 112, Pasal 113, Pasal 114 UU No. 35 Tahun 2009 tentang Narkotika</strong></em>).</li>
+            </ol>
+            <p style="text-align:justify;"><span style="font-family:Wingdings;">➢</span> Saya menyadari bahwa peraturan terkait <em><strong>pengelolaan kos dapat berubah</strong></em> <em><strong>sewaktu-waktu</strong></em>, dan <strong>saya berjanji</strong> untuk selalu <strong>mengikuti peraturan baru</strong> yang <strong>diberlakukan</strong> oleh pihak pengelola kos. Apabila saya telah <strong>menerima</strong> <strong>dua</strong> kali <strong>teguran</strong>, baik secara <em><strong>lisan</strong></em> maupun <em><strong>tertulis</strong></em>, dari <strong>PENGELOLA KOS</strong> atas <strong>pelanggaran peraturan</strong> dan masih <strong>mengulanginya</strong> <strong>kembali</strong>, <strong>SAYA BERSEDIA</strong> untuk <strong>mengosongkan</strong> <strong>kosan</strong> dan <strong>mengembalikan</strong> <strong>kunci kamar</strong> serta <strong>gembok pagar</strong> tanpa <strong>MENUNTUT KOMPENSASI APAPUN</strong>!, serta <strong>TETAP MEMBAYARKAN SISA KEWAJIBAN JIKA ADA</strong>.</p>
+            <p style="text-align:justify;">Demikian surat pernyataan ini saya buat dengan sebenar-benarnya tanpa ada paksaan atau tekanan dari pihak manapun.</p>
+            <p style="margin-top:14px;"><strong>Dibuat di:</strong> Jakarta</p>
+            <p><strong>Pada tanggal:</strong> ${indonesianToday()}</p>
+            <p style="margin-top:22px;"><strong>Yang Membuat Pernyataan,</strong></p>
+            <div style="display:flex;gap:50px;margin-top:26px;">
+                <div style="flex:1;max-width:300px;">
+                    <p>Tanda Tangan (1),</p>
+                    <div style="height:110px;"></div>
+                    <p>Nama: <strong>${esc(occ1Name)}</strong>.</p>
+                    <p>No. KTP: <strong>${esc(data.ktp_1_nik)}</strong>.</p>
+                </div>
+                ${data.has_second_occupant ? `
+                    <div style="flex:1;max-width:300px;">
+                        <p>Tanda Tangan (2),</p>
+                        <div style="height:110px;"></div>
+                        <p>Nama: <strong>${esc(occ2Name)}</strong>.</p>
+                        <p>No. KTP: <strong>${esc(data.ktp_2_nik)}</strong>.</p>
+                    </div>
+                ` : ''}
+            </div>`;
+
+        return `
+            <div style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.65;font-size:14px;">
+                ${pageFrame(1, p1Body, '63%')}
+                ${pageFrame(2, p2Body, '35%')}
+                ${pageFrame(3, p3Body)}
             </div>
         `;
-        return html;
     };
 
     const generateAgreementHTML = () => {
@@ -290,6 +421,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         parafPad1.current?.clear();
         sigPad2.current?.clear();
         parafPad2.current?.clear();
+        setParaf1Img('');
+        setParaf2Img('');
     };
 
     const submitAgreement = () => {
@@ -304,6 +437,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
         const payload = {
             ...data,
+            document_html: data.document_html || buildStatementHTML(),
             signature_1: sigPad1.current.getTrimmedCanvas().toDataURL('image/png'),
             paraf_1: parafPad1.current.getTrimmedCanvas().toDataURL('image/png'),
             signature_2: data.has_second_occupant ? sigPad2.current.getTrimmedCanvas().toDataURL('image/png') : '',
@@ -539,106 +673,159 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                     </div>
                 );
             case 8:
+                const parafSlot = (occupant: 1 | 2, editable: boolean, side: 'left' | 'right', topClass: string) => {
+                    const padRef = occupant === 1 ? parafPad1 : parafPad2;
+                    const parafImg = occupant === 1 ? paraf1Img : paraf2Img;
+                    return (
+                        <div className={`absolute ${side === 'left' ? 'left-[0.5%]' : 'right-[0.5%]'} ${topClass} flex flex-col items-center w-[8%] min-w-[40px] max-w-[64px] z-10`}>
+                            {editable ? (
+                                <SignatureCanvas
+                                    ref={padRef}
+                                    onEnd={() => {
+                                        const url = padRef.current?.getTrimmedCanvas().toDataURL('image/png');
+                                        if (url) {
+                                            if (occupant === 1) setParaf1Img(url);
+                                            else setParaf2Img(url);
+                                        }
+                                    }}
+                                    canvasProps={{ className: 'w-full h-16 sm:h-20 border border-neutral-400 rounded-sm bg-white' }}
+                                />
+                            ) : parafImg ? (
+                                <img src={parafImg} alt={`Paraf ${occupant}`} className="w-full border border-neutral-400 rounded-sm bg-white" />
+                            ) : (
+                                <div className="w-full h-16 sm:h-20 rounded-sm bg-neutral-50"></div>
+                            )}
+                            <span className="mt-1 text-[10px] sm:text-xs text-neutral-500 whitespace-nowrap">Paraf ({occupant})</span>
+                        </div>
+                    );
+                };
+
                 return (
                     <div className="space-y-6 w-full min-w-0">
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight mb-2">Tanda Tangan Digital</h2>
-                            <p className="text-sm text-neutral-500">Baca surat pernyataan berikut, lalu berikan tanda tangan dan paraf Anda pada tempat yang tersedia di dalam surat.</p>
+                            <p className="text-sm text-neutral-500">Baca surat sesuai halaman, lalu buat paraf pada tempat yang tersedia (Paraf 1 & 2) dan tanda tangan pada akhir surat.</p>
                         </div>
 
-                        {/* Surat Pernyataan — document view */}
-                        <div className="w-full min-w-0 overflow-x-hidden bg-neutral-100 border border-neutral-300 rounded-xl p-2 sm:p-4">
-                            <div className="w-full min-w-0 bg-white shadow-lg border border-neutral-200 px-4 sm:px-10 py-8 sm:py-10 font-serif text-neutral-800">
-                                <h2 className="text-center font-bold text-lg sm:text-xl tracking-wide uppercase mb-6">Surat Pernyataan Penghuni</h2>
-
-                                <div className="text-sm leading-relaxed space-y-4">
+                        {/* Surat Pernyataan — document view, mirroring the PDF layout */}
+                        <div className="w-full min-w-0 overflow-x-hidden bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
+                            {/* HALAMAN 1 */}
+                            <SheetPage num={1} meteran>
+                                <h2 className="text-center font-bold tracking-wide uppercase text-base sm:text-lg mb-4">Surat Pernyataan</h2>
+                                <div className="space-y-1">
                                     <p>Yang bertanda tangan di bawah ini:</p>
-
-                                    <div className="space-y-1.5">
+                                    <div className="space-y-1">
                                         {buildIdentityRows([
-                                            ['Nama Lengkap', data.ktp_1_name],
-                                            ['Tempat, Tgl Lahir', `${data.ktp_1_birth_place}, ${formatDisplayDate(data.ktp_1_birth_date)}`],
+                                            ['Nama (1)', data.ktp_1_name],
+                                            ['Tempat, Tgl Lahir', birthLine(data.ktp_1_birth_place, data.ktp_1_birth_date)],
                                             ['Pekerjaan', data.ktp_1_job],
-                                            ['No. KTP / NIK', data.ktp_1_nik],
-                                            ['No. WhatsApp', data.whatsapp],
                                             ['Alamat', data.ktp_1_address],
+                                            ['Nomor KTP', data.ktp_1_nik],
                                         ])}
                                     </div>
 
                                     {data.has_second_occupant && (
                                         <>
-                                            <p>Dan Penghuni Kedua:</p>
-                                            <div className="space-y-1.5">
+                                            <p className="pt-2">Dan pasangan saya,</p>
+                                            <div className="space-y-1">
                                                 {buildIdentityRows([
-                                                    ['Nama Lengkap', data.ktp_2_name],
-                                                    ['Tempat, Tgl Lahir', `${data.ktp_2_birth_place}, ${formatDisplayDate(data.ktp_2_birth_date)}`],
+                                                    ['Nama (2)', data.ktp_2_name],
+                                                    ['Tempat, Tgl Lahir', birthLine(data.ktp_2_birth_place, data.ktp_2_birth_date)],
                                                     ['Pekerjaan', data.ktp_2_job],
-                                                    ['No. KTP / NIK', data.ktp_2_nik],
+                                                    ['Alamat', data.ktp_2_address],
+                                                    ['Nomor KTP', data.ktp_2_nik],
                                                 ])}
                                             </div>
                                         </>
                                     )}
 
-                                    <p className="text-justify">
-                                        Menyatakan setuju untuk menempati unit <strong>{tenancy.property.name}</strong> di Menteng Kos Private mulai tanggal <strong>{formatDisplayDate(tenancy.move_in_date)}</strong> dengan ketentuan sebagai berikut:
-                                    </p>
+                                    <p className="pt-4">Dengan ini kami menyatakan dengan sebenar-benarnya bahwa:</p>
+                                    <p className="font-bold">1. Menempati Kosan</p>
+                                    <p className="text-justify" dangerouslySetInnerHTML={{ __html: pasal1Text }} />
+                                    <p className="font-bold">2. Kepatuhan Terhadap Peraturan Kos</p>
+                                    <p className="text-justify">Bersedia mematuhi segala peraturan kos baik yang tertulis maupun tidak tertulis, seperti:</p>
+                                    <ul className="list-disc pl-5 space-y-2 text-justify">
+                                        {peraturanCos.map((t, i) => <li key={i} dangerouslySetInnerHTML={{ __html: t }} />)}
+                                    </ul>
+                                    <p className="text-justify">Menjaga keamanan dan kenyaman Bersama, seperti:</p>
+                                </div>
+                                {parafSlot(1, true, 'left', 'top-[63%]')}
+                                {data.has_second_occupant && parafSlot(2, true, 'right', 'top-[63%]')}
+                            </SheetPage>
 
-                                    <ol className="list-decimal pl-5 space-y-2 text-justify">
-                                        <li>Biaya sewa per bulan adalah <strong>{formatRupiah(tenancy.agreed_price)}</strong>.</li>
-                                        <li>Tagihan jatuh tempo dihitung per siklus 30 hari. Denda keterlambatan adalah <strong>{dailyLatePenalty} / hari</strong>.</li>
-                                        <li>Jatah air (Included Allowance) adalah <strong>5 m³ / bulan</strong>. Kelebihan pemakaian air akan dikenakan biaya tambahan sebesar <strong>Rp14.000 / m³</strong> yang akan ditambahkan ke dalam total tagihan sewa.</li>
-                                        <li>Penghuni wajib menjaga kebersihan dan tidak merusak fasilitas properti. Segala kerusakan menjadi tanggung jawab penghuni.</li>
+                            {/* HALAMAN 2 */}
+                            <SheetPage num={2}>
+                                <div className="space-y-2">
+                                    <ul className="list-disc pl-5 space-y-2 text-justify">
+                                        {menjagaKeamananItems.map((t, i) => <li key={i} dangerouslySetInnerHTML={{ __html: t }} />)}
+                                    </ul>
+                                    <p className="text-justify">Semua fasilitas yang ada wajib <strong>dirawat</strong> dan <strong>dijaga</strong> seperti:</p>
+                                    <ol className="list-decimal pl-5 space-y-1">
+                                        {[1, 2, 3, 4, 5].map(n => (
+                                            <li key={n}><span className="underline decoration-dotted underline-offset-4">______________________</span></li>
+                                        ))}
+                                        <li>
+                                            <span className="underline decoration-dotted underline-offset-4">______________________</span>
+                                            <em className="text-xs text-neutral-500 ml-1">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em>
+                                        </li>
                                     </ol>
-
-                                    <p className="text-justify">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya tanpa paksaan dari pihak mana pun.</p>
+                                    <p className="font-bold pt-2">3. Kepatuhan Terhadap Pembayaran</p>
+                                    <p className="font-bold">4. Kewajiban Terhadap Biaya Yang Terhutang</p>
+                                    <p className="text-justify">Saya sebagai penghuni kos bersedia <strong>membayar biaya yang terhutang</strong> seperti:</p>
+                                    <ol className="list-decimal pl-5 space-y-2 text-justify">
+                                        {biayaTerhutang.map((t, i) => <li key={i} dangerouslySetInnerHTML={{ __html: t }} />)}
+                                    </ol>
+                                    <p className="font-bold">5. Keterlambatan Pembayaran</p>
+                                    <p className="text-justify" dangerouslySetInnerHTML={{ __html: pasal5Intro }} />
+                                    <p className="text-justify" dangerouslySetInnerHTML={{ __html: pasal5Denda }} />
+                                    <p className="text-justify" dangerouslySetInnerHTML={{ __html: pasal5AkhirP1 }} />
                                 </div>
+                                {parafSlot(1, false, 'left', 'top-[35%]')}
+                                {data.has_second_occupant && parafSlot(2, false, 'right', 'top-[35%]')}
+                            </SheetPage>
 
-                                {/* Place + date */}
-                                <div className="mt-10 text-right">
-                                    <p>{todayLine()}</p>
-                                </div>
+                            {/* HALAMAN 3 */}
+                            <SheetPage num={3}>
+                                <div className="space-y-2">
+                                    <p className="text-justify" dangerouslySetInnerHTML={{ __html: pasal5AkhirP2 }} />
+                                    <p className="font-bold">6. Pengosongan Kamar</p>
+                                    <p className="font-bold">7. Peraturan Tambahan</p>
+                                    <p className="text-justify"><span>➢</span> Saya menyadari bahwa <strong>PENGELOLA KOS</strong> berhak meminta saya untuk mengosongkan kamar kosan apabila:</p>
+                                    <ol className="list-decimal pl-5 space-y-1 text-justify">
+                                        <li>Saya telat melakukan pembayaran melebihi 2 hari seperti di <em><strong>point 4</strong></em> <em><strong>keterlambatan</strong></em>.</li>
+                                        <li>Saya melakukan <em><strong>PELANGGARAN BERAT</strong></em> terhadap peraturan hukum yang berlaku di Indonesia (seperti <strong>PERJUDIAN, NARKOBA</strong>, dan <strong>TINDAK PIDANA BERAT</strong> lainnya, yang DILARANG sesuai dengan <em><strong>Pasal 303 KUHP</strong></em> tentang <em><strong>perjudian</strong></em> dan <em><strong>Pasal 112, Pasal 113, Pasal 114 UU No. 35 Tahun 2009 tentang Narkotika</strong></em>).</li>
+                                    </ol>
+                                    <p className="text-justify"><span>➢</span> Saya menyadari bahwa peraturan terkait <em><strong>pengelolaan kos dapat berubah</strong></em> <em><strong>sewaktu-waktu</strong></em>, dan <strong>saya berjanji</strong> untuk selalu <strong>mengikuti peraturan baru</strong> yang <strong>diberlakukan</strong> oleh pihak pengelola kos. Apabila saya telah <strong>menerima</strong> <strong>dua</strong> kali <strong>teguran</strong>, baik secara <em><strong>lisan</strong></em> maupun <em><strong>tertulis</strong></em>, dari <strong>PENGELOLA KOS</strong> atas <strong>pelanggaran peraturan</strong> dan masih <strong>mengulanginya</strong> <strong>kembali</strong>, <strong>SAYA BERSEDIA</strong> untuk <strong>mengosongkan</strong> <strong>kosan</strong> dan <strong>mengembalikan</strong> <strong>kunci kamar</strong> serta <strong>gembok pagar</strong> tanpa <strong>MENUNTUT KOMPENSASI APAPUN</strong>!, serta <strong>TETAP MEMBAYARKAN SISA KEWAJIBAN JIKA ADA</strong>.</p>
+                                    <p className="text-justify pt-2">Demikian surat pernyataan ini saya buat dengan sebenar-benarnya tanpa ada paksaan atau tekanan dari pihak manapun.</p>
 
-                                {/* Signature blocks inside the document */}
-                                <div className={`mt-12 ${data.has_second_occupant ? 'grid grid-cols-1 sm:grid-cols-2 gap-10' : 'max-w-xs ml-auto'}`}>
-                                    {/* Occupant 1 */}
-                                    <div className="text-center">
-                                        <p>Yang Membuat Pernyataan,</p>
-                                        <div className="mt-24 flex flex-col items-center">
-                                            <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[260px]">
-                                                <SignatureCanvas ref={sigPad1} canvasProps={{ className: 'w-full h-32' }} />
-                                            </div>
-                                            <p className="mt-2 font-bold">{data.ktp_1_name}</p>
-                                            <p className="text-xs text-neutral-500">(Penghuni 1)</p>
-                                        </div>
-                                        <div className="mt-8 inline-flex flex-col items-center">
-                                            <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[140px]">
-                                                <SignatureCanvas ref={parafPad1} canvasProps={{ className: 'w-full h-16' }} />
-                                            </div>
-                                            <p className="mt-1 text-xs text-neutral-500">Paraf</p>
-                                        </div>
+                                    <div className="pt-4">
+                                        <p><strong>Dibuat di:</strong> Jakarta</p>
+                                        <p><strong>Pada tanggal:</strong> {indonesianToday()}</p>
+                                        <p className="pt-5"><strong>Yang Membuat Pernyataan,</strong></p>
                                     </div>
 
-                                    {/* Occupant 2 */}
-                                    {data.has_second_occupant && (
-                                        <div className="text-center">
-                                            <p>Yang Membuat Pernyataan,</p>
-                                            <div className="mt-24 flex flex-col items-center">
-                                                <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[260px]">
-                                                    <SignatureCanvas ref={sigPad2} canvasProps={{ className: 'w-full h-32' }} />
-                                                </div>
-                                                <p className="mt-2 font-bold">{data.ktp_2_name}</p>
-                                                <p className="text-xs text-neutral-500">(Penghuni 2)</p>
+                                    <div className={`grid gap-10 pt-6 ${data.has_second_occupant ? 'grid-cols-1 sm:grid-cols-2' : 'max-w-[300px]'}`}>
+                                        <div>
+                                            <p>Tanda Tangan (1),</p>
+                                            <div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
+                                                <SignatureCanvas ref={sigPad1} canvasProps={{ className: 'w-full h-28' }} />
                                             </div>
-                                            <div className="mt-8 inline-flex flex-col items-center">
-                                                <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[140px]">
-                                                    <SignatureCanvas ref={parafPad2} canvasProps={{ className: 'w-full h-16' }} />
-                                                </div>
-                                                <p className="mt-1 text-xs text-neutral-500">Paraf</p>
-                                            </div>
+                                            <p className="mt-3">Nama: <strong>{data.ktp_1_name}</strong>.</p>
+                                            <p>No. KTP: <strong>{data.ktp_1_nik}</strong>.</p>
                                         </div>
-                                    )}
+                                        {data.has_second_occupant && (
+                                            <div>
+                                                <p>Tanda Tangan (2),</p>
+                                                <div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
+                                                    <SignatureCanvas ref={sigPad2} canvasProps={{ className: 'w-full h-28' }} />
+                                                </div>
+                                                <p className="mt-3">Nama: <strong>{data.ktp_2_name}</strong>.</p>
+                                                <p>No. KTP: <strong>{data.ktp_2_nik}</strong>.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            </SheetPage>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
