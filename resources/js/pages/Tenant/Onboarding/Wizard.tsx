@@ -176,6 +176,34 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
     const pasal5AkhirP2 = 'sebelumnya dan bertanggung jawab atas pembayaran sewa yang masih terhutang serta kewajiban lain, seperti: air <strong>PDAM</strong> yang <strong>telah digunakan</strong> hingga <strong>saat pengosongan dilakukan</strong>.';
 
+    // Crop a signature canvas to its non-transparent bounding box (replaces trim-canvas,
+    // whose CJS default import breaks under the rolldown bundler)
+    const canvasDataUrl = (canvas?: HTMLCanvasElement | null) => {
+        if (!canvas) return '';
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return canvas.toDataURL('image/png');
+        const w = canvas.width;
+        const h = canvas.height;
+        const { data } = ctx.getImageData(0, 0, w, h);
+        let top = h, bottom = 0, left = w, right = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (data[(y * w + x) * 4 + 3] > 0) {
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < top) top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) return canvas.toDataURL('image/png');
+        const out = document.createElement('canvas');
+        out.width = right - left + 1;
+        out.height = bottom - top + 1;
+        out.getContext('2d')?.drawImage(canvas, left, top, out.width, out.height, 0, 0, out.width, out.height);
+        return out.toDataURL('image/png');
+    };
+
     const nextStep = () => setStep(s => Math.min(s + 1, totalSteps));
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
@@ -438,10 +466,10 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         const payload = {
             ...data,
             document_html: data.document_html || buildStatementHTML(),
-            signature_1: sigPad1.current.getTrimmedCanvas().toDataURL('image/png'),
-            paraf_1: parafPad1.current.getTrimmedCanvas().toDataURL('image/png'),
-            signature_2: data.has_second_occupant ? sigPad2.current.getTrimmedCanvas().toDataURL('image/png') : '',
-            paraf_2: data.has_second_occupant ? parafPad2.current.getTrimmedCanvas().toDataURL('image/png') : '',
+            signature_1: canvasDataUrl(sigPad1.current?.getCanvas?.()),
+            paraf_1: canvasDataUrl(parafPad1.current?.getCanvas?.()),
+            signature_2: data.has_second_occupant ? canvasDataUrl(sigPad2.current?.getCanvas?.()) : '',
+            paraf_2: data.has_second_occupant ? canvasDataUrl(parafPad2.current?.getCanvas?.()) : '',
         };
 
         router.post('/tenant/onboarding/agreement', payload);
@@ -682,7 +710,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 <SignatureCanvas
                                     ref={padRef}
                                     onEnd={() => {
-                                        const url = padRef.current?.getTrimmedCanvas().toDataURL('image/png');
+                                        const url = canvasDataUrl(padRef.current?.getCanvas?.());
                                         if (url) {
                                             if (occupant === 1) setParaf1Img(url);
                                             else setParaf2Img(url);
