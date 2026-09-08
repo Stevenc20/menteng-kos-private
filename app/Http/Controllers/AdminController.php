@@ -105,18 +105,24 @@ class AdminController extends Controller
         ]);
 
         try {
+            if (!$request->hasFile('photos')) {
+                return redirect()->back()->withErrors(['photos' => 'No files received by server. Keys: ' . implode(',', array_keys($request->all()))]);
+            }
+
             if ($request->hasFile('photos')) {
                 foreach ($request->file('photos') as $photo) {
                     $paths = $watermarkService->processAndStore($photo, $property->id);
                     
-                    \App\Models\PropertyMedia::create([
-                        'property_id' => $property->id,
-                        'type' => 'IMAGE',
-                        'original_path' => $paths['original_path'],
-                        'public_path' => $paths['public_path'],
-                        'is_cover' => $property->media()->where('is_cover', true)->doesntExist(),
-                        'sort_order' => $property->media()->count(),
-                    ]);
+                    \Illuminate\Support\Facades\Log::info('Creating media for property ' . $property->id, $paths);
+
+                    $media = new \App\Models\PropertyMedia();
+                    $media->property_id = $property->id;
+                    $media->type = 'IMAGE';
+                    $media->original_path = $paths['original_path'];
+                    $media->public_path = $paths['public_path'];
+                    $media->is_cover = $property->media()->where('is_cover', true)->doesntExist();
+                    $media->sort_order = $property->media()->count();
+                    $media->save();
                 }
             }
 
@@ -125,14 +131,14 @@ class AdminController extends Controller
                 $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
                 $path = $video->storeAs("public/properties/{$property->id}/videos", $filename);
                 
-                \App\Models\PropertyMedia::create([
-                    'property_id' => $property->id,
-                    'type' => 'VIDEO',
-                    'original_path' => $path,
-                    'public_path' => \Illuminate\Support\Facades\Storage::url($path),
-                    'is_cover' => false,
-                    'sort_order' => $property->media()->count(),
-                ]);
+                $media = new \App\Models\PropertyMedia();
+                $media->property_id = $property->id;
+                $media->type = 'VIDEO';
+                $media->original_path = $path;
+                $media->public_path = \Illuminate\Support\Facades\Storage::url($path);
+                $media->is_cover = false;
+                $media->sort_order = $property->media()->count();
+                $media->save();
             }
 
             return redirect()->back()->with('success', 'Media uploaded successfully.');
