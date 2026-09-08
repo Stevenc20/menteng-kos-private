@@ -130,16 +130,20 @@ export default function Properties({ properties }: PropertiesProps) {
     const uploadMedia = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingProp) return;
+        if (!mediaForm.data.photos || mediaForm.data.photos.length === 0) {
+            toast.error('Pilih foto terlebih dahulu!');
+            return;
+        }
         
         mediaForm.post(`/admin/properties/${editingProp.id}/media`, {
             preserveScroll: true,
+            forceFormData: true,
             onSuccess: () => {
                 toast.success('Media berhasil diunggah');
                 mediaForm.reset();
             },
             onError: (errors) => {
-                const firstError = Object.values(errors)[0];
-                toast.error(firstError || 'Gagal mengunggah media');
+                toast.error('Error: ' + JSON.stringify(errors));
             }
         });
     };
