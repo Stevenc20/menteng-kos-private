@@ -131,6 +131,63 @@ class OnboardingController extends Controller
     }
 
     /**
+     * Upload KTP photos (occupant 1 and/or 2) to private storage.
+     */
+    public function uploadKtp(Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->role !== 'TENANT') {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $validated = $request->validate([
+            'ktp_1_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'ktp_2_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $profile = TenantProfile::firstOrNew(['user_id' => $user->id]);
+        $paths = [];
+
+        if ($request->hasFile('ktp_1_photo')) {
+            if ($profile->ktp_1_photo) {
+                Storage::disk('local')->delete($profile->ktp_1_photo);
+            }
+            $paths['ktp_1_photo'] = $request->file('ktp_1_photo')->store('private/ktp');
+            $profile->ktp_1_photo = $paths['ktp_1_photo'];
+        }
+
+        if ($request->hasFile('ktp_2_photo')) {
+            if ($profile->ktp_2_photo) {
+                Storage::disk('local')->delete($profile->ktp_2_photo);
+            }
+            $paths['ktp_2_photo'] = $request->file('ktp_2_photo')->store('private/ktp');
+            $profile->ktp_2_photo = $paths['ktp_2_photo'];
+        }
+
+        $profile->save();
+
+        return response()->json(array_merge(['ok' => true], $paths));
+    }
+
+    /**
+     * Serve the uploaded KTP photo to its owner (private storage).
+     */
+    public function getKtpPhoto(string $kind)
+    {
+        $user = Auth::user();
+        $profile = TenantProfile::where('user_id', $user->id)->first();
+
+        $path = $kind === 'ktp_2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
+
+        if (!$path || !Storage::disk('local')->exists($path)) {
+            abort(404);
+        }
+
+        return Storage::disk('local')->response($path);
+    }
+
+    /**
      * Submit Agreement and Signatures
      */
     public function submitAgreement(Request $request)
