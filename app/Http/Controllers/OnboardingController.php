@@ -179,15 +179,19 @@ class OnboardingController extends Controller
 
         if (isset($paths['ktp_1_photo'])) {
             $absolutePath = Storage::disk('local')->path($paths['ktp_1_photo']);
+            Log::info('KTP upload received for occupant 1', ['path' => $paths['ktp_1_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
             if (file_exists($absolutePath)) {
                 try {
+                    Log::info('KTP OCR started for occupant 1');
                     $ocr = $ocrService->extract($absolutePath);
+                    Log::info('KTP OCR parsed result for occupant 1', ['data' => $ocr]);
                     if ($ocr['name']) $profile->ktp_1_name = $ocr['name'];
                     if ($ocr['nik']) $profile->ktp_1_nik = $ocr['nik'];
                     if ($ocr['birth_place']) $profile->ktp_1_birth_place = $ocr['birth_place'];
                     if ($ocr['birth_date']) $profile->ktp_1_birth_date = $ocr['birth_date'];
                     if ($ocr['address']) $profile->ktp_1_address = $ocr['address'];
                     $profile->save();
+                    Log::info('KTP OCR result saved to tenant_profiles for occupant 1');
                     $ocrResults['ktp_1'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 1: ' . $e->getMessage());
@@ -198,15 +202,19 @@ class OnboardingController extends Controller
 
         if (isset($paths['ktp_2_photo'])) {
             $absolutePath = Storage::disk('local')->path($paths['ktp_2_photo']);
+            Log::info('KTP upload received for occupant 2', ['path' => $paths['ktp_2_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
             if (file_exists($absolutePath)) {
                 try {
+                    Log::info('KTP OCR started for occupant 2');
                     $ocr = $ocrService->extract($absolutePath);
+                    Log::info('KTP OCR parsed result for occupant 2', ['data' => $ocr]);
                     if ($ocr['name']) $profile->ktp_2_name = $ocr['name'];
                     if ($ocr['nik']) $profile->ktp_2_nik = $ocr['nik'];
                     if ($ocr['birth_place']) $profile->ktp_2_birth_place = $ocr['birth_place'];
                     if ($ocr['birth_date']) $profile->ktp_2_birth_date = $ocr['birth_date'];
                     if ($ocr['address']) $profile->ktp_2_address = $ocr['address'];
                     $profile->save();
+                    Log::info('KTP OCR result saved to tenant_profiles for occupant 2');
                     $ocrResults['ktp_2'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 2: ' . $e->getMessage());
@@ -215,6 +223,7 @@ class OnboardingController extends Controller
             }
         }
 
+        Log::info('KTP OCR response returned to frontend', ['ocr' => $ocrResults]);
         return response()->json(array_merge(['ok' => true], $paths, ['ocr' => $ocrResults]));
     }
 
