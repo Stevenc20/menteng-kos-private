@@ -75,7 +75,7 @@ class OnboardingController extends Controller
             'ktp_1_birth_date' => 'required|date',
             'ktp_1_job' => 'required|string',
             'ktp_1_address' => 'required|string',
-            'ktp_1_photo' => 'nullable|image|max:5120', // Max 5MB
+            'ktp_1_photo' => 'nullable|image|max:10240', // Max 10MB
             
             'has_second_occupant' => 'required|boolean',
             
@@ -85,7 +85,7 @@ class OnboardingController extends Controller
             'ktp_2_birth_date' => 'nullable|required_if:has_second_occupant,true|date',
             'ktp_2_job' => 'nullable|required_if:has_second_occupant,true|string',
             'ktp_2_address' => 'nullable|required_if:has_second_occupant,true|string',
-            'ktp_2_photo' => 'nullable|image|max:5120',
+            'ktp_2_photo' => 'nullable|image|max:10240',
         ]);
 
         $profileData = $validated;
@@ -142,9 +142,13 @@ class OnboardingController extends Controller
         }
 
         $validated = $request->validate([
-            'ktp_1_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'ktp_2_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'ktp_1_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
+            'ktp_2_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
+
+        if (!$request->hasFile('ktp_1_photo') && !$request->hasFile('ktp_2_photo')) {
+            return response()->json(['ok' => false, 'message' => 'No KTP photo file was received. Silakan coba lagi.'], 422);
+        }
 
         $profile = TenantProfile::firstOrNew(['user_id' => $user->id]);
         $paths = [];

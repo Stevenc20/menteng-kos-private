@@ -7,9 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "9002:80"
-    volumes:
+volumes:
       - .:/var/www/html
       - ./database:/var/www/html/database
       - ./storage:/var/www/html/storage
+      - ./docker/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     environment:
       - DB_CONNECTION=sqlite
