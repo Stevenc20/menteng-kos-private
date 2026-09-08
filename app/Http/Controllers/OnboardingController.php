@@ -189,6 +189,7 @@ class OnboardingController extends Controller
                     if ($ocr['nik']) $profile->ktp_1_nik = $ocr['nik'];
                     if ($ocr['birth_place']) $profile->ktp_1_birth_place = $ocr['birth_place'];
                     if ($ocr['birth_date']) $profile->ktp_1_birth_date = $ocr['birth_date'];
+                    if ($ocr['job']) $profile->ktp_1_job = $ocr['job'];
                     if ($ocr['address']) $profile->ktp_1_address = $ocr['address'];
                     $profile->save();
                     Log::info('KTP OCR result saved to tenant_profiles for occupant 1');
@@ -212,6 +213,7 @@ class OnboardingController extends Controller
                     if ($ocr['nik']) $profile->ktp_2_nik = $ocr['nik'];
                     if ($ocr['birth_place']) $profile->ktp_2_birth_place = $ocr['birth_place'];
                     if ($ocr['birth_date']) $profile->ktp_2_birth_date = $ocr['birth_date'];
+                    if ($ocr['job']) $profile->ktp_2_job = $ocr['job'];
                     if ($ocr['address']) $profile->ktp_2_address = $ocr['address'];
                     $profile->save();
                     Log::info('KTP OCR result saved to tenant_profiles for occupant 2');

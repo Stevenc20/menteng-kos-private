@@ -148,7 +148,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
             const prefix = occupant === 1 ? 'ktp_1' : 'ktp_2';
             const ocrData = json.ocr?.[`ktp_${occupant}`];
-            const hasOcrFields = ocrData && !ocrData.error && (ocrData.name || ocrData.nik || ocrData.birth_place || ocrData.birth_date || ocrData.address);
+            const hasOcrFields = ocrData && !ocrData.error && (ocrData.name || ocrData.nik || ocrData.birth_place || ocrData.birth_date || ocrData.job || ocrData.address);
 
             setData(`${prefix}_photo`, null);
             setData(`${prefix}_photo_path`, json[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]);
@@ -158,11 +158,12 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                 if (ocrData.nik) setData(`${prefix}_nik`, ocrData.nik);
                 if (ocrData.birth_place) setData(`${prefix}_birth_place`, ocrData.birth_place);
                 if (ocrData.birth_date) setData(`${prefix}_birth_date`, ocrData.birth_date);
+                if (ocrData.job) setData(`${prefix}_job`, ocrData.job);
                 if (ocrData.address) setData(`${prefix}_address`, ocrData.address);
             }
 
             if (ocrData && !ocrData.error) {
-                const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.address].filter(Boolean).length;
+                const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.job, ocrData.address].filter(Boolean).length;
                 if (filled > 0) {
                     setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil dipindai (${filled} field terisi). Silakan periksa di langkah berikutnya.` }));
                 } else {

@@ -42,6 +42,7 @@ it('handles inline label with colon for all fields', function () {
          . "Nama : STEVEN CHRISTIAN\n"
          . "Tempat/Tgl Lahir : BEKASI, 07-03-2002\n"
          . "Jenis Kelamin : LAKI-LAKI\n"
+         . "Pekerjaan : PELAJAR/MAHASISWA\n"
          . "Alamat : Jl. Test No. 1 RT 002 RW 003";
 
     $result = parseKtp($raw);
@@ -50,6 +51,7 @@ it('handles inline label with colon for all fields', function () {
     expect($result['name'])->toBe('STEVEN CHRISTIAN');
     expect($result['birth_place'])->toBe('BEKASI');
     expect($result['birth_date'])->toBe('2002-03-07');
+    expect($result['job'])->toBe('PELAJAR/MAHASISWA');
     expect($result['address'])->toBe('Jl. Test No. 1 RT 002 RW 003');
 });
 

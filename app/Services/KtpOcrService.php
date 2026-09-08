@@ -198,6 +198,7 @@ class KtpOcrService
             'birth_place' => '',
             'birth_date'  => '',
             'gender'      => '',
+            'job'         => '',
             'address'     => '',
         ];
 
@@ -272,6 +273,26 @@ class KtpOcrService
             $result['gender'] = 'LAKI-LAKI';
         } elseif (preg_match('/PEREMPUAN/i', $fullText)) {
             $result['gender'] = 'PEREMPUAN';
+        }
+
+        // --- Pekerjaan ---
+        for ($i = 0; $i < count($lines); $i++) {
+            // Inline: "Pekerjaan : PELAJAR/MAHASISWA"
+            if (preg_match('/^Pekerjaan\s*[:\-\s]+\s*(.+)$/i', $lines[$i], $m)) {
+                $job = $this->cleanName($m[1]);
+                if ($job !== '') {
+                    $result['job'] = $job;
+                }
+                break;
+            }
+            // Label on its own line: "Pekerjaan" then value below
+            if (preg_match('/^Pekerjaan\s*$/i', $lines[$i]) && isset($lines[$i + 1])) {
+                $job = $this->cleanName($lines[$i + 1]);
+                if ($job !== '' && !preg_match('/^(Perkawinan|Agama|Kawin|Status|Alamat)/i', $job)) {
+                    $result['job'] = $job;
+                }
+                break;
+            }
         }
 
         // --- Alamat ---
