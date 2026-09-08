@@ -74,17 +74,17 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
         <AdminLayout title="Tenant & Undangan">
             <div className="flex justify-between items-end mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Manajemen Tenant</h1>
-                    <p className="text-neutral-500 mt-1">Undang calon penghuni dan pantau status siklus sewa mereka.</p>
+                    <h1 className="text-[28px] md:text-[32px] font-bold tracking-tight text-[#1A1A18]">Manajemen Tenant</h1>
+                    <p className="text-[14px] md:text-[15px] text-[#6B6B67] mt-1.5">Undang calon penghuni dan pantau status siklus sewa mereka.</p>
                 </div>
                 <AdminButton onClick={() => setShowModal(true)}>
                     + Buat Undangan
                 </AdminButton>
             </div>
 
-            <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="bg-white border border-[#E8E7E3] rounded-2xl overflow-hidden shadow-sm">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-neutral-50 text-neutral-500 border-b border-neutral-200">
+                    <thead className="bg-[#F7F7F5] text-[#6B6B67] border-b border-[#E8E7E3]">
                         <tr>
                             <th className="px-6 py-4 font-medium">Email / Akun</th>
                             <th className="px-6 py-4 font-medium">Unit</th>
@@ -93,21 +93,21 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                             <th className="px-6 py-4 font-medium">Status</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-200">
+                    <tbody className="divide-y divide-[#E8E7E3]">
                         {tenancies.map((t) => (
-                            <tr key={t.id} className="hover:bg-neutral-50 transition-colors">
+                            <tr key={t.id} className="hover:bg-[#F7F7F5] transition-colors">
                                 <td className="px-6 py-4">
-                                    <div className="font-medium text-neutral-900">{t.user.name}</div>
-                                    <div className="text-neutral-500">{t.user.email}</div>
+                                    <div className="font-medium text-[#1A1A18]">{t.user.name}</div>
+                                    <div className="text-[#6B6B67]">{t.user.email}</div>
                                 </td>
-                                <td className="px-6 py-4 font-medium">{t.property.name}</td>
-                                <td className="px-6 py-4 text-neutral-600">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</td>
-                                <td className="px-6 py-4 text-neutral-600">{t.move_in_date}</td>
+                                <td className="px-6 py-4 font-medium text-[#1A1A18]">{t.property.name}</td>
+                                <td className="px-6 py-4 text-[#6B6B67]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</td>
+                                <td className="px-6 py-4 text-[#6B6B67]">{t.move_in_date}</td>
                                 <td className="px-6 py-4">
-                                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                                        t.status === 'INVITED' ? 'bg-purple-100 text-purple-800' :
-                                        t.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                                        'bg-neutral-100 text-neutral-800'
+                                    <span className={`px-2.5 py-1 text-[12px] font-medium rounded-full ${
+                                        t.status === 'INVITED' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
+                                        t.status === 'ACTIVE' ? 'bg-[#ECFDF5] text-[#047857]' :
+                                        'bg-[#F3F4F6] text-[#374151]'
                                     }`}>
                                         {t.status}
                                     </span>
@@ -116,7 +116,7 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                         ))}
                         {tenancies.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">Belum ada tenant atau undangan.</td>
+                                <td colSpan={5} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada tenant atau undangan.</td>
                             </tr>
                         )}
                     </tbody>

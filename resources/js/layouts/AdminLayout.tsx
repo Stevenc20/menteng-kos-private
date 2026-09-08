@@ -17,37 +17,40 @@ export default function AdminLayout({ children, title = 'Admin Dashboard' }: Adm
     ];
 
     return (
-        <div className="min-h-screen bg-neutral-100 flex font-sans">
+        <div className="min-h-screen bg-[#F7F7F5] flex font-sans text-[#1A1A18]">
             <Head title={title} />
             
             {/* Sidebar */}
-            <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col hidden md:flex">
-                <div className="h-16 flex items-center px-6 border-b border-neutral-200">
-                    <span className="font-bold tracking-tight text-lg uppercase">Menteng Admin</span>
+            <aside className="w-64 bg-white border-r border-[#E8E7E3] flex flex-col hidden md:flex shrink-0">
+                <div className="h-[80px] flex items-center px-8 border-b border-[#E8E7E3]">
+                    <span className="font-bold tracking-tight text-[18px] text-[#1A1A18] uppercase">Menteng Admin</span>
                 </div>
-                <nav className="flex-1 px-4 py-6 space-y-2">
-                    {navItems.map((item) => (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors font-medium text-sm ${
-                                url.startsWith(item.href) 
-                                    ? 'bg-neutral-900 text-white' 
-                                    : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
-                            }`}
-                        >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                            </svg>
-                            {item.name}
-                        </Link>
-                    ))}
+                <nav className="flex-1 px-5 py-8 space-y-2">
+                    {navItems.map((item) => {
+                        const isActive = url.startsWith(item.href);
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-[10px] transition-colors font-medium text-[14px] ${
+                                    isActive
+                                        ? 'bg-[#1E1E1C] text-white shadow-sm' 
+                                        : 'text-[#6B6B67] hover:bg-[#F7F7F5] hover:text-[#1A1A18]'
+                                }`}
+                            >
+                                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                                </svg>
+                                {item.name}
+                            </Link>
+                        );
+                    })}
                 </nav>
-                <div className="p-4 border-t border-neutral-200">
+                <div className="p-5 border-t border-[#E8E7E3]">
                     <form method="POST" action="/logout">
                         <input type="hidden" name="_token" value={(window as any).csrf_token} />
-                        <button type="submit" className="flex items-center gap-3 px-3 py-2 w-full text-left rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <button type="submit" className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-[10px] text-[14px] font-medium text-red-600/90 hover:bg-red-50 hover:text-red-700 transition-colors">
+                            <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
                             Logout
@@ -58,16 +61,16 @@ export default function AdminLayout({ children, title = 'Admin Dashboard' }: Adm
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-16 bg-white border-b border-neutral-200 flex items-center px-8 md:hidden">
-                    <span className="font-bold">Menteng Admin</span>
+                <header className="h-16 bg-white border-b border-[#E8E7E3] flex items-center px-8 md:hidden">
+                    <span className="font-bold text-[#1A1A18]">Menteng Admin</span>
                 </header>
                 
-                <main className="flex-1 overflow-auto p-8">
+                <main className="flex-1 overflow-auto p-8 md:p-12">
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.4 }}
-                        className="max-w-6xl mx-auto"
+                        className="max-w-[1000px] mx-auto"
                     >
                         {children}
                     </motion.div>
