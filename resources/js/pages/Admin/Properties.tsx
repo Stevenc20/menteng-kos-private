@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import { toast } from 'sonner';
+import { Pencil, Trash2 } from 'lucide-react';
 import { 
     AdminModal, 
     AdminModalHeader, 
@@ -9,9 +10,7 @@ import {
     AdminModalFooter 
 } from '@/components/admin/AdminModal';
 import { 
-    FormSection, 
     FormLabel, 
-    FormHelper, 
     FormError, 
     TextInput, 
     SelectInput, 
@@ -33,26 +32,64 @@ interface PropertiesProps {
 
 export default function Properties({ properties }: PropertiesProps) {
     const [showModal, setShowModal] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     
-    const { data, setData, post, processing, reset, errors } = useForm({
+    const { data, setData, post, put, processing, reset, errors, clearErrors } = useForm({
         name: '',
         type: 'ROOM',
         normal_price: '',
         status: 'AVAILABLE'
     });
 
+    const openAddModal = () => {
+        setEditingId(null);
+        reset();
+        clearErrors();
+        setShowModal(true);
+    };
+
+    const openEditModal = (prop: Property) => {
+        setEditingId(prop.id);
+        setData({
+            name: prop.name,
+            type: prop.type,
+            normal_price: prop.normal_price,
+            status: prop.status
+        });
+        clearErrors();
+        setShowModal(true);
+    };
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/admin/properties', {
-            onSuccess: () => {
-                setShowModal(false);
-                reset();
-                toast.success('Properti berhasil ditambahkan');
-            },
-            onError: () => {
-                toast.error('Gagal menyimpan properti');
-            }
-        });
+        if (editingId) {
+            put(`/admin/properties/${editingId}`, {
+                onSuccess: () => {
+                    setShowModal(false);
+                    reset();
+                    toast.success('Properti berhasil diperbarui');
+                },
+                onError: () => toast.error('Gagal memperbarui properti')
+            });
+        } else {
+            post('/admin/properties', {
+                onSuccess: () => {
+                    setShowModal(false);
+                    reset();
+                    toast.success('Properti berhasil ditambahkan');
+                },
+                onError: () => toast.error('Gagal menyimpan properti')
+            });
+        }
+    };
+
+    const deleteProperty = (id: number) => {
+        if (confirm('Apakah Anda yakin ingin menghapus properti ini?')) {
+            router.delete(`/admin/properties/${id}`, {
+                onSuccess: () => toast.success('Properti berhasil dihapus'),
+                onError: () => toast.error('Gagal menghapus properti')
+            });
+        }
     };
 
     return (
@@ -62,7 +99,7 @@ export default function Properties({ properties }: PropertiesProps) {
                     <h1 className="text-[28px] md:text-[32px] font-bold tracking-tight text-[#1A1A18]">Properti</h1>
                     <p className="text-[14px] md:text-[15px] text-[#6B6B67] mt-1.5">Kelola data kamar kos dan kios komersial.</p>
                 </div>
-                <AdminButton onClick={() => setShowModal(true)}>
+                <AdminButton onClick={openAddModal}>
                     + Tambah Properti
                 </AdminButton>
             </div>
@@ -75,6 +112,7 @@ export default function Properties({ properties }: PropertiesProps) {
                             <th className="px-6 py-4 font-medium">Tipe</th>
                             <th className="px-6 py-4 font-medium">Harga Normal</th>
                             <th className="px-6 py-4 font-medium">Status</th>
+                            <th className="px-6 py-4 font-medium w-24">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E7E3]">
@@ -94,11 +132,29 @@ export default function Properties({ properties }: PropertiesProps) {
                                         {prop.status}
                                     </span>
                                 </td>
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => openEditModal(prop)}
+                                            className="p-1.5 text-[#6B6B67] hover:text-[#1A1A18] hover:bg-[#F7F7F5] rounded-md transition-colors"
+                                            title="Edit"
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            onClick={() => deleteProperty(prop.id)}
+                                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                                            title="Hapus"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                         {properties.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada properti yang ditambahkan.</td>
+                                <td colSpan={5} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada properti yang ditambahkan.</td>
                             </tr>
                         )}
                     </tbody>
@@ -112,7 +168,7 @@ export default function Properties({ properties }: PropertiesProps) {
             >
                 <form onSubmit={submit}>
                     <AdminModalHeader 
-                        title="Tambah Properti Baru" 
+                        title={editingId ? "Edit Properti" : "Tambah Properti Baru"} 
                         onClose={() => !processing && setShowModal(false)}
                     />
                     
@@ -143,6 +199,22 @@ export default function Properties({ properties }: PropertiesProps) {
                                 </SelectInput>
                                 <FormError>{errors.type}</FormError>
                             </div>
+
+                            {editingId && (
+                                <div>
+                                    <FormLabel htmlFor="status">Status</FormLabel>
+                                    <SelectInput 
+                                        id="status"
+                                        value={data.status} 
+                                        onChange={e => setData('status', e.target.value as any)}
+                                    >
+                                        <option value="AVAILABLE">Tersedia (AVAILABLE)</option>
+                                        <option value="OCCUPIED">Terisi (OCCUPIED)</option>
+                                        <option value="MAINTENANCE">Perbaikan (MAINTENANCE)</option>
+                                    </SelectInput>
+                                    <FormError>{errors.status}</FormError>
+                                </div>
+                            )}
                             
                             <div>
                                 <FormLabel htmlFor="normal_price">Harga Normal Bulanan</FormLabel>
@@ -171,7 +243,7 @@ export default function Properties({ properties }: PropertiesProps) {
                             type="submit" 
                             isLoading={processing}
                         >
-                            Simpan Properti
+                            {editingId ? "Simpan Perubahan" : "Simpan Properti"}
                         </AdminButton>
                     </AdminModalFooter>
                 </form>

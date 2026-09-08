@@ -57,6 +57,35 @@ class AdminController extends Controller
     }
 
     /**
+     * Update a Property.
+     */
+    public function updateProperty(Request $request, $id)
+    {
+        $property = Property::findOrFail($id);
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type' => 'required|in:ROOM,KIOSK',
+            'normal_price' => 'required|numeric|min:0',
+            'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE'
+        ]);
+
+        $property->update($validated);
+
+        return redirect()->back()->with('success', 'Property updated successfully.');
+    }
+
+    /**
+     * Destroy a Property.
+     */
+    public function destroyProperty($id)
+    {
+        $property = Property::findOrFail($id);
+        $property->delete();
+
+        return redirect()->back()->with('success', 'Property deleted successfully.');
+    }
+
+    /**
      * Display the Tenants and Invitations page.
      */
     public function tenants()

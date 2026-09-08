@@ -45,6 +45,8 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     // Properties
     Route::get('/properties', [\App\Http\Controllers\AdminController::class, 'properties'])->name('admin.properties');
     Route::post('/properties', [\App\Http\Controllers\AdminController::class, 'storeProperty'])->name('admin.properties.store');
+    Route::put('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'updateProperty'])->name('admin.properties.update');
+    Route::delete('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'destroyProperty'])->name('admin.properties.destroy');
     
     // Tenants & Invitations
     Route::get('/tenants', [\App\Http\Controllers\AdminController::class, 'tenants'])->name('admin.tenants');
