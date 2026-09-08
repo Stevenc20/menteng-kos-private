@@ -26,7 +26,18 @@ class KtpOcrService
      */
     private function runTesseract(string $path): string
     {
-        $cmd = sprintf('tesseract %s stdout -l ind+eng 2>&1', escapeshellarg($path));
+        $bin = $this->findTesseract();
+        if (!$bin) {
+            throw new \RuntimeException('Tesseract OCR engine not found on this system.');
+        }
+
+        // Prefer ind+eng but fall back to eng if ind is unavailable
+        $langs = 'ind+eng';
+        if (!$this->languageAvailable($bin, 'ind')) {
+            $langs = 'eng';
+        }
+
+        $cmd = sprintf('%s %s stdout -l %s 2>&1', escapeshellarg($bin), escapeshellarg($path), $langs);
         exec($cmd, $output, $exitCode);
 
         if ($exitCode !== 0) {
@@ -34,6 +45,50 @@ class KtpOcrService
         }
 
         return implode("\n", $output);
+    }
+
+    /**
+     * Check if the given language traineddata is installed.
+     */
+    private function languageAvailable(string $bin, string $lang): bool
+    {
+        $cmd = sprintf('%s --list-langs 2>&1', escapeshellarg($bin));
+        exec($cmd, $output, $exitCode);
+        return $exitCode === 0 && in_array($lang, array_map('trim', $output), true);
+    }
+
+    /**
+     * Find the Tesseract binary path (cross-platform).
+     */
+    private function findTesseract(): ?string
+    {
+        // Check common locations
+        $candidates = [
+            'tesseract', // PATH
+            '/usr/bin/tesseract', // Linux
+            '/usr/local/bin/tesseract', // macOS Homebrew
+            'C:\\Program Files\\Tesseract-OCR\\tesseract.exe', // Windows
+            'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe', // Windows 32-bit
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_executable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        // Try shell command to find it
+        exec('where tesseract 2>nul', $whereOut, $whereCode);
+        if ($whereCode === 0 && !empty($whereOut)) {
+            return trim($whereOut[0]);
+        }
+
+        exec('which tesseract 2>/dev/null', $whichOut, $whichCode);
+        if ($whichCode === 0 && !empty($whichOut)) {
+            return trim($whichOut[0]);
+        }
+
+        return null;
     }
 
     /**
@@ -82,23 +137,29 @@ class KtpOcrService
         // --- Tempat/Tgl Lahir ---
         for ($i = 0; $i < count($lines); $i++) {
             if (preg_match('/Tempat.*Tgl.*Lahir/i', $lines[$i])) {
+                // Same line inline value: "Tempat/Tgl Lahir : BEKASI, 07-03-2002"
+                if (preg_match('/Tempat.*Tgl.*Lahir\s*[:\-\s]*\s*(.+)$/i', $lines[$i], $mIn)) {
+                    if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $mIn[1], $m)) {
+                        $result['birth_place'] = trim($m[1]);
+                        $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
+                        break;
+                    }
+                }
+                // Value on next line: "Tempat/Tgl Lahir" then "BEKASI, 07-03-2002"
                 if (isset($lines[$i + 1]) && preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $lines[$i + 1], $m)) {
                     $result['birth_place'] = trim($m[1]);
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
                     break;
                 }
-                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $lines[$i], $m)) {
-                    $result['birth_place'] = trim($m[1]);
-                    $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
-                    break;
-                }
+                // Compact date: "BEKASI 07032002"
                 if (isset($lines[$i + 1]) && preg_match('/(.+?)\s+(\d{2})(\d{2})(\d{4})/i', $lines[$i + 1], $m)) {
                     $result['birth_place'] = trim($m[1]);
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
                     break;
                 }
             }
-            if (preg_match('/^([A-Z\s]+),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})$/i', $lines[$i], $m) && $result['birth_place'] === '') {
+            // Bare value line without label: "BEKASI, 07-03-2002"
+            if (preg_match('/^([A-Z\s]{2,}),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})$/i', $lines[$i], $m) && $result['birth_place'] === '') {
                 $result['birth_place'] = trim($m[1]);
                 $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
             }
@@ -113,24 +174,26 @@ class KtpOcrService
 
         // --- Alamat ---
         for ($i = 0; $i < count($lines); $i++) {
+            // Inline address: "Alamat : ..."
+            if (preg_match('/^Alamat\s*[:\-\s]\s*(.+)$/i', $lines[$i], $m)) {
+                $result['address'] = trim($m[1]);
+                break;
+            }
+            // Label on its own line: "Alamat" then address lines below
             if (preg_match('/^Alamat\s*$/i', $lines[$i])) {
                 $addrLines = [];
                 for ($j = $i + 1; $j < count($lines); $j++) {
-                    $line = $lines[$j];
-                    if (preg_match('/^(RT|RW|Kel|Desa|Kec|Kota|Kab|Provinsi|Agama|Kawin|Pekerjaan|Warganegara|Berlaku|NAma|NIK|Tempat|Jenis|Goldar)/i', $line)) {
+                    $line = trim($lines[$j]);
+                    if ($line === '') continue;
+                    // Stop at unrelated KTP field labels
+                    if (preg_match('/^(Agama|Kawin|Pekerjaan|Warganegara|Berlaku|Goldar|Nama|NIK|Tempat|Jenis|Gol\b)/i', $line)) {
                         break;
                     }
-                    if ($line !== '') {
-                        $addrLines[] = $line;
-                    }
+                    $addrLines[] = $line;
                 }
                 if (!empty($addrLines)) {
                     $result['address'] = implode(', ', $addrLines);
                 }
-                break;
-            }
-            if (preg_match('/^Alamat\s*[:\-\s]\s*(.+)$/i', $lines[$i], $m)) {
-                $result['address'] = trim($m[1]);
                 break;
             }
         }

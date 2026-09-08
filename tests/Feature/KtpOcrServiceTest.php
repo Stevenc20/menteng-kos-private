@@ -2,13 +2,18 @@
 
 use App\Services\KtpOcrService;
 
-it('extracts NIK from raw OCR text with 16 digits', function () {
+function parseKtp(string $raw): array
+{
     $service = new KtpOcrService();
+    $ref = new ReflectionClass($service);
+    $method = $ref->getMethod('parse');
+    $method->setAccessible(true);
+    return $method->invoke($service, $raw);
+}
 
-    $raw = "Prov. DKI JAKARTA\n"
-         . "Kota adm. JAKARTA SELATAN\n"
-         . "Kec. Cilandak\n"
-         . "Kel. Cilandak Timur\n"
+it('extracts NIK, name, birth data, gender and address from realistic KTP OCR', function () {
+    $raw = "REPUBLIK INDONESIA\n"
+         . "NIK\n"
          . "3275011503020001\n"
          . "Nama\n"
          . "STEVEN CHRISTIAN\n"
@@ -17,61 +22,48 @@ it('extracts NIK from raw OCR text with 16 digits', function () {
          . "Jenis Kelamin\n"
          . "LAKI-LAKI\n"
          . "Alamat\n"
-         . "Jl. Test No. 123\n"
-         . "RT 01/RW 02";
+         . "JL. H. MOKEN NO. 19 RT 01 RW 02\n"
+         . "KEL. GANDARIA, KEC. JAGAKARSA\n"
+         . "KOTA ADMINISTRASI JAKARTA SELATAN";
 
-    // Use reflection to call parse directly
-    $ref = new ReflectionClass($service);
-    $parseMethod = $ref->getMethod('parse');
-    $parseMethod->setAccessible(true);
-
-    $result = $parseMethod->invoke($service, $raw);
+    $result = parseKtp($raw);
 
     expect($result['nik'])->toBe('3275011503020001');
     expect($result['name'])->toBe('STEVEN CHRISTIAN');
     expect($result['birth_place'])->toBe('BEKASI');
     expect($result['birth_date'])->toBe('2002-03-15');
     expect($result['gender'])->toBe('LAKI-LAKI');
-    expect($result['address'])->toContain('Jl. Test No. 123');
+    expect($result['address'])->toContain('JL. H. MOKEN NO. 19 RT 01 RW 02');
+    expect($result['address'])->toContain('JAKARTA SELATAN');
 });
 
-it('extracts name when label is on separate line', function () {
-    $service = new KtpOcrService();
-    $ref = new ReflectionClass($service);
-    $parseMethod = $ref->getMethod('parse');
-    $parseMethod->setAccessible(true);
+it('handles inline label with colon for all fields', function () {
+    $raw = "NIK : 3275011503020001\n"
+         . "Nama : STEVEN CHRISTIAN\n"
+         . "Tempat/Tgl Lahir : BEKASI, 07-03-2002\n"
+         . "Jenis Kelamin : LAKI-LAKI\n"
+         . "Alamat : Jl. Test No. 1 RT 002 RW 003";
 
-    $raw = "Nama\nSITI NURHALIZA\nTempat/Tgl Lahir\nJAKARTA, 01-01-1990";
+    $result = parseKtp($raw);
 
-    $result = $parseMethod->invoke($service, $raw);
-
-    expect($result['name'])->toBe('SITI NURHALIZA');
-    expect($result['birth_place'])->toBe('JAKARTA');
-    expect($result['birth_date'])->toBe('1990-01-01');
+    expect($result['nik'])->toBe('3275011503020001');
+    expect($result['name'])->toBe('STEVEN CHRISTIAN');
+    expect($result['birth_place'])->toBe('BEKASI');
+    expect($result['birth_date'])->toBe('2002-03-07');
+    expect($result['address'])->toBe('Jl. Test No. 1 RT 002 RW 003');
 });
 
 it('extracts gender as PEREMPUAN', function () {
-    $service = new KtpOcrService();
-    $ref = new ReflectionClass($service);
-    $parseMethod = $ref->getMethod('parse');
-    $parseMethod->setAccessible(true);
-
-    $raw = "Jenis Kelamin\nPEREMPUAN\nAlamat\nJl. Mawar No. 5";
-
-    $result = $parseMethod->invoke($service, $raw);
+    $result = parseKtp("Jenis Kelamin\nPEREMPUAN\nAlamat\nJl. Mawar No. 5");
 
     expect($result['gender'])->toBe('PEREMPUAN');
+    expect($result['address'])->toBe('Jl. Mawar No. 5');
 });
 
 it('handles missing fields gracefully', function () {
-    $service = new KtpOcrService();
-    $ref = new ReflectionClass($service);
-    $parseMethod = $ref->getMethod('parse');
-    $parseMethod->setAccessible(true);
-
     $raw = "Some random text\nwithout KTP structure";
 
-    $result = $parseMethod->invoke($service, $raw);
+    $result = parseKtp($raw);
 
     expect($result['nik'])->toBe('');
     expect($result['name'])->toBe('');
@@ -82,14 +74,8 @@ it('handles missing fields gracefully', function () {
 });
 
 it('cleans NIK from extra characters', function () {
-    $service = new KtpOcrService();
-    $ref = new ReflectionClass($service);
-    $parseMethod = $ref->getMethod('parse');
-    $parseMethod->setAccessible(true);
-
-    $raw = "NIK: 3275 0115 0302 0001\nNama\nTEST USER";
-
-    $result = $parseMethod->invoke($service, $raw);
+    $result = parseKtp("NIK: 3275 0115 0302 0001\nNama\nTEST USER");
 
     expect($result['nik'])->toBe('3275011503020001');
+    expect($result['name'])->toBe('TEST USER');
 });
