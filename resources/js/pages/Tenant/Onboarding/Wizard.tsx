@@ -65,6 +65,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
     const [uploading, setUploading] = useState<{ ktp_1: boolean; ktp_2: boolean }>({ ktp_1: false, ktp_2: false });
     const [uploadError, setUploadError] = useState<{ ktp_1: string; ktp_2: string }>({ ktp_1: '', ktp_2: '' });
+    const [ocrStatus, setOcrStatus] = useState<{ ktp_1: string; ktp_2: string }>({ ktp_1: '', ktp_2: '' });
 
     const { data, setData, post, processing, errors } = useForm({
         whatsapp: p.whatsapp ?? '',
@@ -144,10 +145,31 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                 setUploadError(s => ({ ...s, [errKey]: msg }));
                 return false;
             }
-            if (occupant === 1) {
-                setData(d => ({ ...d, ktp_1_photo: null, ktp_1_photo_path: json.ktp_1_photo ?? d.ktp_1_photo_path }));
+
+            const prefix = occupant === 1 ? 'ktp_1' : 'ktp_2';
+            const ocrData = json.ocr?.[`ktp_${occupant}`];
+            const hasOcrFields = ocrData && !ocrData.error && (ocrData.name || ocrData.nik || ocrData.birth_place || ocrData.birth_date || ocrData.address);
+
+            setData(`${prefix}_photo`, null);
+            setData(`${prefix}_photo_path`, json[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]);
+
+            if (hasOcrFields) {
+                if (ocrData.name) setData(`${prefix}_name`, ocrData.name);
+                if (ocrData.nik) setData(`${prefix}_nik`, ocrData.nik);
+                if (ocrData.birth_place) setData(`${prefix}_birth_place`, ocrData.birth_place);
+                if (ocrData.birth_date) setData(`${prefix}_birth_date`, ocrData.birth_date);
+                if (ocrData.address) setData(`${prefix}_address`, ocrData.address);
+            }
+
+            if (ocrData && !ocrData.error) {
+                const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.address].filter(Boolean).length;
+                if (filled > 0) {
+                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil dipindai (${filled} field terisi). Silakan periksa di langkah berikutnya.` }));
+                } else {
+                    setOcrStatus(s => ({ ...s, [errKey]: 'Foto tersimpan, namun data tidak terbaca otomatis. Silakan isi manual.' }));
+                }
             } else {
-                setData(d => ({ ...d, ktp_2_photo: null, ktp_2_photo_path: json.ktp_2_photo ?? d.ktp_2_photo_path }));
+                setOcrStatus(s => ({ ...s, [errKey]: 'Foto tersimpan. Silakan isi data secara manual.' }));
             }
             return true;
         } catch (e) {
@@ -276,7 +298,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                     <img src={data.ktp_1_photo_preview} alt="KTP Preview" className="max-h-56 mx-auto rounded-lg shadow-sm" />
                                 </div>
                                 {data.ktp_1_photo_path && (
-                                    <p className="text-xs text-green-600 font-medium text-center">Foto KTP berhasil tersimpan.</p>
+                                    <p className="text-xs text-green-600 font-medium text-center">
+                                        {ocrStatus.ktp_1 || 'Foto KTP berhasil tersimpan.'}
+                                    </p>
                                 )}
                                 <div className="flex flex-wrap gap-3 justify-center">
                                     <button type="button" onClick={() => cameraInput1.current?.click()} className="px-4 py-2.5 rounded-xl text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
@@ -388,6 +412,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 )}
                                 <input ref={cameraInput2} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
                                 <input ref={galleryInput2} type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
+                                {data.ktp_2_photo_path && ocrStatus.ktp_2 && (
+                                    <p className="text-xs text-green-600 font-medium text-center">{ocrStatus.ktp_2}</p>
+                                )}
                                 {uploadError.ktp_2 && <p className="text-red-500 text-sm font-medium">{uploadError.ktp_2}</p>}
                             </div>
 

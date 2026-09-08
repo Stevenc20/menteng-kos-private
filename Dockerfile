@@ -1,8 +1,9 @@
 FROM php:8.4-apache
 
-# Install dependencies & Node.js 22
+# Install dependencies, Node.js 22, and Tesseract OCR (Indonesian + English)
 RUN apt-get update && apt-get install -y \
     zip unzip git curl libpng-dev libjpeg-dev libfreetype6-dev sqlite3 libsqlite3-dev \
+    tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \

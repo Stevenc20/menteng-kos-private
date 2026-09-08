@@ -6,8 +6,10 @@ use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\Agreement;
 use App\Models\AgreementSignature;
+use App\Services\KtpOcrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -171,7 +173,49 @@ class OnboardingController extends Controller
 
         $profile->save();
 
-        return response()->json(array_merge(['ok' => true], $paths));
+        // Run OCR on uploaded photos
+        $ocrService = new KtpOcrService();
+        $ocrResults = [];
+
+        if (isset($paths['ktp_1_photo'])) {
+            $absolutePath = Storage::disk('local')->path($paths['ktp_1_photo']);
+            if (file_exists($absolutePath)) {
+                try {
+                    $ocr = $ocrService->extract($absolutePath);
+                    if ($ocr['name']) $profile->ktp_1_name = $ocr['name'];
+                    if ($ocr['nik']) $profile->ktp_1_nik = $ocr['nik'];
+                    if ($ocr['birth_place']) $profile->ktp_1_birth_place = $ocr['birth_place'];
+                    if ($ocr['birth_date']) $profile->ktp_1_birth_date = $ocr['birth_date'];
+                    if ($ocr['address']) $profile->ktp_1_address = $ocr['address'];
+                    $profile->save();
+                    $ocrResults['ktp_1'] = $ocr;
+                } catch (\Exception $e) {
+                    Log::error('KTP OCR failed for occupant 1: ' . $e->getMessage());
+                    $ocrResults['ktp_1'] = ['error' => 'OCR processing failed'];
+                }
+            }
+        }
+
+        if (isset($paths['ktp_2_photo'])) {
+            $absolutePath = Storage::disk('local')->path($paths['ktp_2_photo']);
+            if (file_exists($absolutePath)) {
+                try {
+                    $ocr = $ocrService->extract($absolutePath);
+                    if ($ocr['name']) $profile->ktp_2_name = $ocr['name'];
+                    if ($ocr['nik']) $profile->ktp_2_nik = $ocr['nik'];
+                    if ($ocr['birth_place']) $profile->ktp_2_birth_place = $ocr['birth_place'];
+                    if ($ocr['birth_date']) $profile->ktp_2_birth_date = $ocr['birth_date'];
+                    if ($ocr['address']) $profile->ktp_2_address = $ocr['address'];
+                    $profile->save();
+                    $ocrResults['ktp_2'] = $ocr;
+                } catch (\Exception $e) {
+                    Log::error('KTP OCR failed for occupant 2: ' . $e->getMessage());
+                    $ocrResults['ktp_2'] = ['error' => 'OCR processing failed'];
+                }
+            }
+        }
+
+        return response()->json(array_merge(['ok' => true], $paths, ['ocr' => $ocrResults]));
     }
 
     /**
