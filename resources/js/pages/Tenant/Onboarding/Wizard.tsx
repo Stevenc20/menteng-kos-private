@@ -140,12 +140,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             });
             const json = await res.json();
             if (!res.ok) {
-                let msg = json.message || 'Gagal mengunggah foto KTP.';
-                if (typeof msg === 'string' && msg.includes('failed to upload')) {
-                    msg = 'Foto gagal terunggah ke server (ukuran/format tidak diterima). Pastikan file di bawah 10MB dan bertipe JPG/PNG.';
-                } else if (typeof msg === 'string' && msg.includes('must not be greater than')) {
-                    msg = 'Ukuran foto terlalu besar. Maksimal 10MB.';
-                }
+                const msg = json.message || 'Gagal mengunggah foto KTP.';
                 setUploadError(s => ({ ...s, [errKey]: msg }));
                 return false;
             }
