@@ -43,6 +43,14 @@
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
+        <script>
+            window.addEventListener('error', function(event) {
+                document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;padding:20px;background:red;color:white;z-index:999999;font-family:monospace;white-space:pre-wrap;"><h3>Fatal Error</h3><p>' + event.message + '</p><pre>' + (event.error ? event.error.stack : '') + '</pre></div>';
+            });
+            window.addEventListener('unhandledrejection', function(event) {
+                document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;padding:20px;background:red;color:white;z-index:999999;font-family:monospace;white-space:pre-wrap;"><h3>Promise Error</h3><p>' + event.reason + '</p></div>';
+            });
+        </script>
         <x-inertia::app />
     </body>
 </html>
