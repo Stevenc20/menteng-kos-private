@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useForm, router, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
@@ -143,7 +144,7 @@ export default function Properties({ properties: initialProperties }: Properties
         }
     };
 
-    const uploadMedia = (e: React.FormEvent) => {
+    const uploadMedia = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingProp) return;
         if (!mediaForm.data.photos || mediaForm.data.photos.length === 0) {
@@ -159,16 +160,18 @@ export default function Properties({ properties: initialProperties }: Properties
             formData.append('video', mediaForm.data.video);
         }
 
-        router.post(`/admin/properties/${editingProp.id}/media`, formData, {
-            preserveScroll: true,
-            onSuccess: () => {
-                toast.success('Media berhasil diunggah');
-                mediaForm.reset();
-            },
-            onError: (errors) => {
-                toast.error('Error: ' + JSON.stringify(errors));
-            }
-        });
+        try {
+            const response = await axios.post(`/admin/properties/${editingProp.id}/media`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success('Media berhasil diunggah');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error: ' + JSON.stringify(error.response?.data || error.message));
+        }
     };
 
     const deleteProperty = (id: number) => {
