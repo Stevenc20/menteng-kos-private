@@ -79,3 +79,30 @@ it('cleans NIK from extra characters', function () {
     expect($result['nik'])->toBe('3275011503020001');
     expect($result['name'])->toBe('TEST USER');
 });
+
+it('ignores tesseract chatter lines and strips name punctuation', function () {
+    $raw = "Estimating resolution as 539\n"
+         . "Nama\n"
+         . "— NADHIRA RAYHANA AZKAPRIMA\n"
+         . "Tempat/Tgl Lahir\n"
+         . "BEKASI, 07-03-2002\n"
+         . "Warning: Invalid resolution";
+
+    $result = parseKtp($raw);
+
+    expect($result['name'])->toBe('NADHIRA RAYHANA AZKAPRIMA');
+    expect($result['birth_place'])->toBe('BEKASI');
+    expect($result['birth_date'])->toBe('2002-03-07');
+});
+
+it('tolerates a mangled Alamat label from OCR', function () {
+    $result = parseKtp("Alai: - JL KE\nRn HRW - $64/303\nKel/Desa- > KEBON PEDES");
+
+    expect($result['address'])->toBe('JL KE');
+});
+
+it('recovers NIK when OCR misreads digits as letters', function () {
+    $result = parseKtp("NIK : 3275OII5O3O2OOO1\nNama\nTEST USER");
+
+    expect($result['nik'])->toBe('3275011503020001');
+});

@@ -37,14 +37,70 @@ class KtpOcrService
             $langs = 'eng';
         }
 
-        $cmd = sprintf('%s %s stdout -l %s 2>&1', escapeshellarg($bin), escapeshellarg($path), $langs);
-        exec($cmd, $output, $exitCode);
+        $imagePath = $this->preprocessImage($path) ?? $path;
 
-        if ($exitCode !== 0) {
-            throw new \RuntimeException('Tesseract exited with code ' . $exitCode . ': ' . implode("\n", $output));
+        // stdout only holds the recognized text; stderr is captured separately
+        $cmd = sprintf('%s %s stdout -l %s', escapeshellarg($bin), escapeshellarg($imagePath), $langs);
+        $stderrFile = tempnam(sys_get_temp_dir(), 'ktp_ocr_');
+        exec($cmd . ' 2>' . escapeshellarg($stderrFile), $output, $exitCode);
+        $stderr = file_get_contents($stderrFile);
+        @unlink($stderrFile);
+
+        // Clean up the temp preprocessed image if it was created
+        if ($imagePath !== $path) {
+            @unlink($imagePath);
         }
 
+        if ($exitCode !== 0) {
+            throw new \RuntimeException('Tesseract exited with code ' . $exitCode . ': ' . trim($stderr));
+        }
+
+        Log::info('KTP OCR tesseract stderr:', ['stderr' => trim($stderr)]);
+        Log::info('KTP OCR language used:', ['langs' => $langs]);
+
         return implode("\n", $output);
+    }
+
+    /**
+     * Upscale, convert to grayscale and boost contrast using GD when available.
+     * Returns the path to a temporary preprocessed image, or null if GD can't process.
+     */
+    private function preprocessImage(string $path): ?string
+    {
+        if (!extension_loaded('gd')) {
+            return null;
+        }
+
+        $src = @imagecreatefromstring(file_get_contents($path));
+        if (!$src) {
+            return null;
+        }
+
+        $srcW = imagesx($src);
+        $srcH = imagesy($src);
+
+        // Targets ~2000px wide for better Tesseract accuracy
+        $targetWidth = 2000;
+        $newW = $srcW;
+        $newH = $srcH;
+        if ($srcW < $targetWidth) {
+            $newW = $targetWidth;
+            $newH = (int) round($srcH * ($targetWidth / $srcW));
+        }
+
+        $dst = imagecreatetruecolor($newW, $newH);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
+
+        imagefilter($dst, IMG_FILTER_GRAYSCALE);
+        imagefilter($dst, IMG_FILTER_CONTRAST, -30);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_img_') . '.png';
+        imagepng($dst, $tmp);
+
+        imagedestroy($src);
+        imagedestroy($dst);
+
+        return $tmp;
     }
 
     /**
@@ -94,9 +150,47 @@ class KtpOcrService
     /**
      * Parse raw OCR text into structured KTP fields.
      */
-    private function parse(string $raw): array
+    /**
+     * Normalize OCR misreads inside a NIK value: strip space/separators, O→0, I→1.
+     */
+    private function cleanNik(string $value): string
+    {
+        $value = strtoupper($value);
+        $value = str_replace(['O', 'I'], ['0', '1'], $value);
+        return preg_replace('/[^0-9]/', '', $value);
+    }
+
+    /**
+     * Remove noise from a parsed name value (leading bullets/dashes from OCR).
+     */
+    private function cleanName(string $value): string
+    {
+        $name = preg_replace('/^[\s\-—–_.:*·"\'`]+/', '', trim($value));
+        return trim($name) ?: '';
+    }
+
+    /**
+     * Remove Tesseract stderr chatter and empty lines from the OCR text.
+     */
+    private function cleanLines(string $raw): array
     {
         $lines = array_map('trim', explode("\n", $raw));
+
+        return array_values(array_filter($lines, function (string $line) {
+            if ($line === '') {
+                return false;
+            }
+            // Tesseract info/warning chatter that is not KTP content
+            if (preg_match('/^(Estimating|Warning|Error|Page\b|Loaded|Tesseract|Info\b|C13)/i', $line)) {
+                return false;
+            }
+            return true;
+        }));
+    }
+
+    private function parse(string $raw): array
+    {
+        $lines = $this->cleanLines($raw);
         $result = [
             'raw'         => $raw,
             'name'        => '',
@@ -112,8 +206,13 @@ class KtpOcrService
         // --- NIK (16 digits) ---
         if (preg_match('/(\d{16})/', $fullText, $m)) {
             $result['nik'] = $m[1];
-        } elseif (preg_match('/NIK[\s:]*(\d[\d\s]{10,20})/i', $fullText, $m)) {
-            $cleaned = preg_replace('/\s+/', '', $m[1]);
+        } elseif (preg_match('/NIK[\s:]*([\dOIl\s]{10,24})/i', $fullText, $m)) {
+            $cleaned = $this->cleanNik($m[1]);
+            if (preg_match('/(\d{16})/', $cleaned, $m2)) {
+                $result['nik'] = $m2[1];
+            }
+        } elseif (preg_match('/(\d[\d\sOIl]{14,24})/', $fullText, $m)) {
+            $cleaned = $this->cleanNik($m[1]);
             if (preg_match('/(\d{16})/', $cleaned, $m2)) {
                 $result['nik'] = $m2[1];
             }
@@ -122,15 +221,18 @@ class KtpOcrService
         // --- Nama ---
         for ($i = 0; $i < count($lines); $i++) {
             if (preg_match('/^Nama\s*$/i', $lines[$i]) && isset($lines[$i + 1])) {
-                $candidate = trim($lines[$i + 1]);
+                $candidate = $this->cleanName($lines[$i + 1]);
                 if ($candidate !== '' && !preg_match('/^\d+$/', $candidate)) {
                     $result['name'] = $candidate;
                     break;
                 }
             }
             if (preg_match('/^Nama\s*[:\-\s]\s*(.+)$/i', $lines[$i], $m)) {
-                $result['name'] = trim($m[1]);
-                break;
+                $name = $this->cleanName($m[1]);
+                if ($name !== '') {
+                    $result['name'] = $name;
+                    break;
+                }
             }
         }
 
@@ -173,14 +275,14 @@ class KtpOcrService
         }
 
         // --- Alamat ---
+        // Tolerant label match: OCR often mangles "Alamat" (e.g. "Alai", "Alamal")
         for ($i = 0; $i < count($lines); $i++) {
-            // Inline address: "Alamat : ..."
-            if (preg_match('/^Alamat\s*[:\-\s]\s*(.+)$/i', $lines[$i], $m)) {
+            if (preg_match('/^Al[a-z]{2,}\s*[:\-\s]+\s*(.+)$/i', $lines[$i], $m)) {
                 $result['address'] = trim($m[1]);
                 break;
             }
             // Label on its own line: "Alamat" then address lines below
-            if (preg_match('/^Alamat\s*$/i', $lines[$i])) {
+            if (preg_match('/^Al[a-z]{2,}\s*$/i', $lines[$i])) {
                 $addrLines = [];
                 for ($j = $i + 1; $j < count($lines); $j++) {
                     $line = trim($lines[$j]);
