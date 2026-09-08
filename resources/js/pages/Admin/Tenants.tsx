@@ -1,6 +1,24 @@
 import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useForm } from '@inertiajs/react';
+import { toast } from 'sonner';
+import { 
+    AdminModal, 
+    AdminModalHeader, 
+    AdminModalContent, 
+    AdminModalFooter 
+} from '@/components/admin/AdminModal';
+import { 
+    FormSection, 
+    FormLabel, 
+    FormHelper, 
+    FormError, 
+    TextInput, 
+    SelectInput, 
+    DateInput, 
+    CurrencyInput 
+} from '@/components/admin/AdminForm';
+import { AdminButton } from '@/components/admin/AdminButton';
 
 interface Tenancy {
     id: number;
@@ -38,9 +56,19 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
             onSuccess: () => {
                 setShowModal(false);
                 reset();
+                toast.success('Undangan berhasil dibuat', {
+                    description: 'Calon penghuni dapat login menggunakan akun Google yang telah didaftarkan.'
+                });
             },
+            onError: () => {
+                toast.error('Gagal mengirim undangan', {
+                    description: 'Periksa kembali formulir untuk pesan error spesifik.'
+                });
+            }
         });
     };
+
+    const selectedProperty = availableProperties.find(p => p.id.toString() === data.property_id);
 
     return (
         <AdminLayout title="Tenant & Undangan">
@@ -49,12 +77,9 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                     <h1 className="text-3xl font-bold tracking-tight">Manajemen Tenant</h1>
                     <p className="text-neutral-500 mt-1">Undang calon penghuni dan pantau status siklus sewa mereka.</p>
                 </div>
-                <button 
-                    onClick={() => setShowModal(true)}
-                    className="bg-neutral-900 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors"
-                >
+                <AdminButton onClick={() => setShowModal(true)}>
                     + Buat Undangan
-                </button>
+                </AdminButton>
             </div>
 
             <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm">
@@ -98,56 +123,113 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                 </table>
             </div>
 
-            {/* Invite Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-neutral-900/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
-                        <h2 className="text-xl font-bold mb-4">Undang Calon Penghuni</h2>
-                        <form onSubmit={submit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Email Google Calon Penghuni</label>
-                                <input 
-                                    type="email" value={data.email} onChange={e => setData('email', e.target.value)}
-                                    className="w-full border-neutral-300 rounded-lg shadow-sm" required
-                                />
-                                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Pilih Unit</label>
-                                <select 
-                                    value={data.property_id} onChange={e => setData('property_id', e.target.value)} 
-                                    className="w-full border-neutral-300 rounded-lg shadow-sm" required
-                                >
-                                    <option value="" disabled>-- Pilih Unit Tersedia --</option>
-                                    {availableProperties.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name} (Harga Normal: Rp {Number(p.normal_price).toLocaleString('id-ID')})</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Harga Deal (Hasil Negosiasi)</label>
-                                <input 
-                                    type="number" value={data.agreed_price} onChange={e => setData('agreed_price', e.target.value)}
-                                    className="w-full border-neutral-300 rounded-lg shadow-sm" required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Rencana Tanggal Masuk (Move-in)</label>
-                                <input 
-                                    type="date" value={data.move_in_date} onChange={e => setData('move_in_date', e.target.value)}
-                                    className="w-full border-neutral-300 rounded-lg shadow-sm" required
-                                />
-                            </div>
-                            <div className="pt-4 flex justify-end gap-3">
-                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg">Batal</button>
-                                <button type="submit" disabled={processing} className="px-4 py-2 bg-neutral-900 text-white text-sm font-medium rounded-lg hover:bg-neutral-800 disabled:opacity-50">
-                                    Kirim Undangan
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            <AdminModal 
+                isOpen={showModal} 
+                onClose={() => !processing && setShowModal(false)}
+                maxWidth="md"
+            >
+                <form onSubmit={submit}>
+                    <AdminModalHeader 
+                        title="Undang Calon Penghuni" 
+                        description="Masukkan data penghuni yang telah menyetujui unit dan harga sewa bersama pengelola."
+                        onClose={() => !processing && setShowModal(false)}
+                    />
+                    
+                    <AdminModalContent>
+                        <FormSection title="Informasi Akun" />
+                        <div className="mb-5">
+                            <FormLabel htmlFor="email">Email Google Calon Penghuni</FormLabel>
+                            <TextInput 
+                                id="email"
+                                type="email" 
+                                placeholder="nama@gmail.com"
+                                value={data.email} 
+                                onChange={e => setData('email', e.target.value)}
+                                required
+                            />
+                            <FormHelper>Gunakan alamat Gmail yang akan digunakan tenant untuk login.</FormHelper>
+                            <FormError>{errors.email}</FormError>
+                        </div>
+
+                        <FormSection title="Detail Hunian" />
+                        <div className="mb-5">
+                            <FormLabel htmlFor="property_id">Unit</FormLabel>
+                            <SelectInput 
+                                id="property_id"
+                                value={data.property_id} 
+                                onChange={e => setData('property_id', e.target.value)}
+                                required
+                            >
+                                <option value="" disabled>Pilih Unit Tersedia</option>
+                                {availableProperties.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </SelectInput>
+                            {selectedProperty && (
+                                <FormHelper className="text-[#1E1E1C] font-medium mt-2">
+                                    Harga Normal: Rp {Number(selectedProperty.normal_price).toLocaleString('id-ID')} / bulan
+                                </FormHelper>
+                            )}
+                            <FormError>{errors.property_id}</FormError>
+                        </div>
+
+                        <FormSection title="Kesepakatan Sewa" />
+                        <div className="mb-5">
+                            <FormLabel htmlFor="agreed_price">Harga Deal Bulanan</FormLabel>
+                            <CurrencyInput 
+                                id="agreed_price"
+                                value={data.agreed_price} 
+                                onChange={val => setData('agreed_price', val)}
+                                required
+                                placeholder="0"
+                            />
+                            {selectedProperty && data.agreed_price && (
+                                <div className="mt-3 p-3 bg-neutral-50 border border-neutral-100 rounded-lg text-sm">
+                                    <div className="flex justify-between mb-1 text-neutral-500">
+                                        <span>Harga Normal</span>
+                                        <span>Rp {Number(selectedProperty.normal_price).toLocaleString('id-ID')}</span>
+                                    </div>
+                                    <div className="flex justify-between font-medium">
+                                        <span>Harga Deal</span>
+                                        <span>Rp {Number(data.agreed_price).toLocaleString('id-ID')}</span>
+                                    </div>
+                                </div>
+                            )}
+                            <FormError>{errors.agreed_price}</FormError>
+                        </div>
+
+                        <FormSection title="Rencana Check-in" />
+                        <div className="mb-2">
+                            <FormLabel htmlFor="move_in_date">Tanggal Rencana Masuk</FormLabel>
+                            <DateInput 
+                                id="move_in_date"
+                                value={data.move_in_date} 
+                                onChange={e => setData('move_in_date', e.target.value)}
+                                required
+                            />
+                            <FormHelper>Tanggal ini digunakan sebagai dasar proses onboarding tenant.</FormHelper>
+                            <FormError>{errors.move_in_date}</FormError>
+                        </div>
+                    </AdminModalContent>
+
+                    <AdminModalFooter>
+                        <AdminButton 
+                            type="button" 
+                            variant="secondary" 
+                            onClick={() => setShowModal(false)}
+                            disabled={processing}
+                        >
+                            Batal
+                        </AdminButton>
+                        <AdminButton 
+                            type="submit" 
+                            isLoading={processing}
+                        >
+                            Kirim Undangan
+                        </AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
         </AdminLayout>
     );
 }
