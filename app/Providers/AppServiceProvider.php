@@ -40,6 +40,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
+        \Illuminate\Database\Eloquent\Model::unguard();
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
