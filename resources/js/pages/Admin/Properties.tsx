@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Plus, X, Pencil, Trash2, Building2, Store, Check, Video, Camera, ArrowLeft } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Building2, Store, Check, Video, Camera, ArrowLeft, Image as ImageIcon, Video as VideoIcon, Star } from 'lucide-react';
 import { compressImage } from '@/lib/image-compression';
 import { 
     AdminModal, 
