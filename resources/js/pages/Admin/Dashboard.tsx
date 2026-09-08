@@ -15,28 +15,28 @@ export default function Dashboard({ stats }: DashboardProps) {
     const statCards = [
         { 
             label: 'Total Unit', 
-            value: stats.total_rooms, 
+            value: stats?.total_rooms || 0, 
             desc: 'Kamar & Kios',
             icon: Building2,
             iconColor: 'text-[#1A1A18]'
         },
         { 
             label: 'Unit Tersedia', 
-            value: stats.available_rooms, 
+            value: stats?.available_rooms || 0, 
             desc: 'Siap untuk penghuni',
             icon: CheckCircle,
             iconColor: 'text-[#6B6B67]'
         },
         { 
             label: 'Unit Terisi', 
-            value: stats.occupied_rooms, 
-            desc: `${Math.round((stats.occupied_rooms / (stats.total_rooms || 1)) * 100)}% okupansi`,
+            value: stats?.occupied_rooms || 0, 
+            desc: `${Math.round(((stats?.occupied_rooms || 0) / (stats?.total_rooms || 1)) * 100)}% okupansi`,
             icon: Key,
             iconColor: 'text-[#1A1A18]'
         },
         { 
             label: 'Tenant Aktif', 
-            value: stats.active_tenants, 
+            value: stats?.active_tenants || 0, 
             desc: 'Akun terhubung',
             icon: Users,
             iconColor: 'text-[#6B6B67]'

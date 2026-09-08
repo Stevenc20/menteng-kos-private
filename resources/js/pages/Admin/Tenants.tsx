@@ -68,7 +68,7 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
         });
     };
 
-    const selectedProperty = availableProperties.find(p => p.id.toString() === data.property_id);
+    const selectedProperty = availableProperties?.find(p => p.id.toString() === data.property_id);
 
     return (
         <AdminLayout title="Tenant & Undangan">
@@ -94,13 +94,13 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E7E3]">
-                        {tenancies.map((t) => (
+                        {tenancies?.map((t) => (
                             <tr key={t.id} className="hover:bg-[#F7F7F5] transition-colors">
                                 <td className="px-6 py-4">
-                                    <div className="font-medium text-[#1A1A18]">{t.user.name}</div>
-                                    <div className="text-[#6B6B67]">{t.user.email}</div>
+                                    <div className="font-medium text-[#1A1A18]">{t.user?.name || 'Unknown'}</div>
+                                    <div className="text-[#6B6B67]">{t.user?.email || '-'}</div>
                                 </td>
-                                <td className="px-6 py-4 font-medium text-[#1A1A18]">{t.property.name}</td>
+                                <td className="px-6 py-4 font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</td>
                                 <td className="px-6 py-4 text-[#6B6B67]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</td>
                                 <td className="px-6 py-4 text-[#6B6B67]">{t.move_in_date}</td>
                                 <td className="px-6 py-4">
@@ -161,7 +161,7 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                                 required
                             >
                                 <option value="" disabled>Pilih Unit Tersedia</option>
-                                {availableProperties.map(p => (
+                                {availableProperties?.map(p => (
                                     <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                             </SelectInput>
