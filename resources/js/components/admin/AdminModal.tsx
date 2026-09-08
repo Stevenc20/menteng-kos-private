@@ -49,7 +49,7 @@ export function AdminModal({ isOpen, onClose, children, maxWidth = 'md' }: Admin
                         exit={{ opacity: 0, scale: 0.98, y: 10 }}
                         transition={{ duration: 0.2, ease: "easeOut" }}
                         className={cn(
-                            "relative w-full bg-white rounded-[20px] shadow-2xl border border-[#E8E7E3] flex flex-col max-h-[90vh]",
+                            "relative w-full bg-white rounded-[20px] shadow-2xl border border-[#E8E7E3] flex flex-col max-h-[calc(100dvh-32px)] overflow-hidden",
                             maxWidthClasses[maxWidth]
                         )}
                     >
@@ -71,7 +71,7 @@ export function AdminModalHeader({
     onClose?: () => void; 
 }) {
     return (
-        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-transparent">
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-transparent shrink-0">
             <div>
                 <h2 className="text-[20px] font-bold text-[#1A1A18] leading-tight">{title}</h2>
                 {description && (
@@ -100,7 +100,7 @@ export function AdminModalContent({ children, className }: { children: React.Rea
 
 export function AdminModalFooter({ children, className }: { children: React.ReactNode; className?: string }) {
     return (
-        <div className={cn("px-6 py-4 mt-2 border-t border-neutral-100 flex items-center justify-end gap-3", className)}>
+        <div className={cn("px-6 py-4 mt-2 border-t border-neutral-100 flex items-center justify-end gap-3 shrink-0", className)}>
             {children}
         </div>
     );

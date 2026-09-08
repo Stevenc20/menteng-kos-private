@@ -169,7 +169,7 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                 onClose={() => !processing && setShowModal(false)}
                 maxWidth="md"
             >
-                <form onSubmit={submit}>
+                <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
                     <AdminModalHeader 
                         title="Undang Calon Penghuni" 
                         description="Masukkan data penghuni yang telah menyetujui unit dan harga sewa bersama pengelola."
