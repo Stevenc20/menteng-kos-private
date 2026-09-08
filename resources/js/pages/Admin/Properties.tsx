@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useForm, router } from '@inertiajs/react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Pencil, Trash2, Image as ImageIcon, Video as VideoIcon, Star, Plus, X } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Building2, Store, Check, Video, Camera, ArrowLeft } from 'lucide-react';
+import { compressImage } from '@/lib/image-compression';
 import { 
     AdminModal, 
     AdminModalHeader, 
@@ -484,7 +488,19 @@ export default function Properties({ properties }: PropertiesProps) {
                                                         type="file" 
                                                         multiple
                                                         accept="image/*"
-                                                        onChange={e => mediaForm.setData('photos', Array.from(e.target.files || []))}
+                                                        onChange={async (e) => {
+                                                            const files = Array.from(e.target.files || []);
+                                                            if (files.length === 0) return;
+                                                            
+                                                            try {
+                                                                const compressedFiles = await Promise.all(
+                                                                    files.map(f => compressImage(f, 1600, 0.8))
+                                                                );
+                                                                mediaForm.setData('photos', compressedFiles);
+                                                            } catch (error) {
+                                                                console.error('Compression failed', error);
+                                                            }
+                                                        }}
                                                         className="block w-full text-sm text-[#6B6B67] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A18] file:text-white hover:file:bg-[#333333] transition-colors cursor-pointer"
                                                     />
                                                 </div>
