@@ -1,93 +1,55 @@
 import AdminLayout from '@/layouts/AdminLayout';
-import { motion } from 'framer-motion';
-import { Building2, Key, Users, CheckCircle, CalendarClock } from 'lucide-react';
+import { Building2, Users, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface DashboardProps {
     stats: {
-        total_rooms: number;
-        available_rooms: number;
-        occupied_rooms: number;
-        active_tenants: number;
-    };
+        total_properties: number;
+        available_properties: number;
+        occupied_properties: number;
+        total_tenants: number;
+    }
 }
 
 export default function Dashboard({ stats }: DashboardProps) {
     const statCards = [
-        { 
-            label: 'Total Unit', 
-            value: stats?.total_rooms || 0, 
-            desc: 'Kamar & Kios',
-            icon: Building2,
-            iconColor: 'text-[#1A1A18]'
-        },
-        { 
-            label: 'Unit Tersedia', 
-            value: stats?.available_rooms || 0, 
-            desc: 'Siap untuk penghuni',
-            icon: CheckCircle,
-            iconColor: 'text-[#6B6B67]'
-        },
-        { 
-            label: 'Unit Terisi', 
-            value: stats?.occupied_rooms || 0, 
-            desc: `${Math.round(((stats?.occupied_rooms || 0) / (stats?.total_rooms || 1)) * 100)}% okupansi`,
-            icon: Key,
-            iconColor: 'text-[#1A1A18]'
-        },
-        { 
-            label: 'Tenant Aktif', 
-            value: stats?.active_tenants || 0, 
-            desc: 'Akun terhubung',
-            icon: Users,
-            iconColor: 'text-[#6B6B67]'
-        },
+        { title: 'Total Unit', value: stats.total_properties, icon: Building2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+        { title: 'Unit Tersedia', value: stats.available_properties, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+        { title: 'Unit Terisi', value: stats.occupied_properties, icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
+        { title: 'Total Tenant Aktif', value: stats.total_tenants, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     ];
 
     return (
-        <AdminLayout title="Admin Dashboard">
-            <div className="mb-10">
-                <h1 className="text-[28px] md:text-[32px] font-bold tracking-tight text-[#1A1A18]">Dashboard</h1>
-                <p className="text-[14px] md:text-[15px] text-[#6B6B67] mt-1.5">Ringkasan kondisi properti dan penghuni saat ini.</p>
+        <AdminLayout title="Dashboard Admin">
+            <div className="mb-8">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#1A1A18]">Dashboard Overview</h1>
+                <p className="text-sm md:text-base text-[#6B6B67] mt-1.5">Ringkasan status properti dan penghuni saat ini.</p>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                {statCards.map((stat, idx) => {
+
+            {/* Stats Grid: 1 col on mobile, 2 on tablet, 4 on desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                {statCards.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <motion.div 
-                            key={stat.label}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.1 }}
-                            className="bg-white p-6 rounded-[16px] border border-[#E8E7E3] shadow-sm flex flex-col"
-                        >
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="text-[13px] md:text-[14px] font-medium text-[#6B6B67]">{stat.label}</div>
-                                <div className={`p-2 rounded-full bg-[#F7F7F5] ${stat.iconColor}`}>
-                                    <Icon className="w-[18px] h-[18px]" strokeWidth={2.2} />
-                                </div>
+                        <div key={index} className="bg-white p-6 rounded-2xl border border-[#E8E7E3] shadow-sm flex items-start justify-between">
+                            <div>
+                                <p className="text-[13px] font-semibold text-[#8A8A84] uppercase tracking-wider mb-2">{stat.title}</p>
+                                <p className="text-3xl font-bold text-[#1A1A18] leading-none">{stat.value}</p>
                             </div>
-                            <div className="text-[32px] md:text-[36px] font-semibold text-[#1A1A18] leading-none mb-2">{stat.value}</div>
-                            <div className="text-[13px] text-[#8A8A84]">{stat.desc}</div>
-                        </motion.div>
-                    )
+                            <div className={`p-3 rounded-xl ${stat.bg} ${stat.color} ${stat.border} border`}>
+                                <Icon className="w-6 h-6" />
+                            </div>
+                        </div>
+                    );
                 })}
             </div>
 
-            <div className="mt-8 bg-white rounded-[16px] border border-[#E8E7E3] shadow-sm overflow-hidden">
-                <div className="px-7 py-6 border-b border-[#E8E7E3]">
-                    <h2 className="text-[18px] md:text-[20px] font-semibold text-[#1A1A18]">Aktivitas Mendatang</h2>
+            {/* We can add more sections below later without worrying about gaps because AdminLayout handles the scrolling */}
+            <div className="mt-8 bg-white p-8 rounded-2xl border border-[#E8E7E3] shadow-sm flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 bg-[#F7F7F5] rounded-full flex items-center justify-center text-[#8A8A84] mb-4">
+                    <Building2 className="w-8 h-8" />
                 </div>
-                
-                <div className="px-7 py-16 flex flex-col items-center justify-center text-center">
-                    <div className="w-16 h-16 rounded-full bg-[#F7F7F5] flex items-center justify-center mb-4">
-                        <CalendarClock className="w-8 h-8 text-[#8A8A84]" strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-[16px] font-medium text-[#1A1A18] mb-1">Belum ada aktivitas</h3>
-                    <p className="text-[14px] text-[#6B6B67] max-w-sm">
-                        Saat ini belum ada aktivitas yang membutuhkan perhatian. Modul ini nantinya akan memuat tagihan jatuh tempo dan konfirmasi sewa.
-                    </p>
-                </div>
+                <h3 className="text-lg font-bold text-[#1A1A18] mb-2">Selamat Datang di Menteng Admin</h3>
+                <p className="text-[#6B6B67] text-sm max-w-md">Gunakan menu di sebelah kiri untuk mengelola properti, mengunggah foto galeri, serta mengatur data penghuni kos.</p>
             </div>
         </AdminLayout>
     );

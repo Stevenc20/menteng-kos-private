@@ -48,7 +48,10 @@ class AdminController extends Controller
             'name' => 'required|string|max:255',
             'type' => 'required|in:ROOM,KIOSK',
             'normal_price' => 'required|numeric|min:0',
-            'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE'
+            'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE',
+            'description' => 'nullable|string',
+            'facilities' => 'nullable|array',
+            'facilities.*' => 'string'
         ]);
 
         Property::create($validated);
@@ -57,16 +60,20 @@ class AdminController extends Controller
     }
 
     /**
-     * Update a Property.
+     * Update an existing Property.
      */
     public function updateProperty(Request $request, $id)
     {
         $property = Property::findOrFail($id);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:ROOM,KIOSK',
             'normal_price' => 'required|numeric|min:0',
-            'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE'
+            'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE',
+            'description' => 'nullable|string',
+            'facilities' => 'nullable|array',
+            'facilities.*' => 'string'
         ]);
 
         $property->update($validated);

@@ -82,7 +82,8 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                 </AdminButton>
             </div>
 
-            <div className="bg-white border border-[#E8E7E3] rounded-2xl overflow-hidden shadow-sm">
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white border border-[#E8E7E3] rounded-2xl overflow-hidden shadow-sm">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-[#F7F7F5] text-[#6B6B67] border-b border-[#E8E7E3]">
                         <tr>
@@ -121,6 +122,46 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden flex flex-col gap-4">
+                {tenancies?.map((t) => (
+                    <div key={t.id} className="bg-white border border-[#E8E7E3] rounded-xl p-5 shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 className="font-bold text-[#1A1A18]">{t.user?.name || 'Unknown'}</h3>
+                                <p className="text-sm text-[#6B6B67]">{t.user?.email || '-'}</p>
+                            </div>
+                            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${
+                                t.status === 'INVITED' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
+                                t.status === 'ACTIVE' ? 'bg-[#ECFDF5] text-[#047857]' :
+                                'bg-[#F3F4F6] text-[#374151]'
+                            }`}>
+                                {t.status}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-y-3 pt-3 border-t border-[#E8E7E3]">
+                            <div>
+                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Unit</p>
+                                <p className="text-sm font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Tgl Masuk</p>
+                                <p className="text-sm font-medium text-[#1A1A18]">{t.move_in_date}</p>
+                            </div>
+                            <div className="col-span-2">
+                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Harga Deal</p>
+                                <p className="text-sm font-bold text-[#1A1A18]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</p>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {tenancies.length === 0 && (
+                    <div className="bg-white border border-[#E8E7E3] rounded-xl p-8 text-center text-[#6B6B67] shadow-sm">
+                        Belum ada tenant atau undangan.
+                    </div>
+                )}
             </div>
 
             <AdminModal 
