@@ -151,9 +151,16 @@ export default function Properties({ properties: initialProperties }: Properties
             return;
         }
         
-        mediaForm.post(`/admin/properties/${editingProp.id}/media`, {
+        const formData = new FormData();
+        mediaForm.data.photos.forEach((photo) => {
+            formData.append('photos[]', photo);
+        });
+        if (mediaForm.data.video) {
+            formData.append('video', mediaForm.data.video);
+        }
+
+        router.post(`/admin/properties/${editingProp.id}/media`, formData, {
             preserveScroll: true,
-            forceFormData: true,
             onSuccess: () => {
                 toast.success('Media berhasil diunggah');
                 mediaForm.reset();
