@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 
@@ -7,9 +7,10 @@ interface PublicLayoutProps {
     children: ReactNode;
     title?: string;
     hideFooter?: boolean;
+    transparentTop?: boolean; // Set this true for Landing Page
 }
 
-export default function PublicLayout({ children, title = 'Menteng Kos Private', hideFooter = false }: PublicLayoutProps) {
+export default function PublicLayout({ children, title = 'Menteng Kos Private', hideFooter = false, transparentTop = false }: PublicLayoutProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
 
@@ -18,6 +19,8 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
             setScrolled(window.scrollY > 20);
         };
         window.addEventListener('scroll', handleScroll);
+        // initial check
+        handleScroll();
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
@@ -30,11 +33,18 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
         }
     }, [isMobileMenuOpen]);
 
+    const isTransparent = transparentTop && !scrolled;
+    
+    // Dynamic styles for navbar content based on scroll state
+    const textColor = isTransparent ? 'text-white' : 'text-[#1A1A18]';
+    const linkHoverColor = isTransparent ? 'hover:text-white/70' : 'hover:text-[#6B6B67]';
+    const btnBg = isTransparent ? 'bg-white text-[#1A1A18] hover:bg-neutral-100' : 'bg-[#1A1A18] text-white hover:bg-neutral-800';
+
     const NavLinks = () => (
         <>
-            <a href="/#rooms" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-neutral-500 transition-colors py-2">Kamar & Kios</a>
-            <a href="/#facilities" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-neutral-500 transition-colors py-2">Fasilitas</a>
-            <a href="/#gallery" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-neutral-500 transition-colors py-2">Galeri</a>
+            <a href="/#rooms" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Kamar & Kios</a>
+            <a href="/#facilities" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Fasilitas</a>
+            <a href="/#gallery" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Galeri</a>
         </>
     );
 
@@ -43,26 +53,26 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
             <Head title={title} />
             
             {/* Desktop Navbar */}
-            <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white/90 backdrop-blur-md shadow-sm border-b border-[#E8E7E3]' : 'bg-transparent'}`}>
+            <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isTransparent ? 'bg-transparent border-transparent' : 'bg-white/95 backdrop-blur-md shadow-sm border-b border-[#E8E7E3]'}`}>
                 <div className="max-w-[1440px] mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-                    <Link href="/" className="text-xl font-bold tracking-tight uppercase">
+                    <Link href="/" className={`text-xl font-bold tracking-tight uppercase transition-colors ${textColor}`}>
                         Menteng Kos Private
                     </Link>
                     
                     {/* Desktop Navigation */}
-                    <nav className="hidden lg:flex items-center gap-8">
+                    <nav className={`hidden lg:flex items-center gap-8 ${textColor}`}>
                         <NavLinks />
                     </nav>
 
                     <div className="hidden lg:flex items-center gap-6">
-                        <Link href="/login" className="text-sm font-medium text-[#6B6B67] hover:text-[#1A1A18] transition-colors">
+                        <Link href="/login" className={`text-sm font-medium transition-colors ${textColor} ${linkHoverColor}`}>
                             Tenant Login
                         </Link>
                         <a 
                             href="https://wa.me/6281234567890?text=Halo,%20saya%20ingin%20jadwalkan%20survey%20Menteng%20Kos%20Private."
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-[#1A1A18] text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-neutral-800 transition-all hover:-translate-y-0.5 shadow-md"
+                            className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all shadow-md active:scale-95 ${btnBg}`}
                         >
                             Ajukan Survey
                         </a>
@@ -70,7 +80,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
 
                     {/* Mobile Menu Toggle */}
                     <button 
-                        className="lg:hidden p-2 -mr-2 text-[#1A1A18] hover:bg-neutral-100 rounded-full transition-colors"
+                        className={`lg:hidden p-2 -mr-2 rounded-full transition-colors ${textColor} hover:bg-black/10`}
                         onClick={() => setIsMobileMenuOpen(true)}
                         aria-label="Open menu"
                     >
@@ -100,7 +110,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                             onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside drawer
                         >
                             <div className="h-20 flex items-center justify-between px-6 border-b border-[#E8E7E3]">
-                                <span className="font-bold tracking-tight uppercase text-sm">Menteng Kos</span>
+                                <span className="font-bold tracking-tight uppercase text-sm text-[#1A1A18]">Menteng Kos</span>
                                 <button 
                                     onClick={() => setIsMobileMenuOpen(false)}
                                     className="p-2 -mr-2 text-[#6B6B67] hover:bg-neutral-100 rounded-full transition-colors"
@@ -109,15 +119,17 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                                 </button>
                             </div>
                             
-                            <div className="flex flex-col px-6 py-8 gap-4 overflow-y-auto flex-1">
-                                <NavLinks />
+                            <div className="flex flex-col px-6 py-8 gap-4 overflow-y-auto flex-1 text-[#1A1A18]">
+                                <a href="/#rooms" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Kamar & Kios</a>
+                                <a href="/#facilities" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Fasilitas</a>
+                                <a href="/#gallery" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Galeri</a>
                                 
                                 <div className="h-px bg-[#E8E7E3] my-4" />
                                 
                                 <Link 
                                     href="/login" 
                                     onClick={() => setIsMobileMenuOpen(false)}
-                                    className="text-sm font-medium text-[#1A1A18] py-2"
+                                    className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2"
                                 >
                                     Tenant Login
                                 </Link>

@@ -20,7 +20,7 @@ void createInertiaApp({
                 return [AppLayout, SettingsLayout];
             // Tenant and Admin custom pages usually have their own layout imports inside the component,
             // but if they don't, they will fallback to AppLayout. To avoid layout double-wrapping:
-            case name.startsWith('Tenant/') || name.startsWith('Admin/'):
+            case name.startsWith('Tenant/') || name.startsWith('Admin/') || name.startsWith('Public/'):
                 return null;
             default:
                 return AppLayout;

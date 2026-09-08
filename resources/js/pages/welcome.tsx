@@ -42,7 +42,7 @@ export default function Welcome({ properties }: WelcomeProps) {
     };
 
     return (
-        <PublicLayout title="Beranda | Menteng Kos Private">
+        <PublicLayout title="Beranda | Menteng Kos Private" transparentTop={true}>
             
             {/* HERO SECTION */}
             <section className="relative h-[80vh] min-h-[600px] flex items-center justify-center bg-[#1A1A18] overflow-hidden">
