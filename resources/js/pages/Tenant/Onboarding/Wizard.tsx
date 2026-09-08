@@ -57,6 +57,20 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
     const dailyLatePenalty = formatRupiah(Math.round(Number(tenancy.agreed_price) / 30));
 
+    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+    const formatDisplayDate = (iso?: string) => {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        if (!y || !m || !d) return iso;
+        return `${d}-${m}-${y}`;
+    };
+
+    const todayLine = () => {
+        const t = new Date();
+        return `Jakarta, ${String(t.getDate()).padStart(2, '0')} ${monthNames[t.getMonth()]} ${t.getFullYear()}`;
+    };
+
     // Hidden file inputs for camera (capture) and gallery (file picker) per occupant
     const cameraInput1 = useRef<HTMLInputElement>(null);
     const galleryInput1 = useRef<HTMLInputElement>(null);
@@ -208,38 +222,67 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         });
     };
 
-    const generateAgreementHTML = () => {
+    const buildIdentityRows = (rows: [string, string][]) =>
+        rows.map(([k, v], i) => (
+            <div key={i} className="flex gap-2 items-start">
+                <span className="w-28 sm:w-36 shrink-0 text-neutral-600">{k}</span>
+                <span className="text-neutral-900 font-medium break-words min-w-0 flex-1">: {v}</span>
+            </div>
+        ));
+
+    const buildStatementHTML = () => {
         // Build agreement based on data
+        const identity1 = [
+            ['Nama Lengkap', data.ktp_1_name],
+            ['Tempat, Tgl Lahir', `${data.ktp_1_birth_place}, ${formatDisplayDate(data.ktp_1_birth_date)}`],
+            ['Pekerjaan', data.ktp_1_job],
+            ['No KTP / NIK', data.ktp_1_nik],
+            ['No. WhatsApp', data.whatsapp],
+            ['Alamat', data.ktp_1_address],
+        ];
+        const identity2 = [
+            ['Nama Lengkap', data.ktp_2_name],
+            ['Tempat, Tgl Lahir', `${data.ktp_2_birth_place}, ${formatDisplayDate(data.ktp_2_birth_date)}`],
+            ['Pekerjaan', data.ktp_2_job],
+            ['No KTP / NIK', data.ktp_2_nik],
+        ];
+        const rowHtml = (r: [string, string][]) => r
+            .map(([k, v]) => `<tr><td style="width:150px;vertical-align:top;padding:3px 0;">${k}</td><td style="padding:3px 0;">: ${v}</td></tr>`)
+            .join('');
         const html = `
-            <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="text-align: center; text-transform: uppercase;">Surat Pernyataan Penghuni</h2>
+            <div style="font-family: Georgia, 'Times New Roman', serif; line-height: 1.7; color: #333; max-width: 640px; margin: 0 auto; font-size: 14px;">
+                <h2 style="text-align: center; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px;">Surat Pernyataan Penghuni</h2>
                 <p>Yang bertanda tangan di bawah ini:</p>
                 <table style="width: 100%; margin-bottom: 20px;">
-                    <tr><td style="width: 150px;">Nama Lengkap</td><td>: ${data.ktp_1_name}</td></tr>
-                    <tr><td>Tempat, Tgl Lahir</td><td>: ${data.ktp_1_birth_place}, ${data.ktp_1_birth_date}</td></tr>
-                    <tr><td>Pekerjaan</td><td>: ${data.ktp_1_job}</td></tr>
-                    <tr><td>No KTP</td><td>: ${data.ktp_1_nik}</td></tr>
-                    <tr><td>Alamat</td><td>: ${data.ktp_1_address}</td></tr>
+                    ${rowHtml(identity1)}
                 </table>
                 ${data.has_second_occupant ? `
-                    <p>Dan Penghuni Kedua:</p>
+                    <p style="margin-bottom: 8px;">Dan Penghuni Kedua:</p>
                     <table style="width: 100%; margin-bottom: 20px;">
-                        <tr><td style="width: 150px;">Nama Lengkap</td><td>: ${data.ktp_2_name}</td></tr>
-                        <tr><td>No KTP</td><td>: ${data.ktp_2_nik}</td></tr>
+                        ${rowHtml(identity2)}
                     </table>
                 ` : ''}
-                <p>Menyatakan setuju untuk menempati unit <strong>${tenancy.property.name}</strong> di Menteng Kos Private mulai tanggal <strong>${tenancy.move_in_date}</strong> dengan ketentuan sebagai berikut:</p>
-                <ol>
-                    <li>Biaya sewa per bulan adalah <strong>${formatRupiah(tenancy.agreed_price)}</strong>.</li>
-                    <li>Tagihan jatuh tempo dihitung per siklus 30 hari. Denda keterlambatan adalah <strong>${dailyLatePenalty} / hari</strong>.</li>
-                    <li>Jatah air (Included Allowance) adalah <strong>5 m³ / bulan</strong>. Kelebihan pemakaian air akan dikenakan biaya tambahan sebesar <strong>Rp14.000 / m³</strong> yang akan ditambahkan ke dalam total tagihan sewa.</li>
-                    <li>Penghuni wajib menjaga kebersihan dan tidak merusak fasilitas properti. Segala kerusakan menjadi tanggung jawab penghuni.</li>
+                <p style="text-align: justify;">Menyatakan setuju untuk menempati unit <strong>${tenancy.property.name}</strong> di Menteng Kos Private mulai tanggal <strong>${formatDisplayDate(tenancy.move_in_date)}</strong> dengan ketentuan sebagai berikut:</p>
+                <ol style="padding-left: 24px; margin: 16px 0;">
+                    <li style="margin-bottom: 8px;">Biaya sewa per bulan adalah <strong>${formatRupiah(tenancy.agreed_price)}</strong>.</li>
+                    <li style="margin-bottom: 8px;">Tagihan jatuh tempo dihitung per siklus 30 hari. Denda keterlambatan adalah <strong>${dailyLatePenalty} / hari</strong>.</li>
+                    <li style="margin-bottom: 8px;">Jatah air (Included Allowance) adalah <strong>5 m³ / bulan</strong>. Kelebihan pemakaian air akan dikenakan biaya tambahan sebesar <strong>Rp14.000 / m³</strong> yang akan ditambahkan ke dalam total tagihan sewa.</li>
+                    <li style="margin-bottom: 8px;">Penghuni wajib menjaga kebersihan dan tidak merusak fasilitas properti. Segala kerusakan menjadi tanggung jawab penghuni.</li>
                 </ol>
-                <p>Demikian surat pernyataan ini dibuat dengan sebenar-benarnya tanpa paksaan dari pihak mana pun.</p>
+                <p style="text-align: justify;">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya tanpa paksaan dari pihak mana pun.</p>
+                <div style="margin-top: 32px; text-align: right;">
+                    <p style="margin-bottom: 60px;">${todayLine()}</p>
+                    <p>Yang Membuat Pernyataan,</p>
+                    <p style="margin-top: 80px; font-weight: bold; text-transform: uppercase;">${data.ktp_1_name}</p>
+                    ${data.has_second_occupant ? `<p style="margin-top: 24px; font-weight: bold; text-transform: uppercase;">${data.ktp_2_name}</p>` : ''}
+                </div>
             </div>
         `;
-        setData('document_html', html);
-        nextStep();
+        return html;
+    };
+
+    const generateAgreementHTML = () => {
+        setData('document_html', buildStatementHTML());
     };
 
     const clearSignatures = () => {
@@ -485,8 +528,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                         <h2 className="text-2xl font-bold tracking-tight">Review Surat Pernyataan</h2>
                         <p className="text-sm text-neutral-500">Mohon baca dan pahami ketentuan sebelum menandatangani.</p>
                         
-                        <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm overflow-y-auto max-h-[50vh] text-sm"
-                             dangerouslySetInnerHTML={{ __html: data.document_html || generateAgreementHTML() || '' }}
+                        <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm overflow-x-hidden text-sm"
+                             dangerouslySetInnerHTML={{ __html: data.document_html || buildStatementHTML() }}
                         />
 
                         <div className="flex gap-3 pt-4">
@@ -497,57 +540,117 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                 );
             case 8:
                 return (
-                    <div className="space-y-8">
+                    <div className="space-y-6 w-full min-w-0">
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight mb-2">Tanda Tangan Digital</h2>
-                            <p className="text-sm text-neutral-500">Berikan Tanda Tangan dan Paraf Anda sebagai bentuk persetujuan Surat Pernyataan.</p>
+                            <p className="text-sm text-neutral-500">Baca surat pernyataan berikut, lalu berikan tanda tangan dan paraf Anda pada tempat yang tersedia di dalam surat.</p>
                         </div>
-                        
-                        {/* Occupant 1 Signatures */}
-                        <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200">
-                            <h3 className="font-bold mb-4">{data.ktp_1_name} (Penghuni 1)</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-neutral-600">Tanda Tangan</label>
-                                    <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden">
-                                        <SignatureCanvas ref={sigPad1} canvasProps={{ className: 'w-full h-32' }} />
+
+                        {/* Surat Pernyataan — document view */}
+                        <div className="w-full min-w-0 overflow-x-hidden bg-neutral-100 border border-neutral-300 rounded-xl p-2 sm:p-4">
+                            <div className="w-full min-w-0 bg-white shadow-lg border border-neutral-200 px-4 sm:px-10 py-8 sm:py-10 font-serif text-neutral-800">
+                                <h2 className="text-center font-bold text-lg sm:text-xl tracking-wide uppercase mb-6">Surat Pernyataan Penghuni</h2>
+
+                                <div className="text-sm leading-relaxed space-y-4">
+                                    <p>Yang bertanda tangan di bawah ini:</p>
+
+                                    <div className="space-y-1.5">
+                                        {buildIdentityRows([
+                                            ['Nama Lengkap', data.ktp_1_name],
+                                            ['Tempat, Tgl Lahir', `${data.ktp_1_birth_place}, ${formatDisplayDate(data.ktp_1_birth_date)}`],
+                                            ['Pekerjaan', data.ktp_1_job],
+                                            ['No. KTP / NIK', data.ktp_1_nik],
+                                            ['No. WhatsApp', data.whatsapp],
+                                            ['Alamat', data.ktp_1_address],
+                                        ])}
                                     </div>
+
+                                    {data.has_second_occupant && (
+                                        <>
+                                            <p>Dan Penghuni Kedua:</p>
+                                            <div className="space-y-1.5">
+                                                {buildIdentityRows([
+                                                    ['Nama Lengkap', data.ktp_2_name],
+                                                    ['Tempat, Tgl Lahir', `${data.ktp_2_birth_place}, ${formatDisplayDate(data.ktp_2_birth_date)}`],
+                                                    ['Pekerjaan', data.ktp_2_job],
+                                                    ['No. KTP / NIK', data.ktp_2_nik],
+                                                ])}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <p className="text-justify">
+                                        Menyatakan setuju untuk menempati unit <strong>{tenancy.property.name}</strong> di Menteng Kos Private mulai tanggal <strong>{formatDisplayDate(tenancy.move_in_date)}</strong> dengan ketentuan sebagai berikut:
+                                    </p>
+
+                                    <ol className="list-decimal pl-5 space-y-2 text-justify">
+                                        <li>Biaya sewa per bulan adalah <strong>{formatRupiah(tenancy.agreed_price)}</strong>.</li>
+                                        <li>Tagihan jatuh tempo dihitung per siklus 30 hari. Denda keterlambatan adalah <strong>{dailyLatePenalty} / hari</strong>.</li>
+                                        <li>Jatah air (Included Allowance) adalah <strong>5 m³ / bulan</strong>. Kelebihan pemakaian air akan dikenakan biaya tambahan sebesar <strong>Rp14.000 / m³</strong> yang akan ditambahkan ke dalam total tagihan sewa.</li>
+                                        <li>Penghuni wajib menjaga kebersihan dan tidak merusak fasilitas properti. Segala kerusakan menjadi tanggung jawab penghuni.</li>
+                                    </ol>
+
+                                    <p className="text-justify">Demikian surat pernyataan ini dibuat dengan sebenar-benarnya tanpa paksaan dari pihak mana pun.</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-neutral-600">Paraf</label>
-                                    <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden">
-                                        <SignatureCanvas ref={parafPad1} canvasProps={{ className: 'w-full h-32' }} />
+
+                                {/* Place + date */}
+                                <div className="mt-10 text-right">
+                                    <p>{todayLine()}</p>
+                                </div>
+
+                                {/* Signature blocks inside the document */}
+                                <div className={`mt-12 ${data.has_second_occupant ? 'grid grid-cols-1 sm:grid-cols-2 gap-10' : 'max-w-xs ml-auto'}`}>
+                                    {/* Occupant 1 */}
+                                    <div className="text-center">
+                                        <p>Yang Membuat Pernyataan,</p>
+                                        <div className="mt-24 flex flex-col items-center">
+                                            <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[260px]">
+                                                <SignatureCanvas ref={sigPad1} canvasProps={{ className: 'w-full h-32' }} />
+                                            </div>
+                                            <p className="mt-2 font-bold">{data.ktp_1_name}</p>
+                                            <p className="text-xs text-neutral-500">(Penghuni 1)</p>
+                                        </div>
+                                        <div className="mt-8 inline-flex flex-col items-center">
+                                            <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[140px]">
+                                                <SignatureCanvas ref={parafPad1} canvasProps={{ className: 'w-full h-16' }} />
+                                            </div>
+                                            <p className="mt-1 text-xs text-neutral-500">Paraf</p>
+                                        </div>
                                     </div>
+
+                                    {/* Occupant 2 */}
+                                    {data.has_second_occupant && (
+                                        <div className="text-center">
+                                            <p>Yang Membuat Pernyataan,</p>
+                                            <div className="mt-24 flex flex-col items-center">
+                                                <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[260px]">
+                                                    <SignatureCanvas ref={sigPad2} canvasProps={{ className: 'w-full h-32' }} />
+                                                </div>
+                                                <p className="mt-2 font-bold">{data.ktp_2_name}</p>
+                                                <p className="text-xs text-neutral-500">(Penghuni 2)</p>
+                                            </div>
+                                            <div className="mt-8 inline-flex flex-col items-center">
+                                                <div className="bg-white border border-neutral-300 rounded overflow-hidden w-full max-w-[140px]">
+                                                    <SignatureCanvas ref={parafPad2} canvasProps={{ className: 'w-full h-16' }} />
+                                                </div>
+                                                <p className="mt-1 text-xs text-neutral-500">Paraf</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Occupant 2 Signatures */}
-                        {data.has_second_occupant && (
-                            <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200">
-                                <h3 className="font-bold mb-4">{data.ktp_2_name} (Penghuni 2)</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2 text-neutral-600">Tanda Tangan</label>
-                                        <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden">
-                                            <SignatureCanvas ref={sigPad2} canvasProps={{ className: 'w-full h-32' }} />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2 text-neutral-600">Paraf</label>
-                                        <div className="bg-white border border-neutral-300 rounded-lg overflow-hidden">
-                                            <SignatureCanvas ref={parafPad2} canvasProps={{ className: 'w-full h-32' }} />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="flex gap-3 pt-4 border-t border-neutral-200">
-                            <button onClick={clearSignatures} className="px-6 py-3 rounded-lg font-medium text-neutral-600 border border-neutral-200 hover:bg-neutral-100">Bersihkan Canvas</button>
-                            <div className="flex-1"></div>
-                            <button onClick={prevStep} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200">Kembali</button>
-                            <button onClick={submitAgreement} className="px-8 py-3 rounded-lg font-bold bg-neutral-900 text-white hover:bg-neutral-800 shadow-lg">Submit & Selesai</button>
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full">
+                            <button onClick={clearSignatures} className="w-full sm:w-auto px-6 py-3 rounded-lg font-medium text-neutral-600 border border-neutral-200 hover:bg-neutral-100 transition-colors">
+                                Bersihkan Canvas
+                            </button>
+                            <button onClick={prevStep} className="w-full sm:w-auto px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 transition-colors">
+                                Kembali
+                            </button>
+                            <button onClick={submitAgreement} className="w-full sm:flex-1 px-8 py-3 rounded-lg font-bold bg-neutral-900 text-white hover:bg-neutral-800 shadow-lg transition-colors">
+                                Submit & Selesai
+                            </button>
                         </div>
                     </div>
                 );
