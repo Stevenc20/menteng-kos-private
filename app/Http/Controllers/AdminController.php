@@ -86,6 +86,92 @@ class AdminController extends Controller
     }
 
     /**
+     * Store Media for a Property.
+     */
+    public function storeMedia(Request $request, $id, \App\Services\ImageWatermarkService $watermarkService)
+    {
+        $property = Property::findOrFail($id);
+
+        $request->validate([
+            'photos.*' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'video' => 'nullable|mimes:mp4,mov,avi|max:51200',
+        ]);
+
+        if ($request->hasFile('photos')) {
+            foreach ($request->file('photos') as $photo) {
+                $paths = $watermarkService->processAndStore($photo, $property->id);
+                
+                \App\Models\PropertyMedia::create([
+                    'property_id' => $property->id,
+                    'type' => 'IMAGE',
+                    'original_path' => $paths['original_path'],
+                    'public_path' => $paths['public_path'],
+                    'is_cover' => $property->media()->where('is_cover', true)->doesntExist(),
+                    'sort_order' => $property->media()->count(),
+                ]);
+            }
+        }
+
+        if ($request->hasFile('video')) {
+            $video = $request->file('video');
+            $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
+            $path = $video->storeAs("public/properties/{$property->id}/videos", $filename);
+            
+            \App\Models\PropertyMedia::create([
+                'property_id' => $property->id,
+                'type' => 'VIDEO',
+                'original_path' => $path, // No watermark for videos in this phase
+                'public_path' => \Illuminate\Support\Facades\Storage::url($path),
+                'is_cover' => false,
+                'sort_order' => $property->media()->count(),
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Media uploaded successfully.');
+    }
+
+    public function setCoverMedia($id, $mediaId)
+    {
+        $property = Property::findOrFail($id);
+        $property->media()->update(['is_cover' => false]);
+        $property->media()->where('id', $mediaId)->update(['is_cover' => true]);
+
+        return redirect()->back()->with('success', 'Cover image updated.');
+    }
+
+    public function deleteMedia($id, $mediaId)
+    {
+        $media = \App\Models\PropertyMedia::where('property_id', $id)->findOrFail($mediaId);
+        
+        // Delete files
+        \Illuminate\Support\Facades\Storage::delete($media->original_path);
+        if ($media->public_path) {
+            $publicRelative = str_replace('/storage/', 'public/', $media->public_path);
+            \Illuminate\Support\Facades\Storage::delete($publicRelative);
+        }
+
+        $media->delete();
+
+        return redirect()->back()->with('success', 'Media deleted.');
+    }
+
+    public function reorderMedia(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'order' => 'required|array',
+            'order.*' => 'integer|exists:property_media,id'
+        ]);
+
+        foreach ($validated['order'] as $index => $mediaId) {
+            \App\Models\PropertyMedia::where('property_id', $id)
+                ->where('id', $mediaId)
+                ->update(['sort_order' => $index]);
+        }
+
+        return redirect()->back()->with('success', 'Media reordered.');
+    }
+
+    /**
      * Display the Tenants and Invitations page.
      */
     public function tenants()

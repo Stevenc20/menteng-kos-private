@@ -5,7 +5,10 @@ use App\Models\Property;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    $properties = Property::whereIn('status', ['AVAILABLE', 'UPCOMING_AVAILABLE', 'OCCUPIED'])
+    $properties = Property::with(['media' => function($q) {
+            $q->orderBy('sort_order');
+        }])
+        ->whereIn('status', ['AVAILABLE', 'UPCOMING_AVAILABLE', 'OCCUPIED'])
         ->get()
         ->map(function ($property) {
             // For public facing, we hide details if OCCUPIED.
@@ -15,6 +18,7 @@ Route::get('/', function () {
                     'name' => $property->name,
                     'type' => $property->type,
                     'status' => 'OCCUPIED',
+                    'media' => $property->media
                 ];
             }
             return $property;
@@ -24,6 +28,16 @@ Route::get('/', function () {
         'properties' => $properties
     ]);
 })->name('home');
+
+Route::get('/kamar/{id}', function ($id) {
+    $property = Property::with(['media' => function($q) {
+        $q->orderBy('sort_order');
+    }])->findOrFail($id);
+
+    return Inertia::render('Public/PropertyDetail', [
+        'property' => $property
+    ]);
+})->name('property.show');
 
 // Auth Routes (Google OAuth)
 Route::get('/auth/google', [\App\Http\Controllers\AuthController::class, 'redirectToGoogle'])->name('auth.google');
@@ -47,6 +61,12 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::post('/properties', [\App\Http\Controllers\AdminController::class, 'storeProperty'])->name('admin.properties.store');
     Route::put('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'updateProperty'])->name('admin.properties.update');
     Route::delete('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'destroyProperty'])->name('admin.properties.destroy');
+    
+    // Property Media
+    Route::post('/properties/{id}/media', [\App\Http\Controllers\AdminController::class, 'storeMedia'])->name('admin.properties.media.store');
+    Route::post('/properties/{id}/media/{mediaId}/cover', [\App\Http\Controllers\AdminController::class, 'setCoverMedia'])->name('admin.properties.media.cover');
+    Route::delete('/properties/{id}/media/{mediaId}', [\App\Http\Controllers\AdminController::class, 'deleteMedia'])->name('admin.properties.media.destroy');
+    Route::post('/properties/{id}/media/reorder', [\App\Http\Controllers\AdminController::class, 'reorderMedia'])->name('admin.properties.media.reorder');
     
     // Tenants & Invitations
     Route::get('/tenants', [\App\Http\Controllers\AdminController::class, 'tenants'])->name('admin.tenants');
