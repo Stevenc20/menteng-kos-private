@@ -92,7 +92,7 @@ export function AdminModalHeader({
 
 export function AdminModalContent({ children, className }: { children: React.ReactNode; className?: string }) {
     return (
-        <div className={cn("px-6 py-2 overflow-y-auto", className)}>
+        <div className={cn("px-6 py-2 overflow-y-auto flex-1 min-h-0", className)}>
             {children}
         </div>
     );
