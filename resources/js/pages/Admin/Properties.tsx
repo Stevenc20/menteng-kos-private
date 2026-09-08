@@ -137,7 +137,10 @@ export default function Properties({ properties }: PropertiesProps) {
                 toast.success('Media berhasil diunggah');
                 mediaForm.reset();
             },
-            onError: () => toast.error('Gagal mengunggah media')
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                toast.error(firstError || 'Gagal mengunggah media');
+            }
         });
     };
 

@@ -100,41 +100,45 @@ class AdminController extends Controller
         $property = Property::findOrFail($id);
 
         $request->validate([
-            'photos.*' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'photos.*' => 'nullable|image|max:5120',
             'video' => 'nullable|mimes:mp4,mov,avi|max:51200',
         ]);
 
-        if ($request->hasFile('photos')) {
-            foreach ($request->file('photos') as $photo) {
-                $paths = $watermarkService->processAndStore($photo, $property->id);
+        try {
+            if ($request->hasFile('photos')) {
+                foreach ($request->file('photos') as $photo) {
+                    $paths = $watermarkService->processAndStore($photo, $property->id);
+                    
+                    \App\Models\PropertyMedia::create([
+                        'property_id' => $property->id,
+                        'type' => 'IMAGE',
+                        'original_path' => $paths['original_path'],
+                        'public_path' => $paths['public_path'],
+                        'is_cover' => $property->media()->where('is_cover', true)->doesntExist(),
+                        'sort_order' => $property->media()->count(),
+                    ]);
+                }
+            }
+
+            if ($request->hasFile('video')) {
+                $video = $request->file('video');
+                $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
+                $path = $video->storeAs("public/properties/{$property->id}/videos", $filename);
                 
                 \App\Models\PropertyMedia::create([
                     'property_id' => $property->id,
-                    'type' => 'IMAGE',
-                    'original_path' => $paths['original_path'],
-                    'public_path' => $paths['public_path'],
-                    'is_cover' => $property->media()->where('is_cover', true)->doesntExist(),
+                    'type' => 'VIDEO',
+                    'original_path' => $path,
+                    'public_path' => \Illuminate\Support\Facades\Storage::url($path),
+                    'is_cover' => false,
                     'sort_order' => $property->media()->count(),
                 ]);
             }
-        }
 
-        if ($request->hasFile('video')) {
-            $video = $request->file('video');
-            $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
-            $path = $video->storeAs("public/properties/{$property->id}/videos", $filename);
-            
-            \App\Models\PropertyMedia::create([
-                'property_id' => $property->id,
-                'type' => 'VIDEO',
-                'original_path' => $path, // No watermark for videos in this phase
-                'public_path' => \Illuminate\Support\Facades\Storage::url($path),
-                'is_cover' => false,
-                'sort_order' => $property->media()->count(),
-            ]);
+            return redirect()->back()->with('success', 'Media uploaded successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['photos' => 'Server Error: ' . $e->getMessage()]);
         }
-
-        return redirect()->back()->with('success', 'Media uploaded successfully.');
     }
 
     public function setCoverMedia($id, $mediaId)
