@@ -106,7 +106,7 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
     return (
         <PublicLayout title={`${property.name} | Menteng Kos Private`}>
             
-            <div className="bg-[#F8F8F6] min-h-[calc(100vh-80px)] py-8 md:py-16">
+            <div className="bg-[#F8F8F6] min-h-[calc(100vh-80px)] pt-24 pb-8 md:pt-32 md:pb-16">
                 <div className="max-w-[1200px] mx-auto px-6 lg:px-12">
                     
                     {/* Header */}
@@ -272,14 +272,6 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                             className="w-full flex items-center justify-center px-6 py-4 bg-[#1A1A18] text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors shadow-lg active:scale-95"
                                         >
                                             Ajukan Survey
-                                        </a>
-                                        <a 
-                                            href={generateWhatsAppLink()}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="w-full flex items-center justify-center px-6 py-4 bg-white text-[#1A1A18] border border-[#1A1A18] rounded-xl font-medium hover:bg-neutral-50 transition-colors active:scale-95"
-                                        >
-                                            Hubungi WhatsApp
                                         </a>
                                     </div>
                                 )}
