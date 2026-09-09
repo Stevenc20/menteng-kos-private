@@ -129,17 +129,10 @@ export default function Properties({ properties: initialProperties }: Properties
         facilities: [] as string[]
     });
 
-    // Media Form
-    const mediaForm = useForm({
-        photos: [] as File[],
-        video: null as File | null,
-    });
-
     const openAddModal = () => {
         setEditingProp(null);
         reset();
         clearErrors();
-        mediaForm.reset();
         setCustomFacility('');
         setUploading(false);
         setSaving(false);
@@ -161,7 +154,6 @@ export default function Properties({ properties: initialProperties }: Properties
             facilities: prop.facilities || []
         });
         clearErrors();
-        mediaForm.reset();
         setCustomFacility('');
         setUploading(false);
         setSaving(false);
@@ -287,18 +279,15 @@ export default function Properties({ properties: initialProperties }: Properties
     const uploadMedia = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingProp) return;
-        if (!mediaForm.data.photos || mediaForm.data.photos.length === 0) {
+        if (draftPhotos.length === 0) {
             toast.error('Pilih foto terlebih dahulu!');
             return;
         }
 
         const formData = new FormData();
-        mediaForm.data.photos.forEach((photo) => {
-            formData.append('photos[]', photo);
+        draftPhotos.forEach((photo) => {
+            formData.append('photos[]', photo.file);
         });
-        if (mediaForm.data.video) {
-            formData.append('video', mediaForm.data.video);
-        }
 
         setUploading(true);
         try {
@@ -321,8 +310,7 @@ export default function Properties({ properties: initialProperties }: Properties
                 applyMedia(editingProp.id, body.media);
             }
 
-            mediaForm.setData('photos', []);
-            mediaForm.setData('video', null);
+            clearDraftPhotos();
             if (fileInputRef.current) {
                 fileInputRef.current.value = '';
             }
@@ -768,29 +756,46 @@ export default function Properties({ properties: initialProperties }: Properties
                                                         type="file" 
                                                         multiple
                                                         accept="image/*"
-                                                        onChange={async (e) => {
-                                                            const files = Array.from(e.target.files || []);
-                                                            if (files.length === 0) return;
-                                                            
-                                                            try {
-                                                                const compressedFiles = await Promise.all(
-                                                                    files.map(f => compressImage(f, 1600, 0.8))
-                                                                );
-                                                                mediaForm.setData('photos', compressedFiles);
-                                                            } catch (error) {
-                                                                console.error('Compression failed', error);
-                                                            }
-                                                        }}
-                                                        className="block w-full text-sm text-[#6B6B67] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A18] file:text-white hover:file:bg-[#333333] transition-colors cursor-pointer"
+                                                        disabled={uploading}
+                                                        onChange={handleDraftSelect}
+                                                        className="block w-full text-sm text-[#6B6B67] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A18] file:text-white hover:file:bg-[#333333] transition-colors cursor-pointer disabled:opacity-50"
                                                     />
                                                 </div>
+
+                                                {draftPhotos.length > 0 && (
+                                                    <div>
+                                                        <h5 className="text-[13px] font-semibold text-[#1A1A18] mb-2">
+                                                            Foto Siap Diunggah ({draftPhotos.length})
+                                                        </h5>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                            {draftPhotos.map((photo, index) => (
+                                                                <div key={index} className="relative rounded-lg overflow-hidden border border-[#E8E7E3] aspect-[4/3] bg-neutral-100">
+                                                                    <img src={photo.url} className="w-full h-full object-cover" alt="Preview Foto" />
+                                                                    <button 
+                                                                        type="button"
+                                                                        disabled={uploading}
+                                                                        onClick={() => removeDraftPhoto(index)}
+                                                                        className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 text-white rounded-full hover:bg-red-600 transition-colors disabled:opacity-50"
+                                                                        title="Hapus dari daftar upload"
+                                                                    >
+                                                                        <X className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-[11px] text-[#6B6B67] mt-2">
+                                                            Klik ✕ untuk menghapus satu gambar dari daftar. Pilih kembali untuk menambah gambar lagi.
+                                                        </p>
+                                                    </div>
+                                                )}
+
                                                 <AdminButton 
                                                     type="submit" 
-                                                    disabled={mediaForm.data.photos.length === 0 || uploading}
+                                                    disabled={draftPhotos.length === 0 || uploading}
                                                     isLoading={uploading}
                                                     className="w-full"
                                                 >
-                                                    {uploading ? 'Mengunggah...' : 'Upload Gambar'}
+                                                    {uploading ? 'Mengunggah...' : draftPhotos.length > 0 ? `Upload ${draftPhotos.length} Gambar` : 'Upload Gambar'}
                                                 </AdminButton>
                                             </div>
                                         </form>
@@ -805,7 +810,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                             ) : (
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                     {editingProp.media.map(media => (
-                                                        <div key={media.id} className="relative group rounded-lg overflow-hidden border border-[#E8E7E3] aspect-[4/3] bg-white shadow-sm">
+                                                        <div key={media.id} className="relative rounded-lg overflow-hidden border border-[#E8E7E3] aspect-[4/3] bg-white shadow-sm">
                                                             {media.type === 'IMAGE' ? (
                                                                 <img src={media.url} className="w-full h-full object-cover" alt="Property Media" onError={fallbackImg} />
                                                             ) : (
@@ -815,34 +820,35 @@ export default function Properties({ properties: initialProperties }: Properties
                                                                 </div>
                                                             )}
                                                             
-                                                            {/* Action overlay: always visible on touch, revealed on hover for desktop */}
-                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                                                                {media.type === 'IMAGE' && !media.is_cover && (
-                                                                    <button 
-                                                                        type="button"
-                                                                        onClick={() => setCover(media.id)}
-                                                                        className="p-2 bg-white text-[#1A1A18] rounded-lg hover:bg-neutral-200 transition-colors"
-                                                                        title="Jadikan Cover"
-                                                                    >
-                                                                        <Star className="w-4 h-4" />
-                                                                    </button>
-                                                                )}
-                                                                <button 
-                                                                    type="button"
-                                                                    onClick={() => requestDeleteMedia(media.id)}
-                                                                    disabled={deleting}
-                                                                    className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
-                                                                    title="Hapus"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-
                                                             {media.is_cover && (
-                                                                <div className="absolute top-2 left-2 bg-[#1A1A18] text-white text-[10px] px-2 py-0.5 rounded font-medium flex items-center gap-1">
+                                                                <div className="absolute top-2 left-2 bg-[#1A1A18]/90 text-white text-[10px] px-2 py-0.5 rounded font-medium flex items-center gap-1">
                                                                     <Star className="w-3 h-3 fill-current" /> Cover
                                                                 </div>
                                                             )}
+
+                                                            {/* Persistent action bar: always visible, no hover needed */}
+                                                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-1.5 py-1.5 flex items-center justify-between gap-1">
+                                                                {media.type === 'IMAGE' && !media.is_cover ? (
+                                                                    <button 
+                                                                        type="button"
+                                                                        disabled={deleting}
+                                                                        onClick={() => setCover(media.id)}
+                                                                        className="flex items-center gap-1 bg-white/95 text-[#1A1A18] text-[11px] font-semibold px-2 py-1 rounded-md hover:bg-white transition-colors disabled:opacity-50"
+                                                                    >
+                                                                        <Star className="w-3 h-3" /> Jadikan Cover
+                                                                    </button>
+                                                                ) : (
+                                                                    <span />
+                                                                )}
+                                                                <button 
+                                                                    type="button"
+                                                                    disabled={deleting}
+                                                                    onClick={() => requestDeleteMedia(media.id)}
+                                                                    className="flex items-center gap-1 bg-red-500 text-white text-[11px] font-semibold px-2 py-1 rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+                                                                >
+                                                                    <Trash2 className="w-3 h-3" /> Hapus
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>

@@ -70,6 +70,28 @@ test('media upload without files returns 422 for json requests', function () {
         ->assertStatus(422);
 });
 
+test('additional media upload appends to existing gallery (no replacement)', function () {
+    Storage::fake('local');
+    Storage::fake('public');
+    $admin = makeAdmin();
+    $property = makeMediaProperty();
+
+    $first = $this->actingAs($admin)->postJson("/admin/properties/{$property->id}/media", [
+        'photos' => [fakeImageUpload('a.jpg'), fakeImageUpload('b.jpg')],
+    ])->json('media');
+    expect(count($first))->toBe(2);
+
+    $second = $this->actingAs($admin)->postJson("/admin/properties/{$property->id}/media", [
+        'photos' => [fakeImageUpload('c.jpg'), fakeImageUpload('d.jpg'), fakeImageUpload('e.jpg')],
+    ])->json('media');
+
+    expect(count($second))->toBe(5);
+    expect(PropertyMedia::where('property_id', $property->id)->count())->toBe(5);
+    expect(collect($second)->pluck('id')->all())
+        ->toContain($first[0]['id'])
+        ->toContain($first[1]['id']);
+});
+
 test('set cover returns full media list with updated cover flag', function () {
     Storage::fake('local');
     Storage::fake('public');
