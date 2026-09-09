@@ -88,6 +88,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 Route::middleware(['auth'])->prefix('tenant')->group(function () {
     // Onboarding Wizard
     Route::get('/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('tenant.onboarding');
+    Route::get('/onboarding/profile', [\App\Http\Controllers\OnboardingController::class, 'getProfile'])->name('tenant.onboarding.profile');
     Route::post('/onboarding/info', [\App\Http\Controllers\OnboardingController::class, 'storeInfo'])->name('tenant.onboarding.info');
     Route::post('/onboarding/ktp', [\App\Http\Controllers\OnboardingController::class, 'uploadKtp'])->name('tenant.onboarding.ktp');
     Route::get('/onboarding/ktp/{kind}', [\App\Http\Controllers\OnboardingController::class, 'getKtpPhoto'])->name('tenant.onboarding.ktp.photo');

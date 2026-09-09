@@ -344,3 +344,20 @@ test('a brand-new tenant with readable OCR gets identity persisted and shown in 
     expect(data_get($response->json(), 'profile.ktp_1_name'))->toBe('BUDI SETIAWAN');
     expect(data_get($response->json(), 'profile.ktp_1_nik'))->toBe('3201110203920001');
 });
+test('a tenant can fetch their latest profile to hydrate the wizard', function () {
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $profile = TenantProfile::create([
+        'user_id' => $user->id,
+        'ktp_1_name' => 'Budi Santoso',
+        'ktp_1_nik' => '1234567890123456',
+    ]);
+    
+    $this->actingAs($user);
+    
+    $response = $this->getJson(route('tenant.onboarding.profile'));
+    
+    $response->assertStatus(200)
+             ->assertJsonPath('ok', true)
+             ->assertJsonPath('profile.ktp_1_name', 'Budi Santoso')
+             ->assertJsonPath('profile.ktp_1_nik', '1234567890123456');
+});

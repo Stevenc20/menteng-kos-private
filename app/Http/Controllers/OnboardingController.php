@@ -70,6 +70,27 @@ class OnboardingController extends Controller
     }
 
     /**
+     * Returns the latest profile from the database to hydrate the wizard.
+     */
+    public function getProfile()
+    {
+        $user = Auth::user();
+        if ($user->role !== 'TENANT') {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $profile = TenantProfile::where('user_id', $user->id)->first();
+        
+        return response()->json([
+            'ok' => true,
+            'profile' => $profile ? $profile->only([
+                'ktp_1_photo', 'ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address',
+                'ktp_2_photo', 'ktp_2_name', 'ktp_2_nik', 'ktp_2_birth_place', 'ktp_2_birth_date', 'ktp_2_job', 'ktp_2_address',
+            ]) : (object)[],
+        ]);
+    }
+
+    /**
      * Allow a rejected tenant to go back to the wizard and fix their data.
      */
     public function revise()

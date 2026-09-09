@@ -202,6 +202,51 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         return match ? decodeURIComponent(match[2]) : '';
     };
 
+    const buildProfilePatch = (occProfile: any, prefix?: 'ktp_1' | 'ktp_2') => {
+        const profileToFormMap: Record<string, string> = {
+            ktp_1_name: 'ktp_1_name',
+            ktp_1_nik: 'ktp_1_nik',
+            ktp_1_birth_place: 'ktp_1_birth_place',
+            ktp_1_birth_date: 'ktp_1_birth_date',
+            ktp_1_job: 'ktp_1_job',
+            ktp_1_address: 'ktp_1_address',
+            ktp_2_name: 'ktp_2_name',
+            ktp_2_nik: 'ktp_2_nik',
+            ktp_2_birth_place: 'ktp_2_birth_place',
+            ktp_2_birth_date: 'ktp_2_birth_date',
+            ktp_2_job: 'ktp_2_job',
+            ktp_2_address: 'ktp_2_address',
+        };
+
+        const patch: Record<string, any> = {};
+        for (const [backendKey, formKey] of Object.entries(profileToFormMap)) {
+            // Jika ada prefix, hanya proses field yang sesuai dengan prefix tersebut
+            if (prefix && !backendKey.startsWith(prefix)) continue;
+
+            const v = occProfile[backendKey];
+            if (v !== null && v !== undefined && v !== '') {
+                patch[formKey] = v;
+            }
+        }
+        return patch;
+    };
+
+    const fetchLatestProfileAndHydrate = async () => {
+        try {
+            const res = await fetch('/tenant/onboarding/profile', {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.profile) {
+                const patch = buildProfilePatch(json.profile);
+                setData(prev => ({ ...prev, ...patch }));
+            }
+        } catch {
+            // Jika gagal fetch, lanjutkan dengan state yang ada
+        }
+    };
+
     const uploadKtp = async (occupant: 1 | 2, explicitFile?: File): Promise<boolean> => {
         const file = explicitFile ?? (occupant === 1 ? data.ktp_1_photo : data.ktp_2_photo);
         const errKey = occupant === 1 ? 'ktp_1' : 'ktp_2';
@@ -232,42 +277,11 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const prefix = occupant === 1 ? 'ktp_1' : 'ktp_2';
             const ocrData = json.ocr?.[`ktp_${occupant}`];
 
-            // Build batched state update to prevent Inertia setData race conditions
-            const patch: Partial<typeof data> = {
-                [`${prefix}_photo`]: null as any,
-                [`${prefix}_photo_path`]: json[`${prefix}_photo`] ?? json.profile?.[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]
-            };
+            const patch = buildProfilePatch(json.profile ?? {}, prefix);
+            patch[`${prefix}_photo`] = null as any;
+            patch[`${prefix}_photo_path`] = json[`${prefix}_photo`] ?? json.profile?.[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data];
 
-            const profileToFormMap: Record<string, string> = {
-                ktp_1_name: 'ktp_1_name',
-                ktp_1_nik: 'ktp_1_nik',
-                ktp_1_birth_place: 'ktp_1_birth_place',
-                ktp_1_birth_date: 'ktp_1_birth_date',
-                ktp_1_job: 'ktp_1_job',
-                ktp_1_address: 'ktp_1_address',
-                ktp_2_name: 'ktp_2_name',
-                ktp_2_nik: 'ktp_2_nik',
-                ktp_2_birth_place: 'ktp_2_birth_place',
-                ktp_2_birth_date: 'ktp_2_birth_date',
-                ktp_2_job: 'ktp_2_job',
-                ktp_2_address: 'ktp_2_address',
-            };
-
-            const occProfile = json.profile ?? {};
-            for (const [backendKey, formKey] of Object.entries(profileToFormMap)) {
-                const v = occProfile[backendKey];
-                if (v !== null && v !== undefined && v !== '') {
-                    patch[formKey as keyof typeof data] = v as any;
-                }
-            }
-
-            console.log('1. OCR RESPONSE PROFILE', json.profile);
-            console.log('2. OCR PATCH', patch);
-
-            // Gunakan metode yang paling stabil: function update
-            setData(prev => {
-                return { ...prev, ...patch };
-            });
+            setData(prev => ({ ...prev, ...patch }));
 
             if (ocrData && !ocrData.error) {
                 const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.job, ocrData.address].filter(Boolean).length;
@@ -300,7 +314,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const ok = await uploadKtp(1);
             if (!ok) return;
         }
-        console.log('3. STEP 2 NEXT - FORM DATA', data);
+        
+        // Single source of truth: fetch snapshot profil terbaru dari database
+        await fetchLatestProfileAndHydrate();
         nextStep();
     };
 
@@ -310,6 +326,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const ok = await uploadKtp(2);
             if (!ok) return;
         }
+        
+        await fetchLatestProfileAndHydrate();
         nextStep();
     };
 
@@ -491,12 +509,6 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                     </div>
                 );
             case 3:
-                console.log('4. STEP 3 RECEIVED DATA', data);
-                console.log('5. STEP 3 KTP FIELDS', {
-                    name: data.ktp_1_name,
-                    nik: data.ktp_1_nik,
-                    address: data.ktp_1_address,
-                });
                 return (
                     <div className="space-y-4">
                         <h2 className="text-2xl font-bold tracking-tight mb-2">Informasi Pribadi (Penghuni 1)</h2>
