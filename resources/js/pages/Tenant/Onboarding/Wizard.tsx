@@ -262,11 +262,10 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             }
 
             console.log('1. OCR RESPONSE PROFILE', json.profile);
-            console.log('2. OCR PATCH MAPPING', patch);
+            console.log('2. OCR PATCH', patch);
 
             // Gunakan metode yang paling stabil: function update
             setData(prev => {
-                console.log('3. WIZARD DATA BEFORE STEP CHANGE', prev);
                 return { ...prev, ...patch };
             });
 
@@ -301,6 +300,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const ok = await uploadKtp(1);
             if (!ok) return;
         }
+        console.log('3. STEP 2 NEXT - FORM DATA', data);
         nextStep();
     };
 
@@ -492,6 +492,11 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                 );
             case 3:
                 console.log('4. STEP 3 RECEIVED DATA', data);
+                console.log('5. STEP 3 KTP FIELDS', {
+                    name: data.ktp_1_name,
+                    nik: data.ktp_1_nik,
+                    address: data.ktp_1_address,
+                });
                 return (
                     <div className="space-y-4">
                         <h2 className="text-2xl font-bold tracking-tight mb-2">Informasi Pribadi (Penghuni 1)</h2>
