@@ -364,23 +364,25 @@ class KtpOcrService
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
 
-            // Nama (Lebih robust: NAMA, Nama, Narna, Namo)
-            if ($result['name'] === '' && preg_match('/(?:^|[^A-Za-z])N[aA][rmn][aAuo]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
-                $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $m[1]));
-            } elseif ($result['name'] === '' && preg_match('/(?:^|[^A-Za-z])N[aA][rmn][aAuo]\s*$/i', $line) && isset($lines[$i + 1])) {
-                $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $lines[$i + 1]));
+            // Nama (Lebih robust)
+            if ($result['name'] === '' && preg_match('/N[aA][rmn][aAuo][\s:\-\|]*(.+)$/i', $line, $m)) {
+                $name = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $m[1]));
+                if (strlen($name) > 2 && stripos($name, 'NIK') === false) $result['name'] = $name;
+            } elseif ($result['name'] === '' && preg_match('/N[aA][rmn][aAuo][\s:\-\|]*$/i', $line) && isset($lines[$i + 1])) {
+                $name = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $lines[$i + 1]));
+                if (strlen($name) > 2 && stripos($name, 'NIK') === false) $result['name'] = $name;
             }
 
             // Tempat/Tgl Lahir
-            if ($result['birth_place'] === '' && preg_match('/(T[eE]mp[aA]t|Tgl|L[aA]h[iI]r).*?\s*[:\-\s]*\s*(.+)$/i', $line, $mIn)) {
-                $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $mIn[2]);
-                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
+            if ($result['birth_place'] === '' && preg_match('/(?:T[eE]mp[aA]t|L[aA]h[iI]r|Tgl).*?[\s:\-\|]*(.+)$/i', $line, $mIn)) {
+                $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $mIn[1]);
+                if (preg_match('/([A-Za-z\s\-]+)[,\.]?\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
                     $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
                 }
-            } elseif ($result['birth_place'] === '' && preg_match('/(T[eE]mp[aA]t|Tgl|L[aA]h[iI]r)/i', $line) && isset($lines[$i + 1])) {
+            } elseif ($result['birth_place'] === '' && preg_match('/(?:T[eE]mp[aA]t|L[aA]h[iI]r|Tgl)/i', $line) && isset($lines[$i + 1])) {
                 $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $lines[$i + 1]);
-                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
+                if (preg_match('/([A-Za-z\s\-]+)[,\.]?\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
                     $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
                 }
@@ -394,19 +396,22 @@ class KtpOcrService
             }
 
             // Alamat (multiline support diletakkan duluan untuk tangkap string panjang)
-            if ($result['address'] === '' && preg_match('/A[l1I]am[aA]t|A[l1I]arnat\s*[:\-\s]*\s*(.*)$/i', $line, $m)) {
+            if ($result['address'] === '' && preg_match('/A[l1I]am[aA]t|A[l1I]arnat[\s:\-\|]*(.*)$/i', $line, $m)) {
                 $addrLines = [];
                 if (trim($m[1]) !== '') {
                     $addrLines[] = trim($m[1]);
                 }
-                for ($j = $i + 1; $j < count($lines); $j++) {
-                    $nextLine = trim($lines[$j]);
-                    if (preg_match('/^(R[T7][\s\/\\\.]*[R|B][W|M]|K[eE]l|K[eE]c|A[gG]am[aA]|S[tT]at|P[eE]kerj|K[eE]warga)/i', $nextLine)) {
+                $j = $i + 1;
+                while ($j < count($lines)) {
+                    // Berhenti jika ketemu label field lain
+                    if (preg_match('/(RT|RW|Kel|Desa|Kecamatan|Agama|Status|Pekerjaan|Kewarga|Berlaku|Gol|Darah)/i', $lines[$j])) {
                         break;
                     }
-                    $addrLines[] = preg_replace('/[^A-Za-z0-9\s\.\,\-]/', '', $nextLine);
+                    $addrLines[] = $lines[$j];
+                    $j++;
+                    if (count($addrLines) > 3) break;
                 }
-                $result['address'] = trim(implode(' ', $addrLines));
+                $result['address'] = trim(preg_replace('/[^A-Za-z0-9\s\.\,\/\-]/', '', implode(' ', $addrLines)));
             } elseif ($result['address'] === '' && preg_match('/A[l1I]am[aA]t|A[l1I]arnat/i', $line) && isset($lines[$i + 1])) {
                  // Kasus bila "Alamat" di baris tersendiri dan isinya di baris berikutnya
                  $addrLines = [];
