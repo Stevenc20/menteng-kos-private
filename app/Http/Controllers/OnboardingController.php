@@ -242,7 +242,8 @@ class OnboardingController extends Controller
         }
 
         // Run OCR on uploaded photos (best-effort, may never break persistence).
-        $ocrService = new KtpOcrService();
+        // Resolved from the container so tests can swap the engine.
+        $ocrService = app(KtpOcrService::class);
         $ocrResults = [];
 
         if (isset($newPaths['ktp_1_photo'])) {
@@ -256,18 +257,19 @@ class OnboardingController extends Controller
                     $ocrResults['ktp_1'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 1: ' . $e->getMessage());
-                    $ocr = ['name' => '', 'nik' => '', 'birth_place' => '', 'birth_date' => '', 'gender' => '', 'job' => '', 'address' => ''];
                     $ocrResults['ktp_1'] = ['error' => 'OCR processing failed'];
                 }
 
-                // Foto terbaru adalah sumber kebenaran: seluruh field identitas
-                // di-overwrite dengan hasil OCR (boleh kosong) agar data penghuni
-                // sebelumnya (mis. "ALDO") tidak pernah tertinggal di formulir.
+                // Hanya field yang benar-benar terbaca dari foto yang di-overwrite.
+                // Data identitas yang sudah tersimpan TIDAK pernah dikosongkan hanya
+                // karena OCR gagal — mencegah data hilang saat user mengganti foto.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    $profile->{'ktp_1_' . $field} = $ocr[$field] ?? '';
+                    if (isset($ocr[$field]) && $ocr[$field] !== '') {
+                        $profile->{'ktp_1_' . $field} = $ocr[$field];
+                    }
                 }
                 $profile->save();
-                Log::info('KTP OCR result saved to tenant_profiles for occupant 1');
+                Log::info('KTP photo saved for occupant 1; identity updated where OCR readable');
             }
         }
 
@@ -282,21 +284,32 @@ class OnboardingController extends Controller
                     $ocrResults['ktp_2'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 2: ' . $e->getMessage());
-                    $ocr = ['name' => '', 'nik' => '', 'birth_place' => '', 'birth_date' => '', 'gender' => '', 'job' => '', 'address' => ''];
                     $ocrResults['ktp_2'] = ['error' => 'OCR processing failed'];
                 }
 
-                // Sama seperti penghuni 1: overwrite agar tidak ada data lama tersisa.
+                // Sama seperti penghuni 1: tidak pernah menimpa dengan kosong.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    $profile->{'ktp_2_' . $field} = $ocr[$field] ?? '';
+                    if (isset($ocr[$field]) && $ocr[$field] !== '') {
+                        $profile->{'ktp_2_' . $field} = $ocr[$field];
+                    }
                 }
                 $profile->save();
-                Log::info('KTP OCR result saved to tenant_profiles for occupant 2');
+                Log::info('KTP photo saved for occupant 2; identity updated where OCR readable');
             }
         }
 
+        // Source of truth terbaru untuk frontend: kembalikan snapshot profil yang
+        // barusan disimpan supaya Wizard selalu sinkron dengan database.
+        $profile->refresh();
+
         Log::info('KTP OCR response returned to frontend', ['ocr' => $ocrResults]);
-        return response()->json(array_merge(['ok' => true], $newPaths, ['ocr' => $ocrResults]));
+        return response()->json(array_merge(['ok' => true], $newPaths, [
+            'profile' => $profile->only([
+                'ktp_1_photo', 'ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address',
+                'ktp_2_photo', 'ktp_2_name', 'ktp_2_nik', 'ktp_2_birth_place', 'ktp_2_birth_date', 'ktp_2_job', 'ktp_2_address',
+            ]),
+            'ocr' => $ocrResults,
+        ]));
     }
 
     /**

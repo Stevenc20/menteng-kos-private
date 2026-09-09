@@ -186,13 +186,22 @@ test('uploading a replacement KTP deletes the old file only after a successful s
     }
 });
 
-test('uploading a new KTP photo replaces stale stored identity fields', function () {
+test('a replacement KTP keeps stored identity when OCR reads nothing', function () {
     Storage::fake('local');
     $user = User::factory()->create(['role' => 'TENANT']);
     $this->actingAs($user);
     $this->withoutMiddleware(VerifyCsrfToken::class);
 
-    // Simulate a profile carrying the previous occupant's data (e.g. "ALDO").
+    // OCR engine yang selalu gagal membaca (sesuai fixture placeholder asli).
+    $empty = new class {
+        public function extract(string $absolutePath): array
+        {
+            return ['raw' => '', 'name' => '', 'nik' => '', 'birth_place' => '', 'birth_date' => '', 'gender' => '', 'job' => '', 'address' => ''];
+        }
+    };
+    $this->app->instance(\App\Services\KtpOcrService::class, $empty);
+
+    // Data identitas yang sudah tersimpan sebelumnya (mis. "ALDO").
     TenantProfile::create([
         'user_id' => $user->id,
         'ktp_1_name' => 'ALDO ANDREASS',
@@ -202,18 +211,136 @@ test('uploading a new KTP photo replaces stale stored identity fields', function
         'ktp_1_address' => 'Jl. Lama No. 1',
     ]);
 
-    // The fixture image is a tiny non-OCR-able placeholder, so OCR yields blank
-    // fields — the stale stored identity must NOT survive the new upload.
     $response = $this->postJson(route('tenant.onboarding.ktp'), [
         'ktp_1_photo' => makeKtpUpload('baru.jpg'),
     ]);
     $response->assertOk()->assertJson(['ok' => true]);
 
+    // Ganti foto TIDAK boleh menghapus data: OCR gagal → data lama tetap ada.
     $profile = TenantProfile::where('user_id', $user->id)->first();
-    expect($profile->ktp_1_name)->toBe('');
-    expect($profile->ktp_1_nik)->toBe('');
-    expect($profile->ktp_1_birth_place)->toBe('');
-    expect($profile->ktp_1_job)->toBe('');
-    expect($profile->ktp_1_address)->toBe('');
+    expect($profile->ktp_1_name)->toBe('ALDO ANDREASS');
+    expect($profile->ktp_1_nik)->toBe('3171xxxxxxxxxxxx');
+    expect($profile->ktp_1_birth_place)->toBe('Jakarta');
+    expect($profile->ktp_1_job)->toBe('Wiraswasta');
+    expect($profile->ktp_1_address)->toBe('Jl. Lama No. 1');
     expect($profile->ktp_1_photo)->not->toBeNull();
+
+    // Respons membawa snapshot profil terbaru agar Wizard tidak menebak data.
+    $rProfile = data_get($response->json(), 'profile', []);
+    expect($rProfile['ktp_1_name'])->toBe('ALDO ANDREASS');
+    expect($rProfile['ktp_1_photo'])->not->toBeNull();
+});
+
+test('a replacement KTP with readable OCR updates only the fields that are read', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    $fakeOcr = new class {
+        public function extract(string $absolutePath): array
+        {
+            return [
+                'raw' => 'NIK 3201110203920001 BUDI SETIAWAN JAKARTA 1992-03-02 KARYAWAN',
+                'name' => 'BUDI SETIAWAN',
+                'nik' => '3201110203920001',
+                'birth_place' => 'JAKARTA',
+                'birth_date' => '1992-03-02',
+                'gender' => 'LAKI-LAKI',
+                'job' => 'KARYAWAN',
+                'address' => '',
+            ];
+        }
+    };
+    $this->app->instance(\App\Services\KtpOcrService::class, $fakeOcr);
+
+    TenantProfile::create([
+        'user_id' => $user->id,
+        'ktp_1_name' => 'ALDO ANDREASS',
+        'ktp_1_nik' => '3171xxxxxxxxxxxx',
+        'ktp_1_address' => 'Jl. Lama No. 1',
+    ]);
+
+    $response = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload('baru.jpg'),
+    ]);
+    $response->assertOk();
+
+    // Field yang terbaca dari foto baru menggantikan data lama...
+    $profile = TenantProfile::where('user_id', $user->id)->first();
+    expect($profile->ktp_1_name)->toBe('BUDI SETIAWAN');
+    expect($profile->ktp_1_nik)->toBe('3201110203920001');
+
+    // ...tetapi field yang TIDAK terbaca tetap mempertahankan nilai tersimpan.
+    expect($profile->ktp_1_address)->toBe('Jl. Lama No. 1');
+
+    // Respons membawa hasil OCR + snapshot profil untuk sinkronisasi frontend.
+    expect(data_get($response->json(), 'ocr.ktp_1.name'))->toBe('BUDI SETIAWAN');
+    expect(data_get($response->json(), 'profile.ktp_1_nik'))->toBe('3201110203920001');
+});
+
+test('upload response returns the latest profile snapshot so the wizard stays in sync', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    TenantProfile::create([
+        'user_id' => $user->id,
+        'ktp_1_name' => 'CITRA',
+        'ktp_1_job' => 'Guru',
+    ]);
+
+    $response = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload(),
+    ])->assertOk();
+
+    $json = $response->json();
+    expect($json['profile']['ktp_1_name'])->toBe('CITRA');
+    expect($json['profile']['ktp_1_job'])->toBe('Guru');
+    expect($json['profile']['ktp_1_photo'])->not->toBeNull();
+    expect(is_array($json['ocr']['ktp_1']))->toBeTrue();
+});
+
+test('a brand-new tenant with readable OCR gets identity persisted and shown in the response', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    $fakeOcr = new class {
+        public function extract(string $absolutePath): array
+        {
+            return [
+                'raw' => 'NIK 3201110203920001 BUDI SETIAWAN JAKARTA 1992-03-02 KARYAWAN',
+                'name' => 'BUDI SETIAWAN',
+                'nik' => '3201110203920001',
+                'birth_place' => 'JAKARTA',
+                'birth_date' => '1992-03-02',
+                'gender' => 'LAKI-LAKI',
+                'job' => 'KARYAWAN',
+                'address' => '',
+            ];
+        }
+    };
+    $this->app->instance(\App\Services\KtpOcrService::class, $fakeOcr);
+
+    // Tenant baru: belum ada TenantProfile sama sekali.
+    $response = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload(),
+    ])->assertOk();
+
+    $profile = TenantProfile::where('user_id', $user->id)->first();
+    expect($profile)->not->toBeNull();
+    expect($profile->ktp_1_photo)->not->toBeNull();
+    expect($profile->ktp_1_name)->toBe('BUDI SETIAWAN');
+    expect($profile->ktp_1_nik)->toBe('3201110203920001');
+    expect($profile->ktp_1_birth_place)->toBe('JAKARTA');
+    expect($profile->ktp_1_birth_date)->toBe('1992-03-02');
+    expect($profile->ktp_1_job)->toBe('KARYAWAN');
+
+    // Respons membawa snapshot identitas terbaru agar Step 3 langsung terisi
+    // tanpa refresh — sesuai arsitektur database sebagai source of truth.
+    expect(data_get($response->json(), 'profile.ktp_1_name'))->toBe('BUDI SETIAWAN');
+    expect(data_get($response->json(), 'profile.ktp_1_nik'))->toBe('3201110203920001');
 });

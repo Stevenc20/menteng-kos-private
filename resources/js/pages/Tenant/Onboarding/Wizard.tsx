@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatementDocument from '@/components/Tenant/StatementDocument';
@@ -138,6 +138,34 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         paraf_2: '',
     });
 
+    // ─── Draft recovery: simpan draft form ke sessionStorage dan pulihkan
+    // setelah refresh browser. Profil backend tetap menang — draft hanya mengisi
+    // field yang masih kosong (data yang belum sempat tersimpan tidak hilang).
+    const DRAFT_KEY = 'tenant_onboarding_draft_v2';
+
+    useEffect(() => {
+        try {
+            const { ktp_1_photo, ktp_2_photo, ktp_1_photo_preview, ktp_2_photo_preview, ...draft } = data as any;
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        } catch { /* quota/serialization: abaikan */ }
+    }, [data]);
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(DRAFT_KEY);
+            if (!raw) return;
+            const draft = JSON.parse(raw);
+            const patch: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(draft)) {
+                if (typeof v === 'string' && v !== '' && (data as any)[k] === '') {
+                    patch[k] = v;
+                }
+            }
+            if (Object.keys(patch).length) setData(patch);
+        } catch { /* corrupted draft: abaikan */ }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // ─── Helpers surat: konten & builder kini di services/statement ───
 
     const nextStep = () => setStep(s => Math.min(s + 1, totalSteps));
@@ -147,8 +175,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Foto yang baru dipilih adalah sumber data, jadi data lama harus dibuang
-        // agar tidak ada sisa data penghuni sebelumnya (mis. orang yang lalu).
+        // Data identitas TIDAK dikosongkan di sini: mengganti foto tidak boleh
+        // menghapus data yang sudah terisi. Nilai field hanya diganti oleh hasil
+        // OCR/backend yang benar-benar terbaca dari foto baru (lihat uploadKtp).
         const prefix = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
         const errKey = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
         const previewUrl = URL.createObjectURL(file);
@@ -158,12 +187,6 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             [`${prefix}_photo`]: file,
             [`${prefix}_photo_preview`]: previewUrl,
             [`${prefix}_photo_path`]: '',
-            [`${prefix}_name`]: '',
-            [`${prefix}_nik`]: '',
-            [`${prefix}_birth_place`]: '',
-            [`${prefix}_birth_date`]: '',
-            [`${prefix}_job`]: '',
-            [`${prefix}_address`]: '',
         }));
         setOcrStatus(s => ({ ...s, [errKey]: 'Membaca data KTP...' }));
         setUploadError(s => ({ ...s, [errKey]: '' }));
@@ -208,18 +231,18 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
             const prefix = occupant === 1 ? 'ktp_1' : 'ktp_2';
             const ocrData = json.ocr?.[`ktp_${occupant}`];
-            const hasOcrFields = ocrData && !ocrData.error && (ocrData.name || ocrData.nik || ocrData.birth_place || ocrData.birth_date || ocrData.job || ocrData.address);
 
             setData(`${prefix}_photo`, null);
-            setData(`${prefix}_photo_path`, json[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]);
+            setData(`${prefix}_photo_path`, json[`${prefix}_photo`] ?? json.profile?.[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]);
 
-            if (hasOcrFields) {
-                if (ocrData.name) setData(`${prefix}_name`, ocrData.name);
-                if (ocrData.nik) setData(`${prefix}_nik`, ocrData.nik);
-                if (ocrData.birth_place) setData(`${prefix}_birth_place`, ocrData.birth_place);
-                if (ocrData.birth_date) setData(`${prefix}_birth_date`, ocrData.birth_date);
-                if (ocrData.job) setData(`${prefix}_job`, ocrData.job);
-                if (ocrData.address) setData(`${prefix}_address`, ocrData.address);
+            // Source of truth = snapshot profil terbaru yang dikembalikan backend.
+            // Backend hanya meng-overwrite field yang terbaca OCR, sisanya tetap.
+            // Frontend TIDAK menebak-nebak dari ocrData langsung agar tidak ada
+            // desinkron dengan database.
+            const occProfile = json.profile ?? {};
+            for (const f of ['ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address', 'ktp_2_name', 'ktp_2_nik', 'ktp_2_birth_place', 'ktp_2_birth_date', 'ktp_2_job', 'ktp_2_address']) {
+                const v = occProfile[f];
+                if (typeof v === 'string') setData(f as keyof typeof data, v);
             }
 
             if (ocrData && !ocrData.error) {
@@ -242,6 +265,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     };
 
     const handleKtp1Next = async () => {
+        if (uploading.ktp_1) return;
         if (!data.ktp_1_photo && !data.ktp_1_photo_path) {
             setUploadError(s => ({ ...s, ktp_1: 'Silakan unggah foto KTP terlebih dahulu.' }));
             return;
@@ -254,6 +278,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     };
 
     const handleKtp2Next = async () => {
+        if (uploading.ktp_2) return;
         if (data.ktp_2_photo) {
             const ok = await uploadKtp(2);
             if (!ok) return;
@@ -354,7 +379,14 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             paraf_2: paraf2,
         };
 
-        router.post('/tenant/onboarding/agreement', payload);
+        router.post('/tenant/onboarding/agreement', payload, {
+            onSuccess: () => {
+                // Onboarding selesai & data tersimpan permanen → draft tidak perlu lagi.
+                try {
+                    sessionStorage.removeItem(DRAFT_KEY);
+                } catch { /* abaikan */ }
+            },
+        });
     };
 
     const renderStep = () => {
