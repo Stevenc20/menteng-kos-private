@@ -103,20 +103,31 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
         <>
             <style>{`
                 @media print {
+                    @page { size: A4 portrait; margin: 12mm; }
+                    html, body {
+                        height: auto !important;
+                        overflow: visible !important;
+                        background: #fff !important;
+                    }
                     body * { visibility: hidden !important; }
                     .printable-statement, .printable-statement * { visibility: visible !important; }
                     .printable-statement {
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 100% !important;
+                        display: block !important;
+                        position: static !important;
+                        left: auto !important;
+                        top: auto !important;
+                        width: auto !important;
                         max-width: none !important;
                         margin: 0 !important;
-                        padding: 24px !important;
+                        padding: 0 !important;
                         border: none !important;
                         border-radius: 0 !important;
                         box-shadow: none !important;
                         background: white !important;
+                        overflow: visible !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        max-height: none !important;
                     }
                     .no-print { display: none !important; }
                 }

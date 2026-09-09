@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Tenancy;
 use App\Models\WaterMeter;
 use App\Models\Billing;
+use App\Services\WaterBillingService;
 use Illuminate\Http\Request;
 
 class WaterMeterController extends Controller
@@ -35,8 +36,9 @@ class WaterMeterController extends Controller
         }
 
         $usage = $validated['current_meter'] - $previousMeter;
-        $excessUsage = max(0, $usage - 5); // 5 m3 is the included allowance
-        $excessCharge = $excessUsage * 14000;
+        $charge = WaterBillingService::chargeFor($tenancy, $usage);
+        $chargedUsage = WaterBillingService::billableUsage($tenancy, $usage);
+        $allowance = WaterBillingService::chargesWaterSeparately($tenancy) ? 0 : WaterBillingService::WATER_ALLOWANCE_M3;
 
         $path = $request->file('photo')->store('private/water_meters');
 
@@ -47,35 +49,37 @@ class WaterMeterController extends Controller
             'previous_meter' => $previousMeter,
             'current_meter' => $validated['current_meter'],
             'photo' => $path,
-            'excess_usage_charge' => $excessCharge
+            'excess_usage_charge' => $charge
         ]);
 
-        // If there's an excess charge, append it to the NEXT unpaid rent billing, 
+        // If there's a charge, append it to the NEXT unpaid rent billing,
         // or the CURRENT UPCOMING one.
-        if ($excessCharge > 0) {
+        if ($charge > 0) {
             $upcomingBilling = Billing::where('tenancy_id', $tenancy->id)
                                       ->where('billing_type', 'RENT')
                                       ->whereIn('status', ['UPCOMING', 'REMINDER_SENT'])
                                       ->first();
             
             if ($upcomingBilling) {
-                $upcomingBilling->increment('excess_water_charge', $excessCharge);
+                $upcomingBilling->increment('excess_water_charge', $charge);
             } else {
-                // If there's no upcoming bill (maybe generated next month), 
-                // we can queue it or create a new separate WATER bill. 
-                // But as per the rule: combined with rent.
-                // We'll just create a pending rent bill early for the excess.
+                // If there's no upcoming bill (maybe generated next month),
+                // queue a pending rent bill early for the water charge.
                 Billing::create([
                     'tenancy_id' => $tenancy->id,
                     'billing_type' => 'RENT',
                     'amount' => $tenancy->agreed_price,
-                    'excess_water_charge' => $excessCharge,
+                    'excess_water_charge' => $charge,
                     'due_date' => now()->addDays(30)->toDateString(),
                     'status' => 'UPCOMING'
                 ]);
             }
         }
 
-        return redirect()->back()->with('success', "Meteran air tercatat. Pemakaian: {$usage}m³. Kelebihan: {$excessUsage}m³ (Rp" . number_format($excessCharge, 0, ',', '.') . ").");
+        $allowedText = $allowance > 0
+            ? " (digratiskan {$allowance}m³ pertama)"
+            : " (tanpa jatah gratis, KIOS dengan harga deal di bawah standar)";
+
+        return redirect()->back()->with('success', "Meteran air tercatat. Pemakaian: {$usage}m³. Ditagih: {$chargedUsage}m³ × Rp " . number_format(WaterBillingService::WATER_RATE_PER_M3, 0, ',', '.') . " = Rp " . number_format($charge, 0, ',', '.') . "$allowedText.");
     }
 }

@@ -64,7 +64,18 @@ export default function AdminLayout({ children, title = 'Admin Dashboard' }: Adm
     );
 
     return (
-        <div className="h-screen w-full flex overflow-hidden bg-[#F7F7F5] font-sans text-[#1A1A18]">
+        <div className="admin-print h-screen w-full flex overflow-hidden bg-[#F7F7F5] font-sans text-[#1A1A18]">
+
+            <style>{`
+                @media print {
+                    .admin-print, .admin-print > div, .admin-print header, .admin-print main, .admin-print aside, .admin-print nav {
+                        height: auto !important;
+                        overflow: visible !important;
+                        display: block !important;
+                        background: #fff !important;
+                    }
+                }
+            `}</style>
             <Head title={title} />
             
             {/* DESKTOP SIDEBAR (Fixed) */}

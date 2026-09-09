@@ -117,27 +117,28 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         ${c(1,a,u(n),`63%`,n.signatures?.paraf1,n.signatures?.paraf2)}
         ${c(2,d,void 0,`35%`,n.signatures?.paraf1,n.signatures?.paraf2)}
         ${c(3,f)}
-    </div>`},f=e=>{let n=Math.max(8,e.facilities.length),r=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(e.dendaPerDay)||0),i=Array.from({length:n},(n,r)=>{let i=e.facilities[r]?.trim();return i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=e.hasSecond?`<p style="margin:10px 0 2px;">Dan pasangan saya,</p>
-           ${s([[`Nama (2)`,e.occ2.name],[`Tempat, Tgl Lahir`,e.occ2.birth],[`Pekerjaan`,e.occ2.job],[`Alamat`,e.occ2.address],[`Nomor KTP`,e.occ2.nik]])}`:``,d=`
+    </div>`},f=n=>{let r=Math.max(8,n.facilities.length),i=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dendaPerDay)||0),a=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),d=n.hasSecond?`<p style="margin:10px 0 2px;">Dan pasangan saya,</p>
+           ${s([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}`:``,f=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 6px;font-size:17px;">SURAT PERNYATAAN</h2>
         <h2 style="text-align:center;margin:0 0 18px;font-size:15px;">KIOS</h2>
         <p>Yang bertanda tangan dibawah ini,</p>
-        ${s([[`Nama`,e.occ1.name],[`Tempat, Tanggal Lahir`,e.occ1.birth],[`Pekerjaan`,e.occ1.job],[`Alamat`,e.occ1.address],[`Nomor KTP`,e.occ1.nik]])}
-        ${a}
+        ${s([[`Nama`,n.occ1.name],[`Tempat, Tanggal Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
+        ${d}
         <p style="margin-top:18px;">Dengan ini saya menyatakan dengan sebenar-benarnya bahwa:</p>
 
         <p style="font-weight:bold;">1. Menempati Kios</p>
-        <p style="text-align:justify;">Untuk usaha <strong>${t(e.usaha)||`<em>______________________________</em>`}</strong>, serta tidak diperbolehkan pemindahan kepada pihak lain selain nama yang tertera dalam surat pernyataan.</p>
+        <p style="text-align:justify;">Untuk usaha <strong>${t(n.usaha)||`<em>______________________________</em>`}</strong>, serta tidak diperbolehkan pemindahan kepada pihak lain selain nama yang tertera dalam surat pernyataan.</p>
 
         <p style="font-weight:bold;">2. Pembayaran</p>
-        <p style="text-align:justify;">Saya menyewa kios sebesar <strong>Rp ${t(e.sewaNumeral)}</strong> setiap tanggal <strong>${t(e.dueDay)}</strong> namun akan direminder setiap tgl <strong>${t(e.reminderDay)}</strong>, yang terdiri dari:</p>
+        <p style="text-align:justify;">Saya menyewa kios sebesar <strong>Rp ${t(n.sewaNumeral)}</strong> setiap tanggal <strong>${t(n.dueDay)}</strong> namun akan direminder setiap tgl <strong>${t(n.reminderDay)}</strong>, yang terdiri dari:</p>
         <ul style="padding-left:24px;margin:4px 0;">
-            <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${t(e.sewaNumeral)}</strong></li>
-            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`_______________`}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>
+            <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${t(n.sewaNumeral)}</strong>${n.kioskSeparateWater?` — harga ini <strong>TIDAK termasuk</strong> biaya pemakaian air PAM.</li>
+            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${e(14e3)}/m³</strong>. Rumus: <em>pemakaian air (m³) × Rp ${e(14e3)}</em>.</li>`:`.</li>
+            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${n.meteran?`${t(n.meteran)}m³ - ${Number(n.meteran)+5}m³`:`_______________`}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>`}
         </ul>
 
         <p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>
-        <p style="text-align:justify;">Saya menyadari apabila saya terlambat melakukan pembayaran setelah tanggal jatuh tempo, saya akan dikenakan denda sebesar <strong>Rp ${t(r)}</strong> per hari keterlambatan sesuai dengan ketentuan yang berlaku. Maksimal denda keterlambatan <strong>2 hari, diatas 2 hari wajib mengosongkan kios</strong>.</p>
+        <p style="text-align:justify;">Saya menyadari apabila saya terlambat melakukan pembayaran setelah tanggal jatuh tempo, saya akan dikenakan denda sebesar <strong>Rp ${t(i)}</strong> per hari keterlambatan sesuai dengan ketentuan yang berlaku. Maksimal denda keterlambatan <strong>2 hari, diatas 2 hari wajib mengosongkan kios</strong>.</p>
 
         <p style="font-weight:bold;">4. Kepatuhan Terhadap Peraturan Kios</p>
         <p style="text-align:justify;">Saya menyadari untuk mematuhi segala peraturan kios baik yang tertulis maupun tidak tertulis, seperti:</p>
@@ -146,9 +147,9 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             <li style="margin:6px 0;text-align:justify;">Saya bertanggung jawab penuh atas <strong>kerusakan</strong> atau <strong>kehilangan</strong> fasilitas yang ada di dalam <strong>KIOS</strong> selama <strong>masa sewa</strong>. Jika terjadi <strong>kerusakan akibat kelalaian saya</strong>, saya akan <strong>mengganti kerugian</strong> sesuai dengan <strong>nilai kerusakan</strong> yang ditentukan oleh <strong>pihak pengelola kos</strong>.</li>
             <li style="margin:6px 0;text-align:justify;">Mematuhi peraturan <strong>HUKUM</strong> yang berlaku di <strong>Indonesia</strong> dan <strong>Menjaga norma kesopanan</strong> serta <strong>tidak menimbulkan kegaduhan bagi penghuni lain</strong>.</li>
             <li style="margin:6px 0;text-align:justify;">Keluar masuk <strong>gerbang utama wajib menutup dan mengunci Kembali</strong>, apabila diatas <strong>pukul 22.00 WIB</strong>, <strong>wajib mengembok gerbang utama!</strong>.</li>
-        </ul>`,f=`
+        </ul>`,p=`
         <p style="text-align:justify;">Kios yang saya terima beserta semua fasilitas dalam kondisi baik, dan saya wajib <strong>MENJAGA</strong> dan <strong>MERAWAT</strong> fasilitas yang ada seperti:</p>
-        <ol style="padding-left:24px;margin:4px 0;">${i}</ol>
+        <ol style="padding-left:24px;margin:4px 0;">${a}</ol>
 
         <p style="font-weight:bold;">5. Pengosongan Kios</p>
         <p style="text-align:justify;">Jika saya berniat untuk mengakhiri masa sewa sebelum waktu yang disepakati, saya akan memberikan pemberitahuan kepada pihak <strong>PENGELOLA KOS</strong> 5 hari sebelumnya dan bertanggung jawab atas pembayaran sewa yang masih terhutang serta kewajiban lain, seperti: air <strong>PDAM</strong> yang <strong>telah digunakan</strong> hingga <strong>saat pengosongan dilakukan</strong>.</p>
@@ -166,10 +167,10 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
 
         <p style="text-align:justify;">Demikian surat pernyataan ini saya buat dengan sebenar-benarnya tanpa ada paksaan atau tekanan dari pihak manapun.</p>
         <p style="margin-top:10px;"><strong>Dibuat di:</strong> Jakarta</p>
-        <p><strong>Pada tanggal:</strong> ${t(e.tanggal)}</p>
+        <p><strong>Pada tanggal:</strong> ${t(n.tanggal)}</p>
         <p style="margin-top:20px;"><strong>Yang Membuat Pernyataan,</strong></p>
-        ${l(e)}`;return`${o}
+        ${l(n)}`;return`${o}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
-        ${c(1,d,u(e),`78%`,e.signatures?.paraf1,e.signatures?.paraf2)}
-        ${c(2,f,void 0,`52%`,e.signatures?.paraf1,e.signatures?.paraf2)}
+        ${c(1,f,u(n),`78%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+        ${c(2,p,void 0,`52%`,n.signatures?.paraf1,n.signatures?.paraf2)}
     </div>`},p=(e,t)=>e?f(t):d(t);export{r as a,e as i,i as n,a as r,p as t};

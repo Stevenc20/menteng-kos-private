@@ -11,6 +11,7 @@ interface Tenancy {
     property: {
         name: string;
         type: string;
+        normal_price?: string;
         facilities?: string[] | null;
     };
 }
@@ -60,6 +61,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const inputLabelClass = "block text-sm font-medium mb-1.5 text-neutral-700";
 
     const isKiosk = tenancy.property?.type === 'KIOSK';
+    const kioskSeparateWater = isKiosk
+        && (Number(tenancy.property?.normal_price) || 0) > 0
+        && (Number(tenancy.agreed_price) || 0) < (Number(tenancy.property?.normal_price) || 0);
 
     const formatDisplayDate = (iso?: string) => {
         if (!iso) return '';
@@ -272,6 +276,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             facilities: data.facilities,
             tanggal: indonesianToday(),
             signatures,
+            kioskSeparateWater,
         };
         return buildStatementTemplateHTML(isKiosk, params);
     };
@@ -614,6 +619,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 parafRef1={parafPad1}
                                 sigRef2={sigPad2}
                                 parafRef2={parafPad2}
+                                kioskSeparateWater={kioskSeparateWater}
                             />
                         </div>
 

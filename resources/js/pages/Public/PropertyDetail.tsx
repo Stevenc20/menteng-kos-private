@@ -268,8 +268,18 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                 </div>
 
                                 {isOccupied ? (
-                                    <div className="p-4 bg-[#F7F7F5] rounded-xl border border-[#E8E7E3] text-center text-[#6B6B67] font-medium">
-                                        Unit ini sedang disewa.
+                                    <div className="space-y-3">
+                                        <p className="text-xs text-[#6B6B67] bg-[#F7F7F5] px-4 py-3 rounded-xl leading-relaxed">
+                                            Unit ini sedang terisi. Anda tetap dapat mengajukan survey — kami akan menghubungi Anda apabila tersedia.
+                                        </p>
+                                        <a 
+                                            href={generateWhatsAppLink()}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="w-full flex items-center justify-center px-6 py-4 bg-[#1A1A18] text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors shadow-lg active:scale-95"
+                                        >
+                                            Ajukan Survey
+                                        </a>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">

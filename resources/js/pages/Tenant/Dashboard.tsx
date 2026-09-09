@@ -9,6 +9,13 @@ interface DashboardProps {
 export default function Dashboard({ tenancy, nextBilling }: DashboardProps) {
     const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(val));
 
+    const isKiosk = tenancy?.property?.type === 'KIOSK';
+    const standardPrice = Number(tenancy?.property?.normal_price) || 0;
+    const dealPrice = Number(tenancy?.agreed_price) || 0;
+    // KIOSK whose negotiated deal is below the standard price pays PAM separately.
+    const kioskSeparateWater = isKiosk && standardPrice > 0 && dealPrice < standardPrice;
+    const waterAllowance = kioskSeparateWater ? 0 : 5;
+
     const quickLinks = [
         { icon: '💳', label: 'Payment', desc: 'Riwayat & Bukti Bayar' },
         { icon: '💧', label: 'Water Usage', desc: 'Pemakaian Air Bulanan' },
@@ -46,8 +53,9 @@ export default function Dashboard({ tenancy, nextBilling }: DashboardProps) {
                                 <span className="block text-xl font-bold">{formatRupiah(tenancy.agreed_price)}</span>
                             </div>
                             <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
-                                <span className="block text-xs text-neutral-300 uppercase tracking-wider mb-1">Water Allowance</span>
-                                <span className="block text-xl font-bold">5 m³ / bln</span>
+                                <span className="block text-xs text-neutral-300 uppercase tracking-wider mb-1">{waterAllowance > 0 ? 'Water Allowance' : 'Air PAM'}</span>
+                                <span className="block text-xl font-bold">{waterAllowance > 0 ? `${waterAllowance} m³ / bln` : 'Tagih terpisah'}</span>
+                                {kioskSeparateWater && <span className="block text-[11px] text-neutral-300 mt-1">Harga deal di bawah standar, PAM dibayar terpisah</span>}
                             </div>
                         </div>
                     </div>
@@ -69,15 +77,22 @@ export default function Dashboard({ tenancy, nextBilling }: DashboardProps) {
                                 </div>
                                 <div className="space-y-2 pt-4 border-t border-neutral-100">
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-neutral-500">Rent Price</span>
+                                        <span className="text-neutral-500">Harga Sewa</span>
                                         <span className="font-medium">{formatRupiah(nextBilling.amount)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-neutral-500">Excess Water</span>
+                                        <span className="text-neutral-500">
+                                            {isKiosk ? 'Pemakaian Air PAM' : 'Air Lebih (Excess)'}
+                                        </span>
                                         <span className="font-medium">{formatRupiah(nextBilling.excess_water_charge)}</span>
                                     </div>
+                                    {isKiosk && kioskSeparateWater && (
+                                        <p className="text-[11px] text-neutral-400">
+                                            Tarif PAM Rp 14.000/m³ (dihitung dari meteran aktual, tanpa jatah gratis).
+                                        </p>
+                                    )}
                                     <div className="flex justify-between font-bold pt-2 border-t border-neutral-100">
-                                        <span>Total</span>
+                                        <span>TOTAL TAGIHAN</span>
                                         <span>{formatRupiah(Number(nextBilling.amount) + Number(nextBilling.excess_water_charge))}</span>
                                     </div>
                                 </div>

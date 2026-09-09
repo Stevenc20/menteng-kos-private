@@ -149,7 +149,7 @@ export default function Welcome({ properties }: WelcomeProps) {
                                                 <div>
                                                     <p className="text-[11px] text-[#8A8A84] uppercase tracking-wider font-semibold mb-1">Harga Mulai</p>
                                                     <p className="text-[#1A1A18] font-bold text-lg md:text-xl">
-                                                        {property.normal_price ? formatPrice(property.normal_price) : 'Hubungi Admin'}
+                                                        {property.normal_price ? formatPrice(property.normal_price) : '-'}
                                                         <span className="text-xs md:text-sm font-normal text-[#6B6B67]"> / bln</span>
                                                     </p>
                                                 </div>

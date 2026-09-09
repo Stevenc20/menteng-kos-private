@@ -37,6 +37,7 @@ export interface StatementDocumentProps {
     parafRef1: any;
     sigRef2: any;
     parafRef2: any;
+    kioskSeparateWater?: boolean;
 }
 
 function SheetPage({ num, meteran, meteranValue, onMeteranChange, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; children: ReactNode }) {
@@ -175,7 +176,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
     const { isKiosk, hasSecond, occ1, occ2, sewaNumeral, dueDay, setDueDay, reminderDay,
         dendaPerDay, setDendaPerDay, meteran, setMeteran, usaha, setUsaha,
         facilities, setFacilities, tanggal, paraf1Img, paraf2Img, onParafEnd,
-        sigRef1, parafRef1, sigRef2, parafRef2 } = props;
+        sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater } = props;
 
     const duaDigit = (v: string) => v.replace(/\D/g, '');
 
@@ -241,12 +242,29 @@ export default function StatementDocument(props: StatementDocumentProps) {
                             direminder setiap tgl <strong>{reminderDay}</strong>, yang terdiri dari:
                         </p>
                         <ul className="list-disc pl-5 space-y-1 text-justify">
-                            <li>Uang sewa kios <strong>Rp {sewaNumeral}</strong></li>
-                            <li>
-                                Uang air sebanyak <strong>5m³</strong> dengan meteran dari{' '}
-                                <DocInput value={meteran} onChange={v => setMeteran(duaDigit(v))} maxLength={7} placeholder="______" />
-                                , lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.
-                            </li>
+                            {kioskSeparateWater ? (
+                                <>
+                                    <li>
+                                        Uang sewa kios <strong>Rp {sewaNumeral}</strong>{' '}
+                                        <span className="font-semibold">— harga ini TIDAK termasuk biaya pemakaian air PAM.</span>
+                                    </li>
+                                    <li>
+                                        Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung
+                                        berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif{' '}
+                                        <strong>Rp 14.000/m³</strong>. Rumus:{' '}
+                                        <em>pemakaian air (m³) × Rp 14.000</em>.
+                                    </li>
+                                </>
+                            ) : (
+                                <>
+                                    <li>Uang sewa kios <strong>Rp {sewaNumeral}</strong></li>
+                                    <li>
+                                        Uang air sebanyak <strong>5m³</strong> dengan meteran dari{' '}
+                                        <DocInput value={meteran} onChange={v => setMeteran(duaDigit(v))} maxLength={7} placeholder="______" />
+                                        , lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.
+                                    </li>
+                                </>
+                            )}
                         </ul>
 
                         <p className="font-bold">3. Kepatuhan Terhadap Pembayaran</p>

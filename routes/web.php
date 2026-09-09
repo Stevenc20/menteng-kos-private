@@ -9,20 +9,7 @@ Route::get('/', function () {
             $q->orderBy('sort_order');
         }])
         ->whereIn('status', ['AVAILABLE', 'UPCOMING_AVAILABLE', 'OCCUPIED'])
-        ->get()
-        ->map(function ($property) {
-            // For public facing, we hide details if OCCUPIED.
-            if ($property->status === 'OCCUPIED') {
-                return [
-                    'id' => $property->id,
-                    'name' => $property->name,
-                    'type' => $property->type,
-                    'status' => 'OCCUPIED',
-                    'media' => $property->media
-                ];
-            }
-            return $property;
-        });
+        ->get();
 
     return Inertia::render('welcome', [
         'properties' => $properties

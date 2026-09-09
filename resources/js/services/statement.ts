@@ -45,6 +45,9 @@ export interface StatementParams {
     usaha: string;             // Kios: jenis usaha
     facilities: string[];      // default dari property.facilities
     tanggal: string;           // "09 September 2026"
+    // KIOSK: bila harga deal di bawah harga standar, air PAM ditagih terpisah
+    // (tanpa jatah 5m³ gratis). Hanya relevan untuk template Kios.
+    kioskSeparateWater?: boolean;
     // Gambar digital (data URL) disematkan saat submit sehingga dokumen tersimpan
     // menampilkan paraf & tanda tangan asli (bukan placeholder).
     signatures?: {
@@ -266,8 +269,13 @@ export const kioskStatementHTML = (p: StatementParams) => {
         <p style="font-weight:bold;">2. Pembayaran</p>
         <p style="text-align:justify;">Saya menyewa kios sebesar <strong>Rp ${esc(p.sewaNumeral)}</strong> setiap tanggal <strong>${esc(p.dueDay)}</strong> namun akan direminder setiap tgl <strong>${esc(p.reminderDay)}</strong>, yang terdiri dari:</p>
         <ul style="padding-left:24px;margin:4px 0;">
-            <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${esc(p.sewaNumeral)}</strong></li>
-            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '_______________'}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>
+            <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${esc(p.sewaNumeral)}</strong>${
+                p.kioskSeparateWater
+                    ? ` — harga ini <strong>TIDAK termasuk</strong> biaya pemakaian air PAM.</li>
+            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${formatRupiah(14000)}/m³</strong>. Rumus: <em>pemakaian air (m³) × Rp ${formatRupiah(14000)}</em>.</li>`
+                    : `.</li>
+            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '_______________'}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>`
+            }
         </ul>
 
         <p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>
