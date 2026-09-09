@@ -15,10 +15,33 @@ class KtpOcrService
     public function extract(string $absolutePath): array
     {
         $raw = $this->runOcrWithPreferredProvider($absolutePath);
+        $result = $this->parse($raw);
 
-        Log::info('KTP OCR raw text:', ['raw' => $raw]);
+        $score = $this->scoreText($raw);
+        $core = 0;
+        foreach (['name', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
+            if ($result[$f] !== '') {
+                $core++;
+            }
+        }
 
-        return $this->parse($raw);
+        Log::info('KTP OCR parsed result', [
+            'score' => $score,
+            'fields' => $core + ($result['nik'] !== '' ? 1 : 0),
+            'nik' => $result['nik'] !== '' ? $result['nik'] : null,
+            'meaningful' => $score >= 40 || $core >= 2 || $result['nik'] !== '',
+        ]);
+
+        // Confidence gate: tanpa struktur KTP yang valid (NIK/label), jangan
+        // menimpa data identitas tersimpan dengan hasil kosong/sampah OCR.
+        if ($score < 40 && $core < 2 && $result['nik'] === '') {
+            Log::warning('KTP OCR below confidence threshold; identity data preserved', ['score' => $score]);
+            foreach (['name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
+                $result[$f] = '';
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -48,22 +71,66 @@ class KtpOcrService
     }
 
     /**
-     * Jalankan Tesseract pada beberapa variasi preprocessing + PSM, lalu ambil
-     * hasil dengan skor tertinggi. Foto kamera HP sering miring/blur/sebagian
-     * terbaca — mencoba banyak konfigurasi menaikkan peluang field terbaca.
+     * Pipeline OCR: deteksi area kartu KTP → crop + luruskan → beberapa variasi
+     * preprocessing → OCR per PSM → pilih hasil dengan skor struktur tertinggi.
+     * Foto kamera HP sering berisi background/tangan — meng-OCR kartu yang sudah
+     * di-crop lebih penting daripada menambah variasi preprocessing random.
      */
     private function bestAttempt(string $path): string
     {
-        $attempts = [];
-        $temps = [];
+        $size = @getimagesize($path);
+        Log::info('KTP OCR source image', [
+            'width' => $size[0] ?? null,
+            'height' => $size[1] ?? null,
+        ]);
 
-        foreach ($this->buildVariants($path, $temps) as $label => $image) {
-            $psms = ($label === 'bin' || $label === 'rot') ? [6] : [3, 6];
+        $temps = [];
+        $card = null;
+        $crop = null;
+
+        if (extension_loaded('gd')) {
+            $detector = app(KtpCardDetector::class);
+            $card = $detector->detect($path);
+
+            if ($card !== null) {
+                Log::info('KTP OCR card detected', [
+                    'bbox' => $card['bbox'],
+                    'aspect' => round($card['aspect'], 3),
+                ]);
+
+                $crop = $detector->warp($path, $card['corners']);
+                if ($crop === null) {
+                    Log::warning('KTP OCR card warp failed; falling back to full frame');
+                } else {
+                    $temps[] = $crop;
+                }
+            } else {
+                Log::info('KTP OCR card detection: none, OCR on full frame');
+            }
+        }
+
+        $attempts = [];
+        foreach ($this->buildVariants($path, $crop, $temps) as $label => $image) {
+            $psms = str_starts_with($label, 'rot') ? [6] : [3, 6];
             foreach ($psms as $psm) {
                 try {
                     $raw = $this->runTesseract($image, $psm);
-                    $attempts[] = ['raw' => $raw, 'score' => $this->scoreText($raw), 'label' => $label . '/psm' . $psm];
-                    Log::info('KTP OCR attempt', ['label' => $label, 'psm' => $psm, 'words' => str_word_count($raw)]);
+                    $parsed = $this->parse($raw);
+                    $fields = $parsed['nik'] !== '' ? 1 : 0;
+                    foreach (['name', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
+                        if ($parsed[$f] !== '') {
+                            $fields++;
+                        }
+                    }
+                    $score = $this->scoreText($raw);
+                    $attempts[] = ['raw' => $raw, 'score' => $score, 'label' => $label . '/psm' . $psm, 'fields' => $fields];
+                    Log::info('KTP OCR attempt', [
+                        'label' => $label,
+                        'psm' => $psm,
+                        'score' => $score,
+                        'fields' => $fields,
+                        'words' => str_word_count($raw),
+                    ]);
                 } catch (\Throwable $e) {
                     Log::warning('KTP OCR attempt failed', ['label' => $label, 'psm' => $psm, 'error' => $e->getMessage()]);
                 }
@@ -78,9 +145,14 @@ class KtpOcrService
             throw new \RuntimeException('Tesseract OCR failed on all attempts.');
         }
 
-        usort($attempts, fn ($a, $b) => $b['score'] <=> $a['score']);
+        usort($attempts, fn ($a, $b) => [$b['score'], $b['fields']] <=> [$a['score'], $a['fields']]);
         $best = $attempts[0];
-        Log::info('KTP OCR best attempt', ['label' => $best['label'], 'score' => $best['score']]);
+        Log::info('KTP OCR best attempt', [
+            'label' => $best['label'],
+            'score' => $best['score'],
+            'fields' => $best['fields'],
+            'preview' => mb_substr(preg_replace('/\s+/', ' ', trim($best['raw'])), 0, 120),
+        ]);
 
         return $best['raw'];
     }
@@ -89,29 +161,42 @@ class KtpOcrService
      * Bangun daftar [label => imagePath] variasi gambar untuk dicoba.
      * Temp file hasil preprocessing dicatat ke $temps agar dibersihkan.
      */
-    private function buildVariants(string $path, array &$temps): array
+    private function buildVariants(string $path, ?string $crop, array &$temps): array
     {
-        $variants = ['original' => $path];
+        $variants = [];
+        $base = $path;
+        $baseLabel = 'original';
 
+        if ($crop !== null) {
+            // Kartu terdeteksi → kandidat utama. Original tetap dicoba sebagai
+            // fallback bila hasil crop kurang bersih.
+            $variants['card'] = $crop;
+            $base = $crop;
+            $baseLabel = 'card';
+
+            $pre = $this->preprocessImage($crop);
+            if ($pre !== null) {
+                $temps[] = $pre;
+                $variants['card-pre'] = $pre;
+            }
+        }
+
+        $variants['original'] = $path;
         $pre = $this->preprocessImage($path);
         if ($pre !== null) {
             $temps[] = $pre;
             $variants['pre'] = $pre;
-
-            $rotation = $this->detectOrientation($pre);
-            if ($rotation !== null && $rotation !== 0) {
-                $rot = $this->rotateImage($pre, $rotation);
-                if ($rot !== null) {
-                    $temps[] = $rot;
-                    $variants['rot'] = $rot;
-                }
-            }
         }
 
-        $bin = $this->binarizeImage($path);
-        if ($bin !== null) {
-            $temps[] = $bin;
-            $variants['bin'] = $bin;
+        // Variasi rotasi (OSD) hanya untuk base utama: murah + mengoreksi foto
+        // yang terbalik. Binarization agresif dihapus karena merusak teks.
+        $rotation = $this->detectOrientation($base);
+        if ($rotation !== null && $rotation !== 0) {
+            $rot = $this->rotateImage($base, $rotation);
+            if ($rot !== null) {
+                $temps[] = $rot;
+                $variants[$baseLabel . '-rot'] = $rot;
+            }
         }
 
         return $variants;
@@ -172,82 +257,43 @@ class KtpOcrService
     }
 
     /**
-     * Versi biner (hitam-putih keras): upscale, sharpen, grayscale, contrast
-     * tinggi + brightness — Tesseract kadang lebih akurat pada hasil biner.
+     * Skor kualitas OCR berdasarkan STRUKTUR data KTP, bukan jumlah kata.
+     * NIK valid 16 digit + label KTP = kunci. Jumlah kata hanya faktor minor
+     * supaya noise bervolume tinggi (mis. binarization sampah) tidak menang.
      */
-    private function binarizeImage(string $path): ?string
-    {
-        if (!extension_loaded('gd')) {
-            return null;
-        }
-
-        $src = @imagecreatefromstring(@file_get_contents($path));
-        if (!$src) {
-            return null;
-        }
-
-        $srcW = imagesx($src);
-        $srcH = imagesy($src);
-        $targetWidth = 2000;
-        $newW = $srcW;
-        $newH = $srcH;
-        if ($srcW < $targetWidth) {
-            $newW = $targetWidth;
-            $newH = (int) round($srcH * ($targetWidth / $srcW));
-        }
-
-        $dst = imagecreatetruecolor($newW, $newH);
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
-
-        if (function_exists('imageconvolution')) {
-            $sharpen = [[0, -1, 0], [-1, 5, -1], [0, -1, 0]];
-            imageconvolution($dst, $sharpen, 1, 0);
-        }
-
-        imagefilter($dst, IMG_FILTER_GRAYSCALE);
-        imagefilter($dst, IMG_FILTER_CONTRAST, -100);
-        imagefilter($dst, IMG_FILTER_BRIGHTNESS, 20);
-
-        $tmp = tempnam(sys_get_temp_dir(), 'ktp_bin_') . '.png';
-        imagepng($dst, $tmp);
-
-        imagedestroy($src);
-        imagedestroy($dst);
-
-        return $tmp;
-    }
-
-    /**
-     * Skor kualitas teks OCR: prioritas NIK 16 digit, lalu pengenal field KTP,
-     * lalu jumlah kata yang terbaca.
-     */
-    private function scoreText(string $raw): int
+    public function scoreText(string $raw): int
     {
         $score = 0;
 
-        if (preg_match('/\b\d{16}\b/', $raw, $m)) {
-            $score += 120;
-        }
-        if (preg_match('/NIK\b/i', $raw)) {
-            $score += 12;
-        }
-        if (preg_match('/Nama/i', $raw)) {
-            $score += 12;
-        }
-        if (preg_match('/Tempat/i', $raw) && preg_match('/Lahir/i', $raw)) {
-            $score += 12;
-        }
-        if (preg_match('/Jenis Kelamin|LAKI|PEREMPUAN/i', $raw)) {
-            $score += 10;
-        }
-        if (preg_match('/Pekerjaan/i', $raw)) {
-            $score += 8;
-        }
-        if (preg_match('/Alamat/i', $raw)) {
-            $score += 8;
+        if (preg_match('/\b\d{16}\b/', $raw)) {
+            $score += 100;
         }
 
-        $score += min(str_word_count($raw), 60);
+        $labels = [
+            ['/\bNIK\b/i', 15],
+            ['/\bNama\b/i', 15],
+            ['/Tempat.*Tgl.*Lahir|Tempat\/Tgl Lahir/i', 15],
+            ['/Jenis\s*Kelamin/i', 12],
+            ['/\bAlamat\b|^Al[a-z]{2,}$/m', 12],
+            ['/LAKI[\s\-]*LAKI|PEREMPUAN/i', 10],
+            ['/\bPekerjaan\b/i', 8],
+            ['/\bRT\s*\//i', 6],
+            ['/(^|\b)Kel[\.\s]?\/?\s*Desa/i', 6],
+            ['/Kecamatan\b/i', 6],
+            ['/\bAgama\b/i', 6],
+            ['/Perkawinan|\bKawin\b/i', 6],
+            ['/Warganegara|Kewarganegaraan|\bWNI\b/i', 6],
+            ['/Gol[\.\s]?Darah|Goldar/i', 5],
+            ['/\bBerlaku\b/i', 4],
+        ];
+
+        foreach ($labels as [$pattern, $value]) {
+            if (preg_match($pattern, $raw)) {
+                $score += $value;
+            }
+        }
+
+        $score += min(intdiv(str_word_count($raw), 4), 10);
 
         return $score;
     }
@@ -409,8 +455,8 @@ class KtpOcrService
         // Remove trailing single letter/noise fragment (from the line below bleeding over)
         $job = preg_replace('/\s[A-Za-z]{1,2}$/', '', $job);
 
-        // Remove trailing dash/colon artefacts
-        $job = preg_replace('/[\s\-:]+$/', '', $job);
+        // Remove trailing dash/colon/box-border artefacts
+        $job = preg_replace('/[\s\-:|\x{2500}-\x{25FF}]+$/u', '', $job);
 
         return trim($job) ?: '';
     }
@@ -422,7 +468,11 @@ class KtpOcrService
     {
         $lines = array_map('trim', explode("\n", $raw));
 
-        return array_values(array_filter($lines, function (string $line) {
+        return array_values(array_filter(array_map(function (string $line) {
+            // Buang dekorasi baris dari Tesseract (mis. "| Pekerjaan KARYAWAN |"
+            // dari border kotak kartu) agar label awal baris cocok dengan regex.
+            return preg_replace('/^(?:[\s|:;•·*_—–.\/\\\\#]+)/', '', $line);
+        }, $lines), function (string $line) {
             if ($line === '') {
                 return false;
             }
