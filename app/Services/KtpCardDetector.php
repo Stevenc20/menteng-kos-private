@@ -56,15 +56,38 @@ class KtpCardDetector
         imagecopyresampled($small, $src, 0, 0, 0, 0, $dw, $dh, $w, $h);
         imagefilter($small, IMG_FILTER_GRAYSCALE);
 
-        $threshold = $this->otsuThreshold($small, $dw, $dh);
-        $binary = $this->binarizeToString($small, $dw, $dh, $threshold);
-        $components = $this->connectedComponents($binary, $dw, $dh);
+        $otsu = $this->otsuThreshold($small, $dw, $dh);
+
+        // Cascade threshold: Otsu dulu (kartu penuh frame / latar gelap), lalu
+        // naikkan bertahap supaya lantai/pola terang rontok dan menyisakan
+        // permukaan kartu (KTP selalu paling terang di foto).
+        $candidates = [];
+        $thresholds = [];
+        foreach ([$otsu, $otsu + 30, 205, 225] as $t) {
+            $t = (int) round($t);
+            if ($t >= 20 && $t <= 247 && !in_array($t, $thresholds, true)) {
+                $thresholds[] = $t;
+            }
+        }
+        sort($thresholds);
+
+        $bestError = INF;
+        foreach ($thresholds as $t) {
+            $binary = $this->binarizeToString($small, $dw, $dh, $t);
+            foreach ($this->connectedComponents($binary, $dw, $dh) as $c) {
+                $score = $this->scoreCandidate($c, $dw, $dh);
+                if ($score !== null && $score['error'] < $bestError) {
+                    $bestError = $score['error'];
+                    $card = $c;
+                    $threshold = $t;
+                }
+            }
+        }
 
         imagedestroy($src);
         imagedestroy($small);
 
-        $card = $this->pickCard($components, $dw * $dh);
-        if ($card === null) {
+        if (!isset($card)) {
             return null;
         }
 
@@ -92,6 +115,7 @@ class KtpCardDetector
             ],
             'aspect' => $ch > 0 ? $cw / $ch : 0.0,
             'scale' => $scale,
+            'threshold' => $threshold,
         ];
     }
 
@@ -99,7 +123,7 @@ class KtpCardDetector
      * Potong + luruskan area kartu hasil detect() ke PNG sementara.
      * Pemetaan bilinear quad→rect (mendekati perspective correction).
      */
-    public function warp(string $path, array $corners, int $outW = 1200, int $outH = 756): ?string
+    public function warp(string $path, array $corners, int $outW = 0, int $outH = 0): ?string
     {
         if (!extension_loaded('gd')) {
             return null;
@@ -114,6 +138,18 @@ class KtpCardDetector
         $sh = max(1, imagesy($src));
 
         [$tl, $tr, $br, $bl] = $corners;
+
+        // Default: pertahankan resolusi asli kartu (jangan downscale) supaya
+        // teks kecil tetap terbaca tesseract. Cap 2200 px demi waktu proses.
+        if ($outW <= 0) {
+            $pixelW = sqrt(pow($tr[0] - $tl[0], 2) + pow($tr[1] - $tl[1], 2));
+            $outW = max(1400, min(2200, (int) round($pixelW * 1.1)));
+        }
+        if ($outH <= 0) {
+            $outH = (int) round($outW / self::CARD_ASPECT);
+        }
+        $outW = max(2, $outW);
+        $outH = max(2, $outH);
 
         $dst = imagecreatetruecolor($outW, $outH);
         imagefilledrectangle($dst, 0, 0, $outW, $outH, 0xFFFFFF);
@@ -332,46 +368,57 @@ class KtpCardDetector
     }
 
     /**
-     * Pilih komponen yang paling mirip kartu identitas: luas cukup besar,
-     * kepadatan tinggi (bukan blob tidak beraturan), rasio mendekati 1.586.
+     * Nilai seberapa mirip komponen dengan kartu identitas. Higher score lower.
      *
-     * @param list<array<string, int>> $components
-     * @return array<string, int>|null
+     * @param array<string, int> $c
+     * @return array{error: float}|null
      */
-    private function pickCard(array $components, int $imgArea): ?array
+    private function scoreCandidate(array $c, int $dw, int $dh): ?array
     {
-        $best = null;
-        $bestError = INF;
-
-        foreach ($components as $c) {
-            $cw = $c['maxx'] - $c['minx'] + 1;
-            $ch = $c['maxy'] - $c['miny'] + 1;
-            if ($cw <= 0 || $ch <= 0) {
-                continue;
-            }
-
-            $areaPct = $c['area'] / $imgArea;
-            if ($areaPct < 0.04) {
-                continue; // terlalu kecil untuk kartu dalam frame
-            }
-
-            $density = $c['area'] / ($cw * $ch);
-            if ($density < 0.35) {
-                continue; // komponen terlalu jarang/tidak teratur
-            }
-
-            $aspect = $cw / $ch;
-            if ($aspect < 0.9 || $aspect > 2.4) {
-                continue;
-            }
-
-            $error = abs(log($aspect / self::CARD_ASPECT));
-            if ($error < $bestError) {
-                $bestError = $error;
-                $best = $c;
-            }
+        $cw = $c['maxx'] - $c['minx'] + 1;
+        $ch = $c['maxy'] - $c['miny'] + 1;
+        if ($cw <= 0 || $ch <= 0) {
+            return null;
         }
 
-        return $best;
+        $imgArea = $dw * $dh;
+        $areaPct = $c['area'] / $imgArea;
+        if ($areaPct < 0.04) {
+            return null; // terlalu kecil untuk kartu dalam frame
+        }
+
+        $density = $c['area'] / ($cw * $ch);
+        if ($density < 0.35) {
+            return null; // blob terlalu jarang/tidak teratur
+        }
+
+        $aspect = $cw / $ch;
+        if ($aspect < 1.15 || $aspect > 2.1) {
+            return null;
+        }
+
+        // Komponen yang praktis memenuhi seluruh frame = lantai/gambar latar
+        // yang menyatu, BUKAN kartu. Deteksi seperti ini membuat crop = foto
+        // asli (tidak berguna). Tolak keras.
+        $boxAreaPct = ($cw * $ch) / $imgArea;
+        if ($cw >= $dw * 0.90 && $ch >= $dh * 0.90) {
+            return null; // Reject >90% width AND height
+        }
+        if ($boxAreaPct > 0.90) {
+            return null; // Reject >90% bounding box area
+        }
+
+        $error = abs(log($aspect / self::CARD_ASPECT));
+
+        // Kartu sungguhan biasanya ada di tengah (tidak menyentuh tepi frame).
+        $touchesFrame = $c['minx'] === 0 || $c['maxx'] === $dw - 1
+            || $c['miny'] === 0 || $c['maxy'] === $dh - 1;
+        $error += $touchesFrame ? 0.25 : 0.0;
+
+        // Merged block besar (lantai sisi kartu masih ikut) -> penalti kuat.
+        $error += $boxAreaPct > 0.85 ? 0.6 : 0.0;
+        $error += $boxAreaPct > 0.75 ? 0.3 : 0.0;
+
+        return ['error' => $error];
     }
 }

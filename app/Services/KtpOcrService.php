@@ -8,35 +8,26 @@ class KtpOcrService
 {
     /**
      * Run Tesseract OCR on a KTP image and extract structured data.
-     *
-     * @param string $absolutePath Full filesystem path to the image
-     * @return array{raw: string, name: string, nik: string, birth_place: string, birth_date: string, address: string, gender: string}
      */
     public function extract(string $absolutePath): array
     {
+        Log::info('KTP OCR started', ['path' => $absolutePath]);
+        
         $raw = $this->runOcrWithPreferredProvider($absolutePath);
         $result = $this->parse($raw);
-
-        $score = $this->scoreText($raw);
-        $core = 0;
-        foreach (['name', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
-            if ($result[$f] !== '') {
-                $core++;
-            }
-        }
-
-        Log::info('KTP OCR parsed result', [
-            'score' => $score,
-            'fields' => $core + ($result['nik'] !== '' ? 1 : 0),
+        
+        $fieldsFound = $this->countFields($result);
+        
+        Log::info('KTP OCR best attempt parsed result', [
+            'fields_found' => $fieldsFound,
             'nik' => $result['nik'] !== '' ? $result['nik'] : null,
-            'meaningful' => $score >= 40 || $core >= 2 || $result['nik'] !== '',
+            'meaningful' => $fieldsFound >= 2 || $result['nik'] !== '',
         ]);
 
-        // Confidence gate: tanpa struktur KTP yang valid (NIK/label), jangan
-        // menimpa data identitas tersimpan dengan hasil kosong/sampah OCR.
-        if ($score < 40 && $core < 2 && $result['nik'] === '') {
-            Log::warning('KTP OCR below confidence threshold; identity data preserved', ['score' => $score]);
-            foreach (['name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
+        if ($fieldsFound < 2 && $result['nik'] === '') {
+            Log::warning('KTP OCR below confidence threshold; identity data preserved');
+            // Empty out fields to prevent overwriting with garbage
+            foreach (['name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address', 'rt_rw', 'kelurahan_desa', 'kecamatan', 'agama', 'status_perkawinan', 'kewarganegaraan'] as $f) {
                 $result[$f] = '';
             }
         }
@@ -44,15 +35,18 @@ class KtpOcrService
         return $result;
     }
 
-    /**
-     * Tesseract (offline) adalah provider utama tanpa biaya. Google Cloud
-     * Vision HANYA dipakai bila VISION_OCR_ENABLED=true DAN API key terisi
-     * (opsi future) — tanpa itu OCR tetap berfungsi penuh via Tesseract.
-     */
+    private function countFields(array $parsed): int
+    {
+        $c = 0;
+        foreach (['name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address', 'rt_rw', 'kelurahan_desa', 'kecamatan', 'agama', 'status_perkawinan', 'kewarganegaraan'] as $f) {
+            if (!empty($parsed[$f])) $c++;
+        }
+        return $c;
+    }
+
     private function runOcrWithPreferredProvider(string $absolutePath): string
     {
         $vision = app(GoogleVisionKtpOcrService::class);
-
         if ((bool) config('services.vision.enabled', false) && $vision->available()) {
             try {
                 $text = $vision->extractText($absolutePath);
@@ -60,22 +54,13 @@ class KtpOcrService
                     Log::info('KTP OCR provider: google_vision');
                     return $text;
                 }
-                Log::warning('KTP OCR google_vision returned empty text; falling back to tesseract');
-            } catch (\Throwable $e) {
-                Log::error('KTP OCR google_vision failed; falling back to tesseract', ['error' => $e->getMessage()]);
-            }
+            } catch (\Throwable $e) {}
         }
 
         Log::info('KTP OCR provider: tesseract');
         return $this->bestAttempt($absolutePath);
     }
 
-    /**
-     * Pipeline OCR: deteksi area kartu KTP → crop + luruskan → beberapa variasi
-     * preprocessing → OCR per PSM → pilih hasil dengan skor struktur tertinggi.
-     * Foto kamera HP sering berisi background/tangan — meng-OCR kartu yang sudah
-     * di-crop lebih penting daripada menambah variasi preprocessing random.
-     */
     private function bestAttempt(string $path): string
     {
         $size = @getimagesize($path);
@@ -85,7 +70,6 @@ class KtpOcrService
         ]);
 
         $temps = [];
-        $card = null;
         $crop = null;
 
         if (extension_loaded('gd')) {
@@ -96,34 +80,39 @@ class KtpOcrService
                 Log::info('KTP OCR card detected', [
                     'bbox' => $card['bbox'],
                     'aspect' => round($card['aspect'], 3),
+                    'threshold' => $card['threshold'] ?? null,
                 ]);
 
                 $crop = $detector->warp($path, $card['corners']);
-                if ($crop === null) {
-                    Log::warning('KTP OCR card warp failed; falling back to full frame');
-                } else {
+                if ($crop !== null) {
                     $temps[] = $crop;
                 }
             } else {
-                Log::info('KTP OCR card detection: none, OCR on full frame');
+                Log::info('KTP OCR card detection: FAILED or ignored (>90%), OCR on full frame');
             }
         }
 
         $attempts = [];
-        foreach ($this->buildVariants($path, $crop, $temps) as $label => $image) {
-            $psms = str_starts_with($label, 'rot') ? [6] : [3, 6];
+        $variants = $this->buildVariants($path, $crop, $temps);
+        
+        foreach ($variants as $label => $image) {
+            $psms = str_starts_with($label, 'rot') ? [6] : [3, 4, 6];
             foreach ($psms as $psm) {
                 try {
                     $raw = $this->runTesseract($image, $psm);
                     $parsed = $this->parse($raw);
-                    $fields = $parsed['nik'] !== '' ? 1 : 0;
-                    foreach (['name', 'birth_place', 'birth_date', 'gender', 'job', 'address'] as $f) {
-                        if ($parsed[$f] !== '') {
-                            $fields++;
-                        }
-                    }
-                    $score = $this->scoreText($raw);
-                    $attempts[] = ['raw' => $raw, 'score' => $score, 'label' => $label . '/psm' . $psm, 'fields' => $fields];
+                    
+                    $score = $this->scoreAttempt($raw, $parsed);
+                    $fields = $this->countFields($parsed);
+                    
+                    $attempts[] = [
+                        'raw' => $raw, 
+                        'score' => $score, 
+                        'label' => $label . '/psm' . $psm, 
+                        'fields' => $fields,
+                        'parsed' => $parsed
+                    ];
+                    
                     Log::info('KTP OCR attempt', [
                         'label' => $label,
                         'psm' => $psm,
@@ -147,7 +136,7 @@ class KtpOcrService
 
         usort($attempts, fn ($a, $b) => [$b['score'], $b['fields']] <=> [$a['score'], $a['fields']]);
         $best = $attempts[0];
-        Log::info('KTP OCR best attempt', [
+        Log::info('KTP OCR best attempt selected', [
             'label' => $best['label'],
             'score' => $best['score'],
             'fields' => $best['fields'],
@@ -157,10 +146,43 @@ class KtpOcrService
         return $best['raw'];
     }
 
-    /**
-     * Bangun daftar [label => imagePath] variasi gambar untuk dicoba.
-     * Temp file hasil preprocessing dicatat ke $temps agar dibersihkan.
-     */
+    private function scoreAttempt(string $raw, array $parsed): int
+    {
+        $score = 0;
+        
+        // 1. NIK valid 16 digit
+        if (preg_match('/^\d{16}$/', $parsed['nik'])) {
+            $score += 500;
+        } elseif ($parsed['nik'] !== '') {
+            $score += 100;
+        }
+        
+        // 2. Label KTP
+        if (preg_match('/KARTU\s*TANDA\s*PENDUDUK|PROVINSI/i', $raw)) {
+            $score += 50;
+        }
+
+        // Add scores for found structural fields
+        if ($parsed['name'] !== '') $score += 50;
+        if ($parsed['birth_place'] !== '') $score += 30;
+        if ($parsed['birth_date'] !== '') $score += 30;
+        if ($parsed['gender'] !== '') $score += 30;
+        if ($parsed['address'] !== '') $score += 30;
+        if ($parsed['rt_rw'] !== '') $score += 20;
+        if ($parsed['kelurahan_desa'] !== '') $score += 20;
+        if ($parsed['kecamatan'] !== '') $score += 20;
+        if ($parsed['agama'] !== '') $score += 20;
+        if ($parsed['status_perkawinan'] !== '') $score += 20;
+        if ($parsed['job'] !== '') $score += 20;
+        if ($parsed['kewarganegaraan'] !== '') $score += 20;
+        
+        // Word count score (capped at 20) to slightly reward more text, but prevent noise from winning
+        $words = str_word_count($raw);
+        $score += min($words, 20);
+
+        return $score;
+    }
+
     private function buildVariants(string $path, ?string $crop, array &$temps): array
     {
         $variants = [];
@@ -168,8 +190,6 @@ class KtpOcrService
         $baseLabel = 'original';
 
         if ($crop !== null) {
-            // Kartu terdeteksi → kandidat utama. Original tetap dicoba sebagai
-            // fallback bila hasil crop kurang bersih.
             $variants['card'] = $crop;
             $base = $crop;
             $baseLabel = 'card';
@@ -181,310 +201,119 @@ class KtpOcrService
             }
         }
 
-        $variants['original'] = $path;
-        $pre = $this->preprocessImage($path);
-        if ($pre !== null) {
-            $temps[] = $pre;
-            $variants['pre'] = $pre;
+        // Always keep original (maybe resized)
+        $opt = $this->optimizeImageSize($path);
+        if ($opt !== null && $opt !== $path) {
+            $temps[] = $opt;
+            $variants['original_opt'] = $opt;
+        } else {
+            $variants['original'] = $path;
         }
 
-        // Variasi rotasi (OSD) hanya untuk base utama: murah + mengoreksi foto
-        // yang terbalik. Binarization agresif dihapus karena merusak teks.
-        $rotation = $this->detectOrientation($base);
-        if ($rotation !== null && $rotation !== 0) {
-            $rot = $this->rotateImage($base, $rotation);
-            if ($rot !== null) {
-                $temps[] = $rot;
-                $variants[$baseLabel . '-rot'] = $rot;
-            }
+        // Grayscale contrast
+        $gray = $this->preprocessImage($opt ?? $path);
+        if ($gray !== null) {
+            $temps[] = $gray;
+            $variants['gray'] = $gray;
         }
 
         return $variants;
     }
 
-    /**
-     * Deteksi rotasi lewat OSD (PSM 0). Kembalikan sudut derajat atau null.
-     */
-    private function detectOrientation(string $path): ?int
+    private function optimizeImageSize(string $path): ?string
     {
-        $bin = $this->findTesseract();
-        if (!$bin) {
-            return null;
-        }
+        if (!extension_loaded('gd')) return null;
+        $src = @imagecreatefromstring(@file_get_contents($path));
+        if (!$src) return null;
 
-        $cmd = sprintf('%s %s stdout --psm 0', escapeshellarg($bin), escapeshellarg($path));
-        exec($cmd . ' 2>/dev/null', $output, $exitCode);
-
-        if ($exitCode !== 0) {
-            return null;
-        }
-
-        foreach ($output as $line) {
-            if (preg_match('/Rotate:\s*([0-9]+)/i', $line, $m)) {
-                return (int) $m[1];
+        // Fix EXIF orientation
+        if (function_exists('exif_read_data')) {
+            $exif = @exif_read_data($path);
+            if (!empty($exif['Orientation'])) {
+                switch ($exif['Orientation']) {
+                    case 3: $src = imagerotate($src, 180, 0); break;
+                    case 6: $src = imagerotate($src, -90, 0); break;
+                    case 8: $src = imagerotate($src, 90, 0); break;
+                }
             }
         }
 
-        return null;
+        $w = imagesx($src);
+        $h = imagesy($src);
+        
+        // Auto rotate portrait to landscape
+        if ($h > $w) {
+            $src = imagerotate($src, 90, 0);
+            $w = imagesx($src);
+            $h = imagesy($src);
+        }
+
+        // Resize if too large
+        $maxDim = 2000;
+        if ($w > $maxDim || $h > $maxDim) {
+            $scale = $maxDim / max($w, $h);
+            $nw = (int)($w * $scale);
+            $nh = (int)($h * $scale);
+            $dst = imagecreatetruecolor($nw, $nh);
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+            $tmp = tempnam(sys_get_temp_dir(), 'ktp_opt_') . '.png';
+            imagepng($dst, $tmp);
+            imagedestroy($src);
+            imagedestroy($dst);
+            return $tmp;
+        }
+        
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_opt_') . '.png';
+        imagepng($src, $tmp);
+        imagedestroy($src);
+        return $tmp;
     }
 
-    /**
-     * Putar foto agar ujungnya menghadap ke bawah (korreksi foto miring).
-     */
-    private function rotateImage(string $path, int $angle): ?string
+    private function preprocessImage(string $path): ?string
     {
-        if (!extension_loaded('gd')) {
-            return null;
-        }
-
+        if (!extension_loaded('gd')) return null;
         $src = @imagecreatefromstring(@file_get_contents($path));
-        if (!$src) {
-            return null;
-        }
+        if (!$src) return null;
 
-        $rotated = imagerotate($src, 360 - ($angle % 360), 0xffffff);
+        imagefilter($src, IMG_FILTER_GRAYSCALE);
+        imagefilter($src, IMG_FILTER_CONTRAST, -20); // Increase contrast (negative value)
+
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_gray_') . '.png';
+        imagepng($src, $tmp);
         imagedestroy($src);
-
-        if ($rotated === false) {
-            return null;
-        }
-
-        $tmp = tempnam(sys_get_temp_dir(), 'ktp_rot_') . '.png';
-        imagepng($rotated, $tmp);
-        imagedestroy($rotated);
 
         return $tmp;
     }
 
-    /**
-     * Skor kualitas OCR berdasarkan STRUKTUR data KTP, bukan jumlah kata.
-     * NIK valid 16 digit + label KTP = kunci. Jumlah kata hanya faktor minor
-     * supaya noise bervolume tinggi (mis. binarization sampah) tidak menang.
-     */
-    public function scoreText(string $raw): int
+    private function runTesseract(string $path, int $psm): string
     {
-        $score = 0;
-
-        if (preg_match('/\b\d{16}\b/', $raw)) {
-            $score += 100;
-        }
-
-        $labels = [
-            ['/\bNIK\b/i', 15],
-            ['/\bNama\b/i', 15],
-            ['/Tempat.*Tgl.*Lahir|Tempat\/Tgl Lahir/i', 15],
-            ['/Jenis\s*Kelamin/i', 12],
-            ['/\bAlamat\b|^Al[a-z]{2,}$/m', 12],
-            ['/LAKI[\s\-]*LAKI|PEREMPUAN/i', 10],
-            ['/\bPekerjaan\b/i', 8],
-            ['/\bRT\s*\//i', 6],
-            ['/(^|\b)Kel[\.\s]?\/?\s*Desa/i', 6],
-            ['/Kecamatan\b/i', 6],
-            ['/\bAgama\b/i', 6],
-            ['/Perkawinan|\bKawin\b/i', 6],
-            ['/Warganegara|Kewarganegaraan|\bWNI\b/i', 6],
-            ['/Gol[\.\s]?Darah|Goldar/i', 5],
-            ['/\bBerlaku\b/i', 4],
-        ];
-
-        foreach ($labels as [$pattern, $value]) {
-            if (preg_match($pattern, $raw)) {
-                $score += $value;
-            }
-        }
-
-        $score += min(intdiv(str_word_count($raw), 4), 10);
-
-        return $score;
-    }
-
-    public function tesseractAvailable(): bool
-    {
-        return $this->findTesseract() !== null;
-    }
-
-    /**
-     * Execute Tesseract on the image and return raw text.
-     */
-    private function runTesseract(string $path, int $psm = 3): string
-    {
-        $bin = $this->findTesseract();
-        if (!$bin) {
-            throw new \RuntimeException('Tesseract OCR engine not found on this system.');
-        }
-
-        // Prefer ind+eng but fall back to eng if ind is unavailable
-        $langs = 'ind+eng';
-        if (!$this->languageAvailable($bin, 'ind')) {
-            $langs = 'eng';
-        }
-
-        // stdout only holds the recognized text; stderr is captured separately
-        $cmd = sprintf('%s %s stdout -l %s --oem 1 --psm %d', escapeshellarg($bin), escapeshellarg($path), $langs, $psm);
-        $stderrFile = tempnam(sys_get_temp_dir(), 'ktp_ocr_');
-        exec($cmd . ' 2>' . escapeshellarg($stderrFile), $output, $exitCode);
-        $stderr = file_get_contents($stderrFile);
-        @unlink($stderrFile);
-
-        if ($exitCode !== 0) {
-            throw new \RuntimeException('Tesseract exited with code ' . $exitCode . ': ' . trim($stderr));
-        }
-
-        Log::info('KTP OCR tesseract stderr:', ['stderr' => trim($stderr)]);
-        Log::info('KTP OCR language used:', ['langs' => $langs]);
-
+        $bin = config('services.tesseract.bin', 'tesseract');
+        // ind+eng fallback
+        $cmd = sprintf('%s %s stdout -l ind+eng --psm %d quiet 2>/dev/null', escapeshellarg($bin), escapeshellarg($path), $psm);
+        exec($cmd, $output, $code);
         return implode("\n", $output);
     }
 
-    /**
-     * Upscale, convert to grayscale and boost contrast using GD when available.
-     * Returns the path to a temporary preprocessed image, or null if GD can't process.
-     */
-    private function preprocessImage(string $path): ?string
-    {
-        if (!extension_loaded('gd')) {
-            return null;
-        }
-
-        $src = @imagecreatefromstring(file_get_contents($path));
-        if (!$src) {
-            return null;
-        }
-
-        $srcW = imagesx($src);
-        $srcH = imagesy($src);
-
-        // Targets ~2000px wide for better Tesseract accuracy
-        $targetWidth = 2000;
-        $newW = $srcW;
-        $newH = $srcH;
-        if ($srcW < $targetWidth) {
-            $newW = $targetWidth;
-            $newH = (int) round($srcH * ($targetWidth / $srcW));
-        }
-
-        $dst = imagecreatetruecolor($newW, $newH);
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
-
-        imagefilter($dst, IMG_FILTER_GRAYSCALE);
-        imagefilter($dst, IMG_FILTER_CONTRAST, -30);
-
-        $tmp = tempnam(sys_get_temp_dir(), 'ktp_img_') . '.png';
-        imagepng($dst, $tmp);
-
-        imagedestroy($src);
-        imagedestroy($dst);
-
-        return $tmp;
-    }
-
-    /**
-     * Check if the given language traineddata is installed.
-     */
-    private function languageAvailable(string $bin, string $lang): bool
-    {
-        $cmd = sprintf('%s --list-langs 2>&1', escapeshellarg($bin));
-        exec($cmd, $output, $exitCode);
-        return $exitCode === 0 && in_array($lang, array_map('trim', $output), true);
-    }
-
-    /**
-     * Find the Tesseract binary path (cross-platform).
-     */
-    private function findTesseract(): ?string
-    {
-        // Check common locations
-        $candidates = [
-            'tesseract', // PATH
-            '/usr/bin/tesseract', // Linux
-            '/usr/local/bin/tesseract', // macOS Homebrew
-            'C:\\Program Files\\Tesseract-OCR\\tesseract.exe', // Windows
-            'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe', // Windows 32-bit
-        ];
-
-        foreach ($candidates as $candidate) {
-            if (is_executable($candidate)) {
-                return $candidate;
-            }
-        }
-
-        // Try shell command to find it
-        exec('where tesseract 2>nul', $whereOut, $whereCode);
-        if ($whereCode === 0 && !empty($whereOut)) {
-            return trim($whereOut[0]);
-        }
-
-        exec('which tesseract 2>/dev/null', $whichOut, $whichCode);
-        if ($whichCode === 0 && !empty($whichOut)) {
-            return trim($whichOut[0]);
-        }
-
-        return null;
-    }
-
-    /**
-     * Parse raw OCR text into structured KTP fields.
-     */
-    /**
-     * Normalize OCR misreads inside a NIK value: strip space/separators, O→0, I→1.
-     */
-    private function cleanNik(string $value): string
-    {
-        $value = strtoupper($value);
-        $value = str_replace(['O', 'I'], ['0', '1'], $value);
-        return preg_replace('/[^0-9]/', '', $value);
-    }
-
-    /**
-     * Remove noise from a parsed name value (leading bullets/dashes from OCR).
-     */
-    private function cleanName(string $value): string
-    {
-        $name = preg_replace('/^[\s\-—–_.:*·"\'`]+/', '', trim($value));
-        return trim($name) ?: '';
-    }
-
-    /**
-     * Clean a job value: strip short trailing OCR noise fragments
-     * (e.g. "PELAJAR/MAHASISWA se" -> "PELAJAR/MAHASISWA").
-     */
-    private function cleanJob(string $value): string
-    {
-        $job = $this->cleanName($value);
-
-        // Remove trailing single letter/noise fragment (from the line below bleeding over)
-        $job = preg_replace('/\s[A-Za-z]{1,2}$/', '', $job);
-
-        // Remove trailing dash/colon/box-border artefacts
-        $job = preg_replace('/[\s\-:|\x{2500}-\x{25FF}]+$/u', '', $job);
-
-        return trim($job) ?: '';
-    }
-
-    /**
-     * Remove Tesseract stderr chatter and empty lines from the OCR text.
-     */
     private function cleanLines(string $raw): array
     {
         $lines = array_map('trim', explode("\n", $raw));
-
         return array_values(array_filter(array_map(function (string $line) {
-            // Buang dekorasi baris dari Tesseract (mis. "| Pekerjaan KARYAWAN |"
-            // dari border kotak kartu) agar label awal baris cocok dengan regex.
-            return preg_replace('/^(?:[\s|:;•·*_—–.\/\\\\#]+)/', '', $line);
+            return preg_replace('/^(?:[\s|:;?A*_?"?".\/\\\\#]+)/', '', $line);
         }, $lines), function (string $line) {
-            if ($line === '') {
-                return false;
-            }
-            // Tesseract info/warning chatter that is not KTP content
-            if (preg_match('/^(Estimating|Warning|Error|Page\b|Loaded|Tesseract|Info\b|C13)/i', $line)) {
-                return false;
-            }
+            if ($line === '') return false;
+            if (preg_match('/^(Estimating|Warning|Error|Page\b|Loaded|Tesseract|Info\b|C13)/i', $line)) return false;
             return true;
         }));
     }
 
-    private function parse(string $raw): array
+    private function cleanNik(string $value): string
+    {
+        $value = strtoupper($value);
+        $value = str_replace(['O', 'I', 'L', 'S', 'B'], ['0', '1', '1', '5', '8'], $value);
+        return preg_replace('/[^0-9]/', '', $value);
+    }
+
+    public function parse(string $raw): array
     {
         $lines = $this->cleanLines($raw);
         $result = [
@@ -496,126 +325,116 @@ class KtpOcrService
             'gender'      => '',
             'job'         => '',
             'address'     => '',
+            'rt_rw'       => '',
+            'kelurahan_desa' => '',
+            'kecamatan'   => '',
+            'agama'       => '',
+            'status_perkawinan' => '',
+            'kewarganegaraan' => '',
         ];
 
         $fullText = implode("\n", $lines);
 
-        // --- NIK (16 digits) ---
-        if (preg_match('/(\d{16})/', $fullText, $m)) {
-            $result['nik'] = $m[1];
-        } elseif (preg_match('/NIK[\s:]*([\dOIl\s]{10,24})/i', $fullText, $m)) {
-            $cleaned = $this->cleanNik($m[1]);
-            if (preg_match('/(\d{16})/', $cleaned, $m2)) {
-                $result['nik'] = $m2[1];
-            }
-        } elseif (preg_match('/(\d[\d\sOIl]{14,24})/', $fullText, $m)) {
+        // NIK
+        if (preg_match('/N[I1]K[\s:]*([A-Z0-9\s]{10,24})/i', $fullText, $m)) {
             $cleaned = $this->cleanNik($m[1]);
             if (preg_match('/(\d{16})/', $cleaned, $m2)) {
                 $result['nik'] = $m2[1];
             }
         }
-
-        // --- Nama ---
-        for ($i = 0; $i < count($lines); $i++) {
-            if (preg_match('/^Nama\s*$/i', $lines[$i]) && isset($lines[$i + 1])) {
-                $candidate = $this->cleanName($lines[$i + 1]);
-                if ($candidate !== '' && !preg_match('/^\d+$/', $candidate)) {
-                    $result['name'] = $candidate;
-                    break;
-                }
-            }
-            if (preg_match('/^Nama\s*[:\-\s]\s*(.+)$/i', $lines[$i], $m)) {
-                $name = $this->cleanName($m[1]);
-                if ($name !== '') {
-                    $result['name'] = $name;
-                    break;
-                }
+        if ($result['nik'] === '' && preg_match('/(\d[\d\sOIlSB]{14,24})/', $fullText, $m)) {
+            $cleaned = $this->cleanNik($m[1]);
+            if (preg_match('/(\d{16})/', $cleaned, $m2)) {
+                $result['nik'] = $m2[1];
             }
         }
 
-        // --- Tempat/Tgl Lahir ---
         for ($i = 0; $i < count($lines); $i++) {
-            if (preg_match('/Tempat.*Tgl.*Lahir/i', $lines[$i])) {
-                // Same line inline value: "Tempat/Tgl Lahir : BEKASI, 07-03-2002"
-                if (preg_match('/Tempat.*Tgl.*Lahir\s*[:\-\s]*\s*(.+)$/i', $lines[$i], $mIn)) {
-                    if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $mIn[1], $m)) {
-                        $result['birth_place'] = trim($m[1]);
-                        $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
-                        break;
-                    }
-                }
-                // Value on next line: "Tempat/Tgl Lahir" then "BEKASI, 07-03-2002"
-                if (isset($lines[$i + 1]) && preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $lines[$i + 1], $m)) {
-                    $result['birth_place'] = trim($m[1]);
+            $line = $lines[$i];
+
+            // Nama
+            if ($result['name'] === '' && preg_match('/^N[aA][rm][aA]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
+                $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $m[1]));
+            } elseif ($result['name'] === '' && preg_match('/^N[aA][rm][aA]\s*$/i', $line) && isset($lines[$i + 1])) {
+                $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $lines[$i + 1]));
+            }
+
+            // Tempat/Tgl Lahir
+            if ($result['birth_place'] === '' && preg_match('/Tempat.*Lahir\s*[:\-\s]*\s*(.+)$/i', $line, $mIn)) {
+                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $mIn[1], $m)) {
+                    $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
-                    break;
                 }
-                // Compact date: "BEKASI 07032002"
-                if (isset($lines[$i + 1]) && preg_match('/(.+?)\s+(\d{2})(\d{2})(\d{4})/i', $lines[$i + 1], $m)) {
-                    $result['birth_place'] = trim($m[1]);
+            } elseif ($result['birth_place'] === '' && preg_match('/Tempat.*Lahir/i', $line) && isset($lines[$i + 1])) {
+                $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $lines[$i + 1]);
+                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
+                    $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
-                    break;
                 }
             }
-            // Bare value line without label: "BEKASI, 07-03-2002"
-            if (preg_match('/^([A-Z\s]{2,}),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})$/i', $lines[$i], $m) && $result['birth_place'] === '') {
-                $result['birth_place'] = trim($m[1]);
-                $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
-            }
-        }
 
-        // --- Jenis Kelamin ---
-        if (preg_match('/LAKI[\s\-]*LAKI|LAKI/i', $fullText)) {
-            $result['gender'] = 'LAKI-LAKI';
-        } elseif (preg_match('/PEREMPUAN/i', $fullText)) {
-            $result['gender'] = 'PEREMPUAN';
-        }
+            // Jenis Kelamin
+            if ($result['gender'] === '' && preg_match('/LAKI[\s\-]*LAKI|LAK!/i', $line)) {
+                $result['gender'] = 'LAKI-LAKI';
+            } elseif ($result['gender'] === '' && preg_match('/PEREMPUAN/i', $line)) {
+                $result['gender'] = 'PEREMPUAN';
+            }
 
-        // --- Pekerjaan ---
-        for ($i = 0; $i < count($lines); $i++) {
-            // Inline: "Pekerjaan : PELAJAR/MAHASISWA"
-            if (preg_match('/^Pekerjaan\s*[:\-\s]+\s*(.+)$/i', $lines[$i], $m)) {
-                $job = $this->cleanJob($m[1]);
-                if ($job !== '') {
-                    $result['job'] = $job;
-                }
-                break;
+            // RT/RW
+            if ($result['rt_rw'] === '' && preg_match('/RT[\/\\\]?RW\s*[:\-\s]*([0-9OIS]{1,3}[\/\\\][0-9OIS]{1,3})/i', $line, $m)) {
+                $result['rt_rw'] = str_replace(['O', 'I', 'S'], ['0', '1', '5'], trim($m[1]));
             }
-            // Label on its own line: "Pekerjaan" then value below
-            if (preg_match('/^Pekerjaan\s*$/i', $lines[$i]) && isset($lines[$i + 1])) {
-                $job = $this->cleanJob($lines[$i + 1]);
-                if ($job !== '' && !preg_match('/^(Perkawinan|Agama|Kawin|Status|Alamat)/i', $job)) {
-                    $result['job'] = $job;
-                }
-                break;
-            }
-        }
 
-        // --- Alamat ---
-        // Tolerant label match: OCR often mangles "Alamat" (e.g. "Alai", "Alamal")
-        for ($i = 0; $i < count($lines); $i++) {
-            if (preg_match('/^Al[a-z]{2,}\s*[:\-\s]+\s*(.+)$/i', $lines[$i], $m)) {
-                $result['address'] = trim($m[1]);
-                break;
+            // Kel/Desa
+            if ($result['kelurahan_desa'] === '' && preg_match('/(Kel\/Desa|Kel[\s\.]+Desa)\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['kelurahan_desa'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[2]));
             }
-            // Label on its own line: "Alamat" then address lines below
-            if (preg_match('/^Al[a-z]{2,}\s*$/i', $lines[$i])) {
+
+            // Kecamatan
+            if ($result['kecamatan'] === '' && preg_match('/Kecamatan\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['kecamatan'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[1]));
+            }
+
+            // Agama
+            if ($result['agama'] === '' && preg_match('/Agama\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['agama'] = trim(preg_replace('/[^A-Za-z\s]/', '', $m[1]));
+            }
+
+            // Status Perkawinan
+            if ($result['status_perkawinan'] === '' && preg_match('/(Status|Perkawinan|Kawin)\s*[:\-\s]*\s*(BELUM KAWIN|KAWIN|CERAI HIDUP|CERAI MATI)/i', $line, $m)) {
+                $result['status_perkawinan'] = strtoupper(trim($m[2]));
+            }
+
+            // Pekerjaan
+            if ($result['job'] === '' && preg_match('/Pekerjaan\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['job'] = trim(preg_replace('/[^A-Za-z\s\/]/', '', $m[1]));
+            }
+
+            // Kewarganegaraan
+            if ($result['kewarganegaraan'] === '' && preg_match('/Kewarganegaraan\s*[:\-\s]*\s*(WNI|WNA)/i', $line, $m)) {
+                $result['kewarganegaraan'] = strtoupper(trim($m[1]));
+            }
+
+            // Alamat (multiline support)
+            if ($result['address'] === '' && preg_match('/Al[a-z]{2,}\s*[:\-\s]*\s*(.*)$/i', $line, $m)) {
                 $addrLines = [];
+                if (trim($m[1]) !== '') {
+                    $addrLines[] = trim($m[1]);
+                }
                 for ($j = $i + 1; $j < count($lines); $j++) {
-                    $line = trim($lines[$j]);
-                    if ($line === '') continue;
-                    // Stop at unrelated KTP field labels
-                    if (preg_match('/^(Agama|Kawin|Pekerjaan|Warganegara|Berlaku|Goldar|Nama|NIK|Tempat|Jenis|Gol\b)/i', $line)) {
+                    $nextLine = trim($lines[$j]);
+                    if (preg_match('/^(RT[\/\\\]?RW|Kel[\/\\\s\.]+Desa|Kecamatan|Agama|Status|Pekerjaan|Kewarga)/i', $nextLine)) {
                         break;
                     }
-                    $addrLines[] = $line;
+                    $addrLines[] = preg_replace('/[^A-Za-z0-9\s\.\,\-]/', '', $nextLine);
                 }
-                if (!empty($addrLines)) {
-                    $result['address'] = implode(', ', $addrLines);
-                }
-                break;
+                $result['address'] = trim(implode(' ', $addrLines));
             }
         }
+
+        // Clean up any remaining noise in address
+        $result['address'] = preg_replace('/\s+/', ' ', $result['address']);
+        $result['name'] = preg_replace('/\s+/', ' ', $result['name']);
 
         return $result;
     }
