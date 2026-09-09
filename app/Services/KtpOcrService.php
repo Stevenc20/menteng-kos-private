@@ -14,7 +14,7 @@ class KtpOcrService
      */
     public function extract(string $absolutePath): array
     {
-        $raw = $this->runTesseract($absolutePath);
+        $raw = $this->runOcrWithPreferredProvider($absolutePath);
 
         Log::info('KTP OCR raw text:', ['raw' => $raw]);
 
@@ -22,9 +22,245 @@ class KtpOcrService
     }
 
     /**
+     * Tesseract (offline) adalah provider utama tanpa biaya. Google Cloud
+     * Vision HANYA dipakai bila VISION_OCR_ENABLED=true DAN API key terisi
+     * (opsi future) — tanpa itu OCR tetap berfungsi penuh via Tesseract.
+     */
+    private function runOcrWithPreferredProvider(string $absolutePath): string
+    {
+        $vision = app(GoogleVisionKtpOcrService::class);
+
+        if ((bool) config('services.vision.enabled', false) && $vision->available()) {
+            try {
+                $text = $vision->extractText($absolutePath);
+                if (trim($text) !== '') {
+                    Log::info('KTP OCR provider: google_vision');
+                    return $text;
+                }
+                Log::warning('KTP OCR google_vision returned empty text; falling back to tesseract');
+            } catch (\Throwable $e) {
+                Log::error('KTP OCR google_vision failed; falling back to tesseract', ['error' => $e->getMessage()]);
+            }
+        }
+
+        Log::info('KTP OCR provider: tesseract');
+        return $this->bestAttempt($absolutePath);
+    }
+
+    /**
+     * Jalankan Tesseract pada beberapa variasi preprocessing + PSM, lalu ambil
+     * hasil dengan skor tertinggi. Foto kamera HP sering miring/blur/sebagian
+     * terbaca — mencoba banyak konfigurasi menaikkan peluang field terbaca.
+     */
+    private function bestAttempt(string $path): string
+    {
+        $attempts = [];
+        $temps = [];
+
+        foreach ($this->buildVariants($path, $temps) as $label => $image) {
+            $psms = ($label === 'bin' || $label === 'rot') ? [6] : [3, 6];
+            foreach ($psms as $psm) {
+                try {
+                    $raw = $this->runTesseract($image, $psm);
+                    $attempts[] = ['raw' => $raw, 'score' => $this->scoreText($raw), 'label' => $label . '/psm' . $psm];
+                    Log::info('KTP OCR attempt', ['label' => $label, 'psm' => $psm, 'words' => str_word_count($raw)]);
+                } catch (\Throwable $e) {
+                    Log::warning('KTP OCR attempt failed', ['label' => $label, 'psm' => $psm, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        foreach ($temps as $tmp) {
+            @unlink($tmp);
+        }
+
+        if (empty($attempts)) {
+            throw new \RuntimeException('Tesseract OCR failed on all attempts.');
+        }
+
+        usort($attempts, fn ($a, $b) => $b['score'] <=> $a['score']);
+        $best = $attempts[0];
+        Log::info('KTP OCR best attempt', ['label' => $best['label'], 'score' => $best['score']]);
+
+        return $best['raw'];
+    }
+
+    /**
+     * Bangun daftar [label => imagePath] variasi gambar untuk dicoba.
+     * Temp file hasil preprocessing dicatat ke $temps agar dibersihkan.
+     */
+    private function buildVariants(string $path, array &$temps): array
+    {
+        $variants = ['original' => $path];
+
+        $pre = $this->preprocessImage($path);
+        if ($pre !== null) {
+            $temps[] = $pre;
+            $variants['pre'] = $pre;
+
+            $rotation = $this->detectOrientation($pre);
+            if ($rotation !== null && $rotation !== 0) {
+                $rot = $this->rotateImage($pre, $rotation);
+                if ($rot !== null) {
+                    $temps[] = $rot;
+                    $variants['rot'] = $rot;
+                }
+            }
+        }
+
+        $bin = $this->binarizeImage($path);
+        if ($bin !== null) {
+            $temps[] = $bin;
+            $variants['bin'] = $bin;
+        }
+
+        return $variants;
+    }
+
+    /**
+     * Deteksi rotasi lewat OSD (PSM 0). Kembalikan sudut derajat atau null.
+     */
+    private function detectOrientation(string $path): ?int
+    {
+        $bin = $this->findTesseract();
+        if (!$bin) {
+            return null;
+        }
+
+        $cmd = sprintf('%s %s stdout --psm 0', escapeshellarg($bin), escapeshellarg($path));
+        exec($cmd . ' 2>/dev/null', $output, $exitCode);
+
+        if ($exitCode !== 0) {
+            return null;
+        }
+
+        foreach ($output as $line) {
+            if (preg_match('/Rotate:\s*([0-9]+)/i', $line, $m)) {
+                return (int) $m[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Putar foto agar ujungnya menghadap ke bawah (korreksi foto miring).
+     */
+    private function rotateImage(string $path, int $angle): ?string
+    {
+        if (!extension_loaded('gd')) {
+            return null;
+        }
+
+        $src = @imagecreatefromstring(@file_get_contents($path));
+        if (!$src) {
+            return null;
+        }
+
+        $rotated = imagerotate($src, 360 - ($angle % 360), 0xffffff);
+        imagedestroy($src);
+
+        if ($rotated === false) {
+            return null;
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_rot_') . '.png';
+        imagepng($rotated, $tmp);
+        imagedestroy($rotated);
+
+        return $tmp;
+    }
+
+    /**
+     * Versi biner (hitam-putih keras): upscale, sharpen, grayscale, contrast
+     * tinggi + brightness — Tesseract kadang lebih akurat pada hasil biner.
+     */
+    private function binarizeImage(string $path): ?string
+    {
+        if (!extension_loaded('gd')) {
+            return null;
+        }
+
+        $src = @imagecreatefromstring(@file_get_contents($path));
+        if (!$src) {
+            return null;
+        }
+
+        $srcW = imagesx($src);
+        $srcH = imagesy($src);
+        $targetWidth = 2000;
+        $newW = $srcW;
+        $newH = $srcH;
+        if ($srcW < $targetWidth) {
+            $newW = $targetWidth;
+            $newH = (int) round($srcH * ($targetWidth / $srcW));
+        }
+
+        $dst = imagecreatetruecolor($newW, $newH);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
+
+        if (function_exists('imageconvolution')) {
+            $sharpen = [[0, -1, 0], [-1, 5, -1], [0, -1, 0]];
+            imageconvolution($dst, $sharpen, 1, 0);
+        }
+
+        imagefilter($dst, IMG_FILTER_GRAYSCALE);
+        imagefilter($dst, IMG_FILTER_CONTRAST, -100);
+        imagefilter($dst, IMG_FILTER_BRIGHTNESS, 20);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_bin_') . '.png';
+        imagepng($dst, $tmp);
+
+        imagedestroy($src);
+        imagedestroy($dst);
+
+        return $tmp;
+    }
+
+    /**
+     * Skor kualitas teks OCR: prioritas NIK 16 digit, lalu pengenal field KTP,
+     * lalu jumlah kata yang terbaca.
+     */
+    private function scoreText(string $raw): int
+    {
+        $score = 0;
+
+        if (preg_match('/\b\d{16}\b/', $raw, $m)) {
+            $score += 120;
+        }
+        if (preg_match('/NIK\b/i', $raw)) {
+            $score += 12;
+        }
+        if (preg_match('/Nama/i', $raw)) {
+            $score += 12;
+        }
+        if (preg_match('/Tempat/i', $raw) && preg_match('/Lahir/i', $raw)) {
+            $score += 12;
+        }
+        if (preg_match('/Jenis Kelamin|LAKI|PEREMPUAN/i', $raw)) {
+            $score += 10;
+        }
+        if (preg_match('/Pekerjaan/i', $raw)) {
+            $score += 8;
+        }
+        if (preg_match('/Alamat/i', $raw)) {
+            $score += 8;
+        }
+
+        $score += min(str_word_count($raw), 60);
+
+        return $score;
+    }
+
+    public function tesseractAvailable(): bool
+    {
+        return $this->findTesseract() !== null;
+    }
+
+    /**
      * Execute Tesseract on the image and return raw text.
      */
-    private function runTesseract(string $path): string
+    private function runTesseract(string $path, int $psm = 3): string
     {
         $bin = $this->findTesseract();
         if (!$bin) {
@@ -37,19 +273,12 @@ class KtpOcrService
             $langs = 'eng';
         }
 
-        $imagePath = $this->preprocessImage($path) ?? $path;
-
         // stdout only holds the recognized text; stderr is captured separately
-        $cmd = sprintf('%s %s stdout -l %s', escapeshellarg($bin), escapeshellarg($imagePath), $langs);
+        $cmd = sprintf('%s %s stdout -l %s --oem 1 --psm %d', escapeshellarg($bin), escapeshellarg($path), $langs, $psm);
         $stderrFile = tempnam(sys_get_temp_dir(), 'ktp_ocr_');
         exec($cmd . ' 2>' . escapeshellarg($stderrFile), $output, $exitCode);
         $stderr = file_get_contents($stderrFile);
         @unlink($stderrFile);
-
-        // Clean up the temp preprocessed image if it was created
-        if ($imagePath !== $path) {
-            @unlink($imagePath);
-        }
 
         if ($exitCode !== 0) {
             throw new \RuntimeException('Tesseract exited with code ' . $exitCode . ': ' . trim($stderr));

@@ -41,4 +41,10 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
     ],
 
+    'vision' => [
+        // Opsi future. Default OFF — OCR utama memakai Tesseract (gratis).
+        'enabled' => (bool) env('VISION_OCR_ENABLED', false),
+        'api_key' => env('GOOGLE_VISION_API_KEY'),
+    ],
+
 ];
