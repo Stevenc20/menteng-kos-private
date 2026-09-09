@@ -121,7 +121,7 @@ Route::middleware(['auth'])->prefix('tenant')->group(function () {
                             ->orderBy('due_date', 'asc')
                             ->first();
 
-        return Inertia\Inertia::render('Tenant/Dashboard', [
+        return Inertia::render('Tenant/Dashboard', [
             'tenancy' => $tenancy,
             'nextBilling' => $nextBilling
         ]);
