@@ -275,15 +275,13 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
             if (ocrData && !ocrData.error) {
                 const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.job, ocrData.address].filter(Boolean).length;
-                if (filled === 6) {
-                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil terbaca otomatis (${filled} data).` }));
-                } else if (filled > 2) {
-                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil dibaca (${filled} data). Silakan periksa dan lengkapi jika ada data yang belum sesuai.` }));
+                if (filled > 2) {
+                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil dibaca. Silakan periksa kembali sebelum melanjutkan.` }));
                 } else {
-                    setOcrStatus(s => ({ ...s, [errKey]: `Foto berhasil disimpan. Beberapa data belum dapat terbaca, silakan lengkapi secara manual.` }));
+                    setOcrStatus(s => ({ ...s, [errKey]: `Beberapa data KTP belum terbaca. Silakan lengkapi data yang kosong.` }));
                 }
             } else {
-                setOcrStatus(s => ({ ...s, [errKey]: 'Foto berhasil disimpan. Beberapa data belum dapat terbaca, silakan lengkapi secara manual.' }));
+                setOcrStatus(s => ({ ...s, [errKey]: 'Beberapa data KTP belum terbaca. Silakan lengkapi data yang kosong.' }));
             }
             return true;
         } catch (e) {

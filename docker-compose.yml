@@ -14,3 +14,11 @@ services:
       - ./docker/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     environment:
       - DB_CONNECTION=sqlite
+  ocr-service:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    container_name: menteng-kos-ocr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
