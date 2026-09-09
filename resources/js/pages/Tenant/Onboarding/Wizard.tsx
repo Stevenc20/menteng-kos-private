@@ -232,18 +232,25 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const prefix = occupant === 1 ? 'ktp_1' : 'ktp_2';
             const ocrData = json.ocr?.[`ktp_${occupant}`];
 
-            setData(`${prefix}_photo`, null);
-            setData(`${prefix}_photo_path`, json[`${prefix}_photo`] ?? json.profile?.[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]);
+            // Build batched state update to prevent Inertia setData race conditions
+            const patch: Partial<typeof data> = {
+                [`${prefix}_photo`]: null as any,
+                [`${prefix}_photo_path`]: json[`${prefix}_photo`] ?? json.profile?.[`${prefix}_photo`] ?? data[`${prefix}_photo_path` as keyof typeof data]
+            };
 
-            // Source of truth = snapshot profil terbaru yang dikembalikan backend.
-            // Backend hanya meng-overwrite field yang terbaca OCR, sisanya tetap.
-            // Frontend TIDAK menebak-nebak dari ocrData langsung agar tidak ada
-            // desinkron dengan database.
             const occProfile = json.profile ?? {};
             for (const f of ['ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address', 'ktp_2_name', 'ktp_2_nik', 'ktp_2_birth_place', 'ktp_2_birth_date', 'ktp_2_job', 'ktp_2_address']) {
                 const v = occProfile[f];
-                if (typeof v === 'string') setData(f as keyof typeof data, v);
+                if (v !== null && v !== undefined && v !== '') {
+                    patch[f as keyof typeof data] = v as any;
+                }
             }
+
+            console.log('OCR RESPONSE PROFILE:', json.profile);
+            console.log('WIZARD FORM DATA PATCH AFTER OCR:', patch);
+
+            // Gunakan metode yang paling stabil: function update
+            setData(prev => ({ ...prev, ...patch }));
 
             if (ocrData && !ocrData.error) {
                 const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.job, ocrData.address].filter(Boolean).length;
@@ -466,6 +473,11 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                     </div>
                 );
             case 3:
+                console.log('STEP 3 FORM DATA:', {
+                    name: data.ktp_1_name,
+                    nik: data.ktp_1_nik,
+                    address: data.ktp_1_address
+                });
                 return (
                     <div className="space-y-4">
                         <h2 className="text-2xl font-bold tracking-tight mb-2">Informasi Pribadi (Penghuni 1)</h2>
