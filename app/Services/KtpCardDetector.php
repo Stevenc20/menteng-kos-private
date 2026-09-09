@@ -383,17 +383,18 @@ class KtpCardDetector
 
         $imgArea = $dw * $dh;
         $areaPct = $c['area'] / $imgArea;
-        if ($areaPct < 0.04) {
-            return null; // terlalu kecil untuk kartu dalam frame
+        if ($areaPct < 0.01) { // Lebih toleran untuk foto dari jauh (1% area)
+            return null;
         }
 
         $density = $c['area'] / ($cw * $ch);
-        if ($density < 0.35) {
-            return null; // blob terlalu jarang/tidak teratur
+        if ($density < 0.25) { // Lebih toleran
+            return null;
         }
 
-        $aspect = $cw / $ch;
-        if ($aspect < 1.15 || $aspect > 2.1) {
+        // Hitung aspect ratio tanpa peduli orientasi potret/landscape (KTP portrait = sama rasio)
+        $aspect = max($cw, $ch) / min($cw, $ch);
+        if ($aspect < 1.10 || $aspect > 2.5) {
             return null;
         }
 

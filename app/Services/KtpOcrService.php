@@ -70,11 +70,18 @@ class KtpOcrService
         ]);
 
         $temps = [];
+        $optPath = $this->optimizeImageSize($path);
+        if ($optPath !== null && $optPath !== $path) {
+            $temps[] = $optPath;
+        } else {
+            $optPath = $path;
+        }
+
         $crop = null;
 
         if (extension_loaded('gd')) {
             $detector = app(KtpCardDetector::class);
-            $card = $detector->detect($path);
+            $card = $detector->detect($optPath);
 
             if ($card !== null) {
                 Log::info('KTP OCR card detected', [
@@ -83,7 +90,7 @@ class KtpOcrService
                     'threshold' => $card['threshold'] ?? null,
                 ]);
 
-                $crop = $detector->warp($path, $card['corners']);
+                $crop = $detector->warp($optPath, $card['corners']);
                 if ($crop !== null) {
                     $temps[] = $crop;
                 }
@@ -93,7 +100,7 @@ class KtpOcrService
         }
 
         $attempts = [];
-        $variants = $this->buildVariants($path, $crop, $temps);
+        $variants = $this->buildVariants($optPath, $crop, $temps);
         
         foreach ($variants as $label => $image) {
             $psms = str_starts_with($label, 'rot') ? [6] : [3, 4, 6];
@@ -201,17 +208,11 @@ class KtpOcrService
             }
         }
 
-        // Always keep original (maybe resized)
-        $opt = $this->optimizeImageSize($path);
-        if ($opt !== null && $opt !== $path) {
-            $temps[] = $opt;
-            $variants['original_opt'] = $opt;
-        } else {
-            $variants['original'] = $path;
-        }
+        // Always keep original (which is already optimized now)
+        $variants['original'] = $path;
 
         // Grayscale contrast
-        $gray = $this->preprocessImage($opt ?? $path);
+        $gray = $this->preprocessImage($path);
         if ($gray !== null) {
             $temps[] = $gray;
             $variants['gray'] = $gray;
