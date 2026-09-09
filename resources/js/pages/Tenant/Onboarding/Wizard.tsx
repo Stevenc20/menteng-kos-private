@@ -273,7 +273,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         });
     };
 
-    const buildStatementHTML = () => {
+    const buildStatementHTML = (signatures?: StatementParams['signatures']) => {
         // Single source of truth: services/statement (KAMAR vs KIOS)
         const params: StatementParams = {
             hasSecond: data.has_second_occupant,
@@ -299,6 +299,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             usaha: data.usaha,
             facilities: data.facilities,
             tanggal: indonesianToday(),
+            signatures,
         };
         return buildStatementTemplateHTML(isKiosk, params);
     };
@@ -340,15 +341,20 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             return;
         }
 
+        const sig1 = canvasDataUrl(sigPad1.current?.getCanvas?.());
+        const sig2 = data.has_second_occupant ? canvasDataUrl(sigPad2.current?.getCanvas?.()) : '';
+        const paraf1 = canvasDataUrl(parafPad1.current?.getCanvas?.());
+        const paraf2 = data.has_second_occupant ? canvasDataUrl(parafPad2.current?.getCanvas?.()) : '';
+
         const payload = {
             ...data,
-            document_html: buildStatementHTML(),
+            document_html: buildStatementHTML({ paraf1, paraf2, sig1, sig2 }),
             due_date_day: dueNum,
             denda_per_day: String(dendaNum),
-            signature_1: canvasDataUrl(sigPad1.current?.getCanvas?.()),
-            paraf_1: canvasDataUrl(parafPad1.current?.getCanvas?.()),
-            signature_2: data.has_second_occupant ? canvasDataUrl(sigPad2.current?.getCanvas?.()) : '',
-            paraf_2: data.has_second_occupant ? canvasDataUrl(parafPad2.current?.getCanvas?.()) : '',
+            signature_1: sig1,
+            paraf_1: paraf1,
+            signature_2: sig2,
+            paraf_2: paraf2,
         };
 
         router.post('/tenant/onboarding/agreement', payload);

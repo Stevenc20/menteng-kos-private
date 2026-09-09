@@ -50,8 +50,10 @@ class OnboardingController extends Controller
         
         // If agreement is already submitted, show waiting page
         if (in_array($tenancy->status, ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
+            $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
             return Inertia::render('Tenant/Onboarding/WaitingApproval', [
-                'tenancy' => $tenancy
+                'tenancy' => $tenancy,
+                'agreement' => $agreement
             ]);
         }
 

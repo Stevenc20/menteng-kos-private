@@ -45,6 +45,14 @@ export interface StatementParams {
     usaha: string;             // Kios: jenis usaha
     facilities: string[];      // default dari property.facilities
     tanggal: string;           // "09 September 2026"
+    // Gambar digital (data URL) disematkan saat submit sehingga dokumen tersimpan
+    // menampilkan paraf & tanda tangan asli (bukan placeholder).
+    signatures?: {
+        paraf1?: string;
+        paraf2?: string;
+        sig1?: string;
+        sig2?: string;
+    };
 }
 
 const RESPONSIVE_STYLE = `
@@ -69,7 +77,7 @@ const identityTableHTML = (rows: [string, string][]) => `
         </tbody>
     </table>`;
 
-const pageFrameHTML = (num: number, inner: string, header?: string, parafY?: string) => `
+const pageFrameHTML = (num: number, inner: string, header?: string, parafY?: string, paraf1Img?: string, paraf2Img?: string) => `
     <div style="position:relative;width:100%;max-width:794px;margin:0 auto 22px;min-height:1122px;padding:22px 9% 56px;box-sizing:border-box;border:1px solid #ddd;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <span style="font-style:italic;">Menteng Kost</span>
@@ -78,8 +86,12 @@ const pageFrameHTML = (num: number, inner: string, header?: string, parafY?: str
         ${inner}
         <div style="position:absolute;bottom:16px;left:0;right:0;text-align:center;">${num}</div>
         ${parafY ? `
-            <div style="position:absolute;left:1.5%;top:${parafY};font-size:11px;">Paraf (1)</div>
-            <div style="position:absolute;right:1.5%;top:${parafY};font-size:11px;">Paraf (2)</div>
+            <div style="position:absolute;left:1.5%;top:${parafY};">
+                ${paraf1Img ? `<img src="${paraf1Img}" alt="Paraf (1)" style="max-height:64px;max-width:120px;border:1px solid #ccc;background:#fff;display:block;" />` : '<div style="font-size:11px;">Paraf (1)</div>'}
+            </div>
+            <div style="position:absolute;right:1.5%;top:${parafY};">
+                ${paraf2Img ? `<img src="${paraf2Img}" alt="Paraf (2)" style="max-height:64px;max-width:120px;border:1px solid #ccc;background:#fff;display:block;" />` : '<div style="font-size:11px;">Paraf (2)</div>'}
+            </div>
         ` : ''}
     </div>`;
 
@@ -87,14 +99,14 @@ const signatureColumnsHTML = (p: StatementParams) => `
     <div style="display:flex;gap:50px;margin-top:26px;">
         <div style="flex:1;max-width:300px;">
             <p>Tanda Tangan (1),</p>
-            <div style="height:110px;"></div>
+            ${p.signatures?.sig1 ? `<img src="${p.signatures.sig1}" alt="Tanda Tangan (1)" style="width:100%;max-width:280px;max-height:130px;object-fit:contain;margin-top:6px;background:#fff;border:1px solid #ddd;display:block;" />` : '<div style="height:110px;"></div>'}
             <p>Nama: <strong>${esc(p.occ1.name)}</strong>.</p>
             <p>No. KTP: <strong>${esc(p.occ1.nik)}</strong>.</p>
         </div>
         ${p.hasSecond ? `
             <div style="flex:1;max-width:300px;">
                 <p>Tanda Tangan (2),</p>
-                <div style="height:110px;"></div>
+                ${p.signatures?.sig2 ? `<img src="${p.signatures.sig2}" alt="Tanda Tangan (2)" style="width:100%;max-width:280px;max-height:130px;object-fit:contain;margin-top:6px;background:#fff;border:1px solid #ddd;display:block;" />` : '<div style="height:110px;"></div>'}
                 <p>Nama: <strong>${esc(p.occ2.name)}</strong>.</p>
                 <p>No. KTP: <strong>${esc(p.occ2.nik)}</strong>.</p>
             </div>
@@ -205,8 +217,8 @@ export const roomStatementHTML = (p: StatementParams) => {
 
     return `${RESPONSIVE_STYLE}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
-        ${pageFrameHTML(1, p1, meteranBoxHTML(p), '63%')}
-        ${pageFrameHTML(2, p2, undefined, '35%')}
+        ${pageFrameHTML(1, p1, meteranBoxHTML(p), '63%', p.signatures?.paraf1, p.signatures?.paraf2)}
+        ${pageFrameHTML(2, p2, undefined, '35%', p.signatures?.paraf1, p.signatures?.paraf2)}
         ${pageFrameHTML(3, p3)}
     </div>`;
 };
@@ -296,8 +308,8 @@ export const kioskStatementHTML = (p: StatementParams) => {
 
     return `${RESPONSIVE_STYLE}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
-        ${pageFrameHTML(1, p1, meteranBoxHTML(p), '78%')}
-        ${pageFrameHTML(2, p2, undefined, '52%')}
+        ${pageFrameHTML(1, p1, meteranBoxHTML(p), '78%', p.signatures?.paraf1, p.signatures?.paraf2)}
+        ${pageFrameHTML(2, p2, undefined, '52%', p.signatures?.paraf1, p.signatures?.paraf2)}
     </div>`;
 };
 

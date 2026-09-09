@@ -1,12 +1,17 @@
 import { Head } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 
-export default function WaitingApproval() {
+interface WaitingApprovalProps {
+    tenancy?: any;
+    agreement: any;
+}
+
+export default function WaitingApproval({ agreement }: WaitingApprovalProps) {
     return (
         <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-6 font-sans">
             <Head title="Menunggu Persetujuan | Menteng Kos Private" />
-            
-            <motion.div 
+
+            <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-white max-w-md w-full p-8 rounded-2xl shadow-sm border border-neutral-200 text-center"
@@ -16,10 +21,10 @@ export default function WaitingApproval() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
-                
+
                 <h1 className="text-2xl font-bold tracking-tight mb-3">Menunggu Persetujuan</h1>
                 <p className="text-neutral-500 mb-8">
-                    Terima kasih telah melengkapi data dan menandatangani Surat Pernyataan. Saat ini data Anda sedang direviu oleh Administrator. 
+                    Terima kasih telah melengkapi data dan menandatangani Surat Pernyataan. Saat ini data Anda sedang direviu oleh Administrator.
                 </p>
 
                 <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 text-sm text-neutral-600 text-left space-y-3">
@@ -39,6 +44,15 @@ export default function WaitingApproval() {
                     </button>
                 </form>
             </motion.div>
+
+            {agreement?.document_html && (
+                <div className="mt-8 w-full max-w-3xl">
+                    <h2 className="text-lg font-bold tracking-tight mb-3 text-neutral-800">Surat Pernyataan &amp; Tanda Tangan Anda</h2>
+                    <div className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-6 shadow-sm text-sm overflow-x-hidden"
+                         dangerouslySetInnerHTML={{ __html: agreement.document_html }}
+                    />
+                </div>
+            )}
         </div>
     );
 }

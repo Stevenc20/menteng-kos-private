@@ -241,6 +241,7 @@ class AdminController extends Controller
         $tenancy = Tenancy::with(['user', 'property'])->findOrFail($id);
         $profile = \App\Models\TenantProfile::where('user_id', $tenancy->user_id)->first();
         $agreement = \App\Models\Agreement::where('tenancy_id', $tenancy->id)->first();
+        $signatures = \App\Models\AgreementSignature::where('agreement_id', $agreement?->id)->get();
         
         $moveInDoc = \App\Models\RoomDocumentation::where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
         $waterMeter = \App\Models\WaterMeter::where('tenancy_id', $tenancy->id)->first();
@@ -249,6 +250,7 @@ class AdminController extends Controller
             'tenancy' => $tenancy,
             'profile' => $profile,
             'agreement' => $agreement,
+            'signatures' => $signatures,
             'moveInDoc' => $moveInDoc,
             'waterMeter' => $waterMeter
         ]);

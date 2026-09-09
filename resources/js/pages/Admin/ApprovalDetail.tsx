@@ -7,11 +7,12 @@ interface ApprovalDetailProps {
     tenancy: any;
     profile: any;
     agreement: any;
+    signatures: any[];
     moveInDoc: any;
     waterMeter: any;
 }
 
-export default function ApprovalDetail({ tenancy, profile, agreement, moveInDoc, waterMeter }: ApprovalDetailProps) {
+export default function ApprovalDetail({ tenancy, profile, agreement, signatures, moveInDoc, waterMeter }: ApprovalDetailProps) {
     const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(val));
 
     // Data Approval Form (Simple Post)
@@ -116,10 +117,43 @@ export default function ApprovalDetail({ tenancy, profile, agreement, moveInDoc,
                                 </div>
                             </div>
                             
-                            {/* In real app, we fetch images via private API route, omitted for simple UI demo */}
-                            <div className="mb-6 p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
-                                (Gambar KTP, Surat Pernyataan HTML, dan Canvas TTD dirender di sini)
-                            </div>
+                            {/* Surat Pernyataan + TTD asli yang dikirim tenant */}
+                            {agreement?.document_html ? (
+                                <div className="mb-6">
+                                    <p className="text-sm font-medium text-neutral-500 mb-2">Surat Pernyataan &amp; Tanda Tangan Tenant</p>
+                                    <div className="bg-neutral-50 rounded-xl border border-neutral-200 p-4 text-sm overflow-x-hidden"
+                                         dangerouslySetInnerHTML={{ __html: agreement.document_html }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="mb-6 p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
+                                    (Belum ada Surat Pernyataan dari tenant)
+                                </div>
+                            )}
+
+                            {signatures?.length > 0 && (
+                                <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {signatures.map((s: any) => (
+                                        <div key={s.id} className="bg-neutral-50 rounded-xl border border-neutral-200 p-4">
+                                            <p className="text-sm font-medium text-neutral-500 mb-3">
+                                                {s.occupant_type === 'OCCUPANT_1' ? 'Penghuni 1' : 'Penghuni 2'}
+                                            </p>
+                                            {s.signature_image && (
+                                                <div className="mb-3">
+                                                    <p className="text-xs text-neutral-400 mb-1">Tanda Tangan</p>
+                                                    <img src={s.signature_image} alt={s.occupant_type} className="w-full max-w-[280px] border border-neutral-300 bg-white rounded" />
+                                                </div>
+                                            )}
+                                            {s.paraf_image && (
+                                                <div>
+                                                    <p className="text-xs text-neutral-400 mb-1">Paraf</p>
+                                                    <img src={s.paraf_image} alt={s.occupant_type} className="w-24 border border-neutral-300 bg-white rounded" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
                             <button onClick={approveData} className="w-full bg-neutral-900 text-white font-medium py-3 rounded-lg hover:bg-neutral-800 transition-colors">
                                 Approve Data & Agreement
