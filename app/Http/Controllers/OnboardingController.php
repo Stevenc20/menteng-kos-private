@@ -253,19 +253,21 @@ class OnboardingController extends Controller
                     Log::info('KTP OCR started for occupant 1');
                     $ocr = $ocrService->extract($absolutePath);
                     Log::info('KTP OCR parsed result for occupant 1', ['data' => $ocr]);
-                    if ($ocr['name']) $profile->ktp_1_name = $ocr['name'];
-                    if ($ocr['nik']) $profile->ktp_1_nik = $ocr['nik'];
-                    if ($ocr['birth_place']) $profile->ktp_1_birth_place = $ocr['birth_place'];
-                    if ($ocr['birth_date']) $profile->ktp_1_birth_date = $ocr['birth_date'];
-                    if ($ocr['job']) $profile->ktp_1_job = $ocr['job'];
-                    if ($ocr['address']) $profile->ktp_1_address = $ocr['address'];
-                    $profile->save();
-                    Log::info('KTP OCR result saved to tenant_profiles for occupant 1');
                     $ocrResults['ktp_1'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 1: ' . $e->getMessage());
+                    $ocr = ['name' => '', 'nik' => '', 'birth_place' => '', 'birth_date' => '', 'gender' => '', 'job' => '', 'address' => ''];
                     $ocrResults['ktp_1'] = ['error' => 'OCR processing failed'];
                 }
+
+                // Foto terbaru adalah sumber kebenaran: seluruh field identitas
+                // di-overwrite dengan hasil OCR (boleh kosong) agar data penghuni
+                // sebelumnya (mis. "ALDO") tidak pernah tertinggal di formulir.
+                foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
+                    $profile->{'ktp_1_' . $field} = $ocr[$field] ?? '';
+                }
+                $profile->save();
+                Log::info('KTP OCR result saved to tenant_profiles for occupant 1');
             }
         }
 
@@ -277,19 +279,19 @@ class OnboardingController extends Controller
                     Log::info('KTP OCR started for occupant 2');
                     $ocr = $ocrService->extract($absolutePath);
                     Log::info('KTP OCR parsed result for occupant 2', ['data' => $ocr]);
-                    if ($ocr['name']) $profile->ktp_2_name = $ocr['name'];
-                    if ($ocr['nik']) $profile->ktp_2_nik = $ocr['nik'];
-                    if ($ocr['birth_place']) $profile->ktp_2_birth_place = $ocr['birth_place'];
-                    if ($ocr['birth_date']) $profile->ktp_2_birth_date = $ocr['birth_date'];
-                    if ($ocr['job']) $profile->ktp_2_job = $ocr['job'];
-                    if ($ocr['address']) $profile->ktp_2_address = $ocr['address'];
-                    $profile->save();
-                    Log::info('KTP OCR result saved to tenant_profiles for occupant 2');
                     $ocrResults['ktp_2'] = $ocr;
                 } catch (\Exception $e) {
                     Log::error('KTP OCR failed for occupant 2: ' . $e->getMessage());
+                    $ocr = ['name' => '', 'nik' => '', 'birth_place' => '', 'birth_date' => '', 'gender' => '', 'job' => '', 'address' => ''];
                     $ocrResults['ktp_2'] = ['error' => 'OCR processing failed'];
                 }
+
+                // Sama seperti penghuni 1: overwrite agar tidak ada data lama tersisa.
+                foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
+                    $profile->{'ktp_2_' . $field} = $ocr[$field] ?? '';
+                }
+                $profile->save();
+                Log::info('KTP OCR result saved to tenant_profiles for occupant 2');
             }
         }
 

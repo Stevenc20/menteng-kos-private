@@ -145,14 +145,33 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, occupantNum: 1 | 2) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const previewUrl = URL.createObjectURL(file);
-            if (occupantNum === 1) {
-                setData(d => ({ ...d, ktp_1_photo: file, ktp_1_photo_preview: previewUrl, ktp_1_photo_path: '' }));
-            } else {
-                setData(d => ({ ...d, ktp_2_photo: file, ktp_2_photo_preview: previewUrl, ktp_2_photo_path: '' }));
-            }
-        }
+        if (!file) return;
+
+        // Foto yang baru dipilih adalah sumber data, jadi data lama harus dibuang
+        // agar tidak ada sisa data penghuni sebelumnya (mis. orang yang lalu).
+        const prefix = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
+        const errKey = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
+        const previewUrl = URL.createObjectURL(file);
+
+        setData(d => ({
+            ...d,
+            [`${prefix}_photo`]: file,
+            [`${prefix}_photo_preview`]: previewUrl,
+            [`${prefix}_photo_path`]: '',
+            [`${prefix}_name`]: '',
+            [`${prefix}_nik`]: '',
+            [`${prefix}_birth_place`]: '',
+            [`${prefix}_birth_date`]: '',
+            [`${prefix}_job`]: '',
+            [`${prefix}_address`]: '',
+        }));
+        setOcrStatus(s => ({ ...s, [errKey]: 'Membaca data KTP...' }));
+        setUploadError(s => ({ ...s, [errKey]: '' }));
+        setUploading(s => ({ ...s, [errKey]: true }));
+
+        // Upload + OCR langsung saat foto dipilih, bukan menunggu tombol "Lanjut",
+        // supaya data KTP otomatis masuk ke field.
+        void uploadKtp(occupantNum, file);
     };
 
     const getXsrfToken = () => {
@@ -160,8 +179,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         return match ? decodeURIComponent(match[2]) : '';
     };
 
-    const uploadKtp = async (occupant: 1 | 2): Promise<boolean> => {
-        const file = occupant === 1 ? data.ktp_1_photo : data.ktp_2_photo;
+    const uploadKtp = async (occupant: 1 | 2, explicitFile?: File): Promise<boolean> => {
+        const file = explicitFile ?? (occupant === 1 ? data.ktp_1_photo : data.ktp_2_photo);
         const errKey = occupant === 1 ? 'ktp_1' : 'ktp_2';
         if (!file) return false;
 
@@ -206,9 +225,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             if (ocrData && !ocrData.error) {
                 const filled = [ocrData.name, ocrData.nik, ocrData.birth_place, ocrData.birth_date, ocrData.job, ocrData.address].filter(Boolean).length;
                 if (filled > 0) {
-                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP berhasil dipindai (${filled} field terisi). Silakan periksa di langkah berikutnya.` }));
+                    setOcrStatus(s => ({ ...s, [errKey]: `Data KTP terbaca otomatis (${filled} field terisi). Periksa & lengkapi di langkah berikutnya.` }));
                 } else {
-                    setOcrStatus(s => ({ ...s, [errKey]: 'Foto tersimpan, namun data tidak terbaca otomatis. Silakan isi manual.' }));
+                    setOcrStatus(s => ({ ...s, [errKey]: 'Foto tersimpan. Data tidak terbaca otomatis, silakan isi data secara manual.' }));
                 }
             } else {
                 setOcrStatus(s => ({ ...s, [errKey]: 'Foto tersimpan. Silakan isi data secara manual.' }));
@@ -366,9 +385,11 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 <div className="border-2 border-dashed border-neutral-300 rounded-2xl p-4 text-center bg-neutral-50">
                                     <img src={data.ktp_1_photo_preview} alt="KTP Preview" className="max-h-56 mx-auto rounded-lg shadow-sm" />
                                 </div>
-                                {data.ktp_1_photo_path && (
-                                    <p className="text-xs text-green-600 font-medium text-center">
-                                        {ocrStatus.ktp_1 || 'Foto KTP berhasil tersimpan.'}
+                                {data.ktp_1_photo_preview && (
+                                    <p className={`text-xs font-medium text-center ${uploading.ktp_1 ? 'text-neutral-500' : 'text-green-600'}`}>
+                                        {uploading.ktp_1
+                                            ? 'Membaca data KTP dari foto...'
+                                            : (ocrStatus.ktp_1 || 'Foto KTP berhasil tersimpan.')}
                                     </p>
                                 )}
                                 <div className="flex flex-wrap gap-3 justify-center">
@@ -481,8 +502,12 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 )}
                                 <input ref={cameraInput2} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
                                 <input ref={galleryInput2} type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
-                                {data.ktp_2_photo_path && ocrStatus.ktp_2 && (
-                                    <p className="text-xs text-green-600 font-medium text-center">{ocrStatus.ktp_2}</p>
+                                {data.ktp_2_photo_preview && (
+                                    <p className={`text-xs font-medium text-center ${uploading.ktp_2 ? 'text-neutral-500' : 'text-green-600'}`}>
+                                        {uploading.ktp_2
+                                            ? 'Membaca data KTP dari foto...'
+                                            : (ocrStatus.ktp_2 || 'Foto KTP berhasil tersimpan.')}
+                                    </p>
                                 )}
                                 {uploadError.ktp_2 && <p className="text-red-500 text-sm font-medium">{uploadError.ktp_2}</p>}
                             </div>

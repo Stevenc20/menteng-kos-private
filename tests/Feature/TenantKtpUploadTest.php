@@ -185,3 +185,35 @@ test('uploading a replacement KTP deletes the old file only after a successful s
         \App\Models\TenantProfile::flushEventListeners();
     }
 });
+
+test('uploading a new KTP photo replaces stale stored identity fields', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    // Simulate a profile carrying the previous occupant's data (e.g. "ALDO").
+    TenantProfile::create([
+        'user_id' => $user->id,
+        'ktp_1_name' => 'ALDO ANDREASS',
+        'ktp_1_nik' => '3171xxxxxxxxxxxx',
+        'ktp_1_birth_place' => 'Jakarta',
+        'ktp_1_job' => 'Wiraswasta',
+        'ktp_1_address' => 'Jl. Lama No. 1',
+    ]);
+
+    // The fixture image is a tiny non-OCR-able placeholder, so OCR yields blank
+    // fields — the stale stored identity must NOT survive the new upload.
+    $response = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload('baru.jpg'),
+    ]);
+    $response->assertOk()->assertJson(['ok' => true]);
+
+    $profile = TenantProfile::where('user_id', $user->id)->first();
+    expect($profile->ktp_1_name)->toBe('');
+    expect($profile->ktp_1_nik)->toBe('');
+    expect($profile->ktp_1_birth_place)->toBe('');
+    expect($profile->ktp_1_job)->toBe('');
+    expect($profile->ktp_1_address)->toBe('');
+    expect($profile->ktp_1_photo)->not->toBeNull();
+});
