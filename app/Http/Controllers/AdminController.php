@@ -129,13 +129,16 @@ class AdminController extends Controller
             if ($request->hasFile('video')) {
                 $video = $request->file('video');
                 $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
-                $path = $video->storeAs("public/properties/{$property->id}/videos", $filename);
+                
+                // Store on public disk
+                $publicRelativePath = "properties/{$property->id}/videos/{$filename}";
+                \Illuminate\Support\Facades\Storage::disk('public')->putFileAs("properties/{$property->id}/videos", $video, $filename);
                 
                 $media = new \App\Models\PropertyMedia();
                 $media->property_id = $property->id;
                 $media->type = 'VIDEO';
-                $media->original_path = $path;
-                $media->public_path = \Illuminate\Support\Facades\Storage::url($path);
+                $media->original_path = $publicRelativePath;
+                $media->public_path = $publicRelativePath; // Store relative path
                 $media->is_cover = false;
                 $media->sort_order = $property->media()->count();
                 $media->save();
@@ -191,14 +194,40 @@ class AdminController extends Controller
     /**
      * Display the Tenants and Invitations page.
      */
-    public function tenants()
+    public function tenants(Request $request)
     {
-        // Load tenancies along with user and property for the UI
-        $tenancies = Tenancy::with(['user', 'property'])->orderBy('created_at', 'desc')->get();
+        // Filter status via ?status= (all|pending|active|rejected)
+        $filter = $request->query('status', 'all');
+
+        $query = Tenancy::with(['user', 'property'])->orderBy('created_at', 'desc');
+
+        switch ($filter) {
+            case 'pending':
+                $query->where('status', 'PENDING_ADMIN_APPROVAL')->where('approval_status', 'PENDING');
+                break;
+            case 'active':
+                $query->where('status', 'ACTIVE');
+                break;
+            case 'rejected':
+                $query->where('approval_status', 'REJECTED');
+                break;
+        }
+
+        $tenancies = $query->get();
+
+        $counts = [
+            'total' => Tenancy::count(),
+            'pending' => Tenancy::where('status', 'PENDING_ADMIN_APPROVAL')->where('approval_status', 'PENDING')->count(),
+            'active' => Tenancy::where('status', 'ACTIVE')->count(),
+            'rejected' => Tenancy::where('approval_status', 'REJECTED')->count(),
+        ];
+
         $availableProperties = Property::where('status', 'AVAILABLE')->get();
 
         return Inertia::render('Admin/Tenants', [
             'tenancies' => $tenancies,
+            'counts' => $counts,
+            'activeFilter' => $filter,
             'availableProperties' => $availableProperties
         ]);
     }
@@ -245,15 +274,101 @@ class AdminController extends Controller
         
         $moveInDoc = \App\Models\RoomDocumentation::where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
         $waterMeter = \App\Models\WaterMeter::where('tenancy_id', $tenancy->id)->first();
+        $approvedBy = $tenancy->approved_by ? User::find($tenancy->approved_by) : null;
 
         return Inertia::render('Admin/ApprovalDetail', [
             'tenancy' => $tenancy,
             'profile' => $profile,
             'agreement' => $agreement,
             'signatures' => $signatures,
+            'approvedBy' => $approvedBy,
             'moveInDoc' => $moveInDoc,
             'waterMeter' => $waterMeter
         ]);
+    }
+
+    /**
+     * Serve a tenant's private KTP photo to admin reviewers.
+     */
+    public function getTenantKtpPhoto($id, $kind)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+        $profile = \App\Models\TenantProfile::where('user_id', $tenancy->user_id)->firstOrFail();
+
+        $path = $kind === '2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
+
+        if (!$path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
+            abort(404);
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('local')->response($path, basename($path), ['Content-Type' => 'image/*']);
+    }
+
+    /**
+     * Approve a PENDING_ADMIN_APPROVAL tenant: activate account + occupied unit.
+     */
+    public function approveTenant($id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+
+        abort_unless($tenancy->status === 'PENDING_ADMIN_APPROVAL', 422, 'Tenant tidak sedang dalam status menunggu persetujuan.');
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($tenancy) {
+            $tenancy->update([
+                'status' => 'ACTIVE',
+                'approval_status' => 'APPROVED',
+                'approved_at' => now(),
+                'approved_by' => \Illuminate\Support\Facades\Auth::id(),
+                'rejection_reason' => null,
+            ]);
+
+            $property = Property::find($tenancy->property_id);
+            if ($property && $property->status !== 'OCCUPIED') {
+                $property->update(['status' => 'OCCUPIED']);
+            }
+        });
+
+        return redirect()->route('admin.tenants.show', $tenancy->id)->with('success', 'Tenant disetujui dan diaktifkan.');
+    }
+
+    /**
+     * Reject / ask revision for a pending tenant. Reason stored for tenant to see.
+     */
+    public function rejectTenant(Request $request, $id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+
+        abort_unless($tenancy->status === 'PENDING_ADMIN_APPROVAL', 422, 'Tenant tidak sedang dalam status menunggu persetujuan.');
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|max:2000',
+        ]);
+
+        $tenancy->update([
+            'approval_status' => 'REJECTED',
+            'rejection_reason' => $validated['rejection_reason'],
+            'approved_at' => null,
+            'approved_by' => null,
+        ]);
+
+        return redirect()->back()->with('success', 'Tenant ditolak dan diminta perbaikan.');
+    }
+
+    /**
+     * Reopen a rejected approval back into the review queue.
+     */
+    public function reopenApproval($id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+
+        abort_unless($tenancy->approval_status === 'REJECTED', 422, 'Tenant tidak sedang dalam status ditolak.');
+
+        $tenancy->update([
+            'approval_status' => 'PENDING',
+            'rejection_reason' => null,
+        ]);
+
+        return redirect()->back()->with('success', 'Review tenant dibuka kembali.');
     }
 
     /**

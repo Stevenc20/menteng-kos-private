@@ -9,7 +9,7 @@ type PropertyStatus = 'AVAILABLE' | 'OCCUPIED' | 'UPCOMING_AVAILABLE' | 'MAINTEN
 interface PropertyMedia {
     id: number;
     type: 'IMAGE' | 'VIDEO';
-    public_path: string;
+    url: string;
     is_cover: boolean;
 }
 
@@ -110,7 +110,7 @@ export default function Welcome({ properties }: WelcomeProps) {
                                         >
                                             {cover && cover.type === 'IMAGE' ? (
                                                 <img 
-                                                    src={cover.public_path} 
+                                                    src={cover.url} 
                                                     alt={property.name}
                                                     draggable="false"
                                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"

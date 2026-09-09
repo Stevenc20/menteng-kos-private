@@ -53,7 +53,7 @@ Route::get('/dashboard', function () {
 })->middleware('auth')->name('dashboard');
 
 // Admin Routes
-Route::middleware(['auth'])->prefix('admin')->group(function () {
+Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('admin.dashboard');
     
     // Properties
@@ -72,7 +72,14 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::get('/tenants', [\App\Http\Controllers\AdminController::class, 'tenants'])->name('admin.tenants');
     Route::post('/tenants/invite', [\App\Http\Controllers\AdminController::class, 'inviteTenant'])->name('admin.tenants.invite');
 
-    // Tenant Approvals & Onboarding (Phase 5)
+    // Admin Approval Workflow
+    Route::get('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.tenants.show');
+    Route::post('/tenants/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveTenant'])->name('admin.tenants.approve');
+    Route::post('/tenants/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
+    Route::post('/tenants/{id}/reopen', [\App\Http\Controllers\AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
+    Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
+
+    // Tenant Approvals & Onboarding (Phase 5 - legacy multi-step)
     Route::get('/approvals/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.approvals.show');
     Route::post('/approvals/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveData'])->name('admin.approvals.approve');
     Route::post('/approvals/{id}/move-in-doc', [\App\Http\Controllers\AdminController::class, 'storeMoveInDoc'])->name('admin.approvals.moveInDoc');
@@ -96,6 +103,7 @@ Route::middleware(['auth'])->prefix('tenant')->group(function () {
     Route::post('/onboarding/ktp', [\App\Http\Controllers\OnboardingController::class, 'uploadKtp'])->name('tenant.onboarding.ktp');
     Route::get('/onboarding/ktp/{kind}', [\App\Http\Controllers\OnboardingController::class, 'getKtpPhoto'])->name('tenant.onboarding.ktp.photo');
     Route::post('/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('tenant.onboarding.agreement');
+    Route::post('/onboarding/revise', [\App\Http\Controllers\OnboardingController::class, 'revise'])->name('tenant.onboarding.revise');
     
     // Tenant Dashboard (Active)
     Route::get('/dashboard', function () {

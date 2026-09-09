@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { 
     AdminModal, 
@@ -25,8 +25,11 @@ interface Tenancy {
     agreed_price: string;
     move_in_date: string;
     status: string;
+    approval_status: string;
+    rejection_reason: string | null;
+    created_at: string;
     user: { name: string; email: string };
-    property: { name: string };
+    property: { name: string; type: string };
 }
 
 interface Property {
@@ -35,12 +38,36 @@ interface Property {
     normal_price: string;
 }
 
+interface Counts {
+    total: number;
+    pending: number;
+    active: number;
+    rejected: number;
+}
+
 interface TenantsProps {
     tenancies: Tenancy[];
+    counts: Counts;
+    activeFilter: string;
     availableProperties: Property[];
 }
 
-export default function Tenants({ tenancies, availableProperties }: TenantsProps) {
+const FILTERS = [
+    { key: 'all', label: 'Semua' },
+    { key: 'pending', label: 'Menunggu Approval' },
+    { key: 'active', label: 'Aktif' },
+    { key: 'rejected', label: 'Perlu Perbaikan / Ditolak' },
+];
+
+function badgeInfo(t: Tenancy) {
+    if (t.approval_status === 'REJECTED') return { label: 'Perlu Perbaikan', cls: 'bg-red-50 text-red-700' };
+    if (t.status === 'PENDING_ADMIN_APPROVAL') return { label: 'Menunggu Approval', cls: 'bg-amber-50 text-amber-800' };
+    if (t.status === 'ACTIVE') return { label: 'Aktif', cls: 'bg-emerald-50 text-emerald-700' };
+    if (t.status === 'INVITED') return { label: 'Diundang', cls: 'bg-purple-50 text-purple-700' };
+    return { label: t.status.replace(/_/g, ' '), cls: 'bg-gray-100 text-gray-600' };
+}
+
+export default function Tenants({ tenancies, counts, activeFilter, availableProperties }: TenantsProps) {
     const [showModal, setShowModal] = useState(false);
     
     const { data, setData, post, processing, reset, errors } = useForm({
@@ -70,16 +97,60 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
 
     const selectedProperty = availableProperties?.find(p => p.id.toString() === data.property_id);
 
+    const setFilter = (key: string) => {
+        router.get('/admin/tenants', key === 'all' ? {} : { status: key }, { preserveState: true, replace: true });
+    };
+
+    const stats = [
+        { label: 'Menunggu Approval', value: counts?.pending ?? 0, cls: 'bg-amber-50 border-amber-100 text-amber-800' },
+        { label: 'Aktif', value: counts?.active ?? 0, cls: 'bg-emerald-50 border-emerald-100 text-emerald-700' },
+        { label: 'Perlu Perbaikan', value: counts?.rejected ?? 0, cls: 'bg-red-50 border-red-100 text-red-700' },
+        { label: 'Total Tenant', value: counts?.total ?? 0, cls: 'bg-neutral-50 border-neutral-100 text-neutral-700' },
+    ];
+
     return (
         <AdminLayout title="Tenant & Undangan">
             <div className="flex justify-between items-end mb-8">
                 <div>
                     <h1 className="text-[28px] md:text-[32px] font-bold tracking-tight text-[#1A1A18]">Manajemen Tenant</h1>
-                    <p className="text-[14px] md:text-[15px] text-[#6B6B67] mt-1.5">Undang calon penghuni dan pantau status siklus sewa mereka.</p>
+                    <p className="text-[14px] md:text-[15px] text-[#6B6B67] mt-1.5">Undang calon penghuni, review onboarding, dan pantau status siklus sewa mereka.</p>
                 </div>
                 <AdminButton onClick={() => setShowModal(true)}>
                     + Buat Undangan
                 </AdminButton>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                {stats.map(s => (
+                    <div key={s.label} className={`rounded-2xl border p-5 ${s.cls}`}>
+                        <div className="text-3xl font-bold">{s.value}</div>
+                        <div className="text-sm font-medium mt-1">{s.label}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap gap-2 mb-6">
+                {FILTERS.map(f => {
+                    const active = (activeFilter || 'all') === f.key;
+                    return (
+                        <button
+                            key={f.key}
+                            onClick={() => setFilter(f.key)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                                active
+                                    ? 'bg-[#1A1A18] text-white border-[#1A1A18]'
+                                    : 'bg-white text-[#6B6B67] border-[#E8E7E3] hover:border-[#1A1A18] hover:text-[#1A1A18]'
+                            }`}
+                        >
+                            {f.label}
+                            {f.key === 'pending' && (counts?.pending ?? 0) > 0 && (
+                                <span className="ml-2 px-1.5 py-0.5 text-[11px] rounded-full bg-amber-400 text-amber-950 font-bold">{counts.pending}</span>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Desktop Table View */}
@@ -87,37 +158,58 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
                 <table className="w-full text-left text-sm">
                     <thead className="bg-[#F7F7F5] text-[#6B6B67] border-b border-[#E8E7E3]">
                         <tr>
-                            <th className="px-6 py-4 font-medium">Email / Akun</th>
+                            <th className="px-6 py-4 font-medium">Tenant</th>
                             <th className="px-6 py-4 font-medium">Unit</th>
                             <th className="px-6 py-4 font-medium">Harga Deal</th>
                             <th className="px-6 py-4 font-medium">Tgl Masuk</th>
                             <th className="px-6 py-4 font-medium">Status</th>
+                            <th className="px-6 py-4 font-medium text-right">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E7E3]">
-                        {tenancies?.map((t) => (
-                            <tr key={t.id} className="hover:bg-[#F7F7F5] transition-colors">
-                                <td className="px-6 py-4">
-                                    <div className="font-medium text-[#1A1A18]">{t.user?.name || 'Unknown'}</div>
-                                    <div className="text-[#6B6B67]">{t.user?.email || '-'}</div>
-                                </td>
-                                <td className="px-6 py-4 font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</td>
-                                <td className="px-6 py-4 text-[#6B6B67]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</td>
-                                <td className="px-6 py-4 text-[#6B6B67]">{t.move_in_date}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2.5 py-1 text-[12px] font-medium rounded-full ${
-                                        t.status === 'INVITED' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
-                                        t.status === 'ACTIVE' ? 'bg-[#ECFDF5] text-[#047857]' :
-                                        'bg-[#F3F4F6] text-[#374151]'
-                                    }`}>
-                                        {t.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
+                        {tenancies?.map((t) => {
+                            const info = badgeInfo(t);
+                            const isPending = t.status === 'PENDING_ADMIN_APPROVAL' && t.approval_status !== 'REJECTED';
+                            return (
+                                <tr key={t.id} className="hover:bg-[#F7F7F5] transition-colors cursor-pointer" onClick={() => router.get(`/admin/tenants/${t.id}`)}>
+                                    <td className="px-6 py-4">
+                                        <div className="font-medium text-[#1A1A18]">{t.user?.name || 'Unknown'}</div>
+                                        <div className="text-[#6B6B67]">{t.user?.email || '-'}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</div>
+                                        <div className="text-xs text-[#8A8A84] uppercase tracking-wider">{t.property?.type || ''}</div>
+                                    </td>
+                                    <td className="px-6 py-4 text-[#6B6B67]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</td>
+                                    <td className="px-6 py-4 text-[#6B6B67]">{t.move_in_date}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2.5 py-1 text-[12px] font-medium rounded-full ${info.cls}`}>
+                                            {info.label}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                                        {isPending ? (
+                                            <button
+                                                onClick={() => router.get(`/admin/tenants/${t.id}`)}
+                                                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#1A1A18] text-white hover:bg-black transition-colors"
+                                            >
+                                                Review
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => router.get(`/admin/tenants/${t.id}`)}
+                                                className="px-4 py-1.5 text-xs font-medium rounded-lg border border-[#E8E7E3] text-[#6B6B67] hover:border-[#1A1A18] hover:text-[#1A1A18] transition-colors"
+                                            >
+                                                Lihat Detail
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                         {tenancies.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada tenant atau undangan.</td>
+                                <td colSpan={6} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada tenant atau undangan.</td>
                             </tr>
                         )}
                     </tbody>
@@ -126,37 +218,47 @@ export default function Tenants({ tenancies, availableProperties }: TenantsProps
 
             {/* Mobile Card View */}
             <div className="md:hidden flex flex-col gap-4">
-                {tenancies?.map((t) => (
-                    <div key={t.id} className="bg-white border border-[#E8E7E3] rounded-xl p-5 shadow-sm">
-                        <div className="flex justify-between items-start mb-3">
-                            <div>
-                                <h3 className="font-bold text-[#1A1A18]">{t.user?.name || 'Unknown'}</h3>
-                                <p className="text-sm text-[#6B6B67]">{t.user?.email || '-'}</p>
+                {tenancies?.map((t) => {
+                    const info = badgeInfo(t);
+                    const isPending = t.status === 'PENDING_ADMIN_APPROVAL' && t.approval_status !== 'REJECTED';
+                    return (
+                        <div key={t.id} className="bg-white border border-[#E8E7E3] rounded-xl p-5 shadow-sm">
+                            <div className="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 className="font-bold text-[#1A1A18]">{t.user?.name || 'Unknown'}</h3>
+                                    <p className="text-sm text-[#6B6B67]">{t.user?.email || '-'}</p>
+                                </div>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${info.cls}`}>
+                                    {info.label}
+                                </span>
                             </div>
-                            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${
-                                t.status === 'INVITED' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
-                                t.status === 'ACTIVE' ? 'bg-[#ECFDF5] text-[#047857]' :
-                                'bg-[#F3F4F6] text-[#374151]'
-                            }`}>
-                                {t.status}
-                            </span>
+                            <div className="grid grid-cols-2 gap-y-3 pt-3 border-t border-[#E8E7E3]">
+                                <div>
+                                    <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Unit</p>
+                                    <p className="text-sm font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Tgl Masuk</p>
+                                    <p className="text-sm font-medium text-[#1A1A18]">{t.move_in_date}</p>
+                                </div>
+                                <div className="col-span-2">
+                                    <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Harga Deal</p>
+                                    <p className="text-sm font-bold text-[#1A1A18]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => router.get(`/admin/tenants/${t.id}`)}
+                                className={`mt-4 w-full py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                                    isPending
+                                        ? 'bg-[#1A1A18] text-white hover:bg-black'
+                                        : 'border border-[#E8E7E3] text-[#6B6B67] hover:text-[#1A1A18]'
+                                }`}
+                            >
+                                {isPending ? 'Review Data' : 'Lihat Detail'}
+                            </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-y-3 pt-3 border-t border-[#E8E7E3]">
-                            <div>
-                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Unit</p>
-                                <p className="text-sm font-medium text-[#1A1A18]">{t.property?.name || 'Unknown'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Tgl Masuk</p>
-                                <p className="text-sm font-medium text-[#1A1A18]">{t.move_in_date}</p>
-                            </div>
-                            <div className="col-span-2">
-                                <p className="text-xs text-[#8A8A84] uppercase tracking-wider font-semibold mb-0.5">Harga Deal</p>
-                                <p className="text-sm font-bold text-[#1A1A18]">Rp {Number(t.agreed_price).toLocaleString('id-ID')}</p>
-                            </div>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
                 {tenancies.length === 0 && (
                     <div className="bg-white border border-[#E8E7E3] rounded-xl p-8 text-center text-[#6B6B67] shadow-sm">
                         Belum ada tenant atau undangan.

@@ -24,19 +24,18 @@ class ImageWatermarkService
         
         $fullName = "{$filename}.{$extension}";
 
-        // 1. Store original securely in private storage
-        $originalPath = $file->storeAs("private/properties/{$propertyId}", $fullName);
+        // 1. Store original securely in private storage (local disk)
+        $originalPath = "properties/{$propertyId}/originals/{$fullName}";
+        Storage::disk('local')->putFileAs("properties/{$propertyId}/originals", $file, $fullName);
 
-        // 2. Since the client already compressed and watermarked it, we just copy it to public
-        $publicRelativePath = "public/properties/{$propertyId}/{$fullName}";
-        
-        // Save public version to storage directly from the uploaded file
-        Storage::put($publicRelativePath, file_get_contents($file->getRealPath()));
+        // 2. Save public version to public disk directly from the uploaded file
+        $publicRelativePath = "properties/{$propertyId}/{$fullName}";
+        Storage::disk('public')->putFileAs("properties/{$propertyId}", $file, $fullName);
 
         // We return the storage URL for public path
         return [
             'original_path' => $originalPath,
-            'public_path' => Storage::url($publicRelativePath),
+            'public_path' => $publicRelativePath, // Save relative path to DB
         ];
     }
 }

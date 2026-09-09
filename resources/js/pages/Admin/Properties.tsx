@@ -26,7 +26,7 @@ interface PropertyMedia {
     id: number;
     property_id: number;
     type: 'IMAGE' | 'VIDEO';
-    public_path: string;
+    url: string;
     is_cover: boolean;
     sort_order: number;
 }
@@ -262,7 +262,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                     <td className="px-6 py-4">
                                         {cover && cover.type === 'IMAGE' ? (
                                             <div className="w-16 h-12 rounded-lg overflow-hidden border border-[#E8E7E3]">
-                                                <img src={cover.public_path} className="w-full h-full object-cover" alt="Cover" />
+                                                <img src={cover.url} className="w-full h-full object-cover" alt="Cover" />
                                             </div>
                                         ) : (
                                             <div className="w-16 h-12 bg-[#F7F7F5] rounded-lg border border-[#E8E7E3] flex items-center justify-center text-[#8A8A84]">
@@ -327,7 +327,7 @@ export default function Properties({ properties: initialProperties }: Properties
                         <div key={prop.id} className="bg-white border border-[#E8E7E3] rounded-xl p-4 shadow-sm flex gap-4">
                             <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-[#E8E7E3] bg-[#F7F7F5] flex items-center justify-center text-[#8A8A84]">
                                 {cover && cover.type === 'IMAGE' ? (
-                                    <img src={cover.public_path} className="w-full h-full object-cover" alt="Cover" />
+                                    <img src={cover.url} className="w-full h-full object-cover" alt="Cover" />
                                 ) : (
                                     <ImageIcon className="w-6 h-6" />
                                 )}
@@ -560,7 +560,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                                     {editingProp.media.map(media => (
                                                         <div key={media.id} className="relative group rounded-lg overflow-hidden border border-[#E8E7E3] aspect-[4/3] bg-white shadow-sm">
                                                             {media.type === 'IMAGE' ? (
-                                                                <img src={media.public_path} className="w-full h-full object-cover" alt="Property Media" />
+                                                                <img src={media.url} className="w-full h-full object-cover" alt="Property Media" />
                                                             ) : (
                                                                 <div className="w-full h-full flex flex-col items-center justify-center text-[#8A8A84] bg-neutral-100">
                                                                     <VideoIcon className="w-6 h-6 mb-1" />

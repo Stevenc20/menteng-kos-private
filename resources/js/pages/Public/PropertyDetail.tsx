@@ -10,7 +10,7 @@ type PropertyStatus = 'AVAILABLE' | 'OCCUPIED' | 'UPCOMING_AVAILABLE' | 'MAINTEN
 interface PropertyMedia {
     id: number;
     type: 'IMAGE' | 'VIDEO';
-    public_path: string;
+    url: string;
     is_cover: boolean;
 }
 
@@ -146,10 +146,14 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                         sortedMedia[0].type === 'IMAGE' ? (
                                             <>
                                                 <img 
-                                                    src={sortedMedia[0].public_path} 
+                                                    src={sortedMedia[0].url} 
                                                     alt={property.name}
                                                     draggable="false"
                                                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                                    onError={(e) => {
+                                                        e.currentTarget.onerror = null;
+                                                        e.currentTarget.src = 'https://placehold.co/800x600/1A1A18/8A8A84?text=Gambar+Tidak+Tersedia';
+                                                    }}
                                                 />
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                                                     <div className="opacity-0 group-hover:opacity-100 bg-white/90 text-[#1A1A18] px-4 py-2 rounded-full font-medium text-sm flex items-center shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-all">
@@ -159,7 +163,7 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                             </>
                                         ) : (
                                             <video 
-                                                src={sortedMedia[0].public_path} 
+                                                src={sortedMedia[0].url} 
                                                 controls
                                                 className="w-full h-full object-cover bg-black"
                                             />
@@ -188,10 +192,14 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                                 >
                                                     {media.type === 'IMAGE' ? (
                                                         <img 
-                                                            src={media.public_path} 
+                                                            src={media.url} 
                                                             alt="Thumbnail"
                                                             draggable="false"
                                                             className="w-full h-full object-cover select-none"
+                                                            onError={(e) => {
+                                                                e.currentTarget.onerror = null;
+                                                                e.currentTarget.src = 'https://placehold.co/400x300/1A1A18/8A8A84?text=X';
+                                                            }}
                                                         />
                                                     ) : (
                                                         <div className="w-full h-full bg-[#1A1A18] flex items-center justify-center text-white">
@@ -327,14 +335,18 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                 >
                                     {activeLightboxMedia.type === 'IMAGE' ? (
                                         <img 
-                                            src={activeLightboxMedia.public_path} 
+                                            src={activeLightboxMedia.url} 
                                             alt="Gallery" 
                                             draggable="false"
                                             className="max-w-full max-h-full object-contain pointer-events-none"
+                                            onError={(e) => {
+                                                e.currentTarget.onerror = null;
+                                                e.currentTarget.src = 'https://placehold.co/1200x800/1A1A18/8A8A84?text=Gambar+Tidak+Tersedia';
+                                            }}
                                         />
                                     ) : (
                                         <video 
-                                            src={activeLightboxMedia.public_path} 
+                                            src={activeLightboxMedia.url} 
                                             controls
                                             className="max-w-full max-h-full"
                                         />
@@ -362,7 +374,16 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
                                     }`}
                                 >
                                     {media.type === 'IMAGE' ? (
-                                        <img src={media.public_path} className="w-full h-full object-cover" alt="Thumb" draggable="false" />
+                                        <img 
+                                            src={media.url} 
+                                            className="w-full h-full object-cover" 
+                                            alt="Thumb" 
+                                            draggable="false" 
+                                            onError={(e) => {
+                                                e.currentTarget.onerror = null;
+                                                e.currentTarget.src = 'https://placehold.co/400x300/1A1A18/8A8A84?text=X';
+                                            }}
+                                        />
                                     ) : (
                                         <div className="w-full h-full bg-neutral-900 flex items-center justify-center text-white/50">
                                             <VideoIcon className="w-5 h-5" />

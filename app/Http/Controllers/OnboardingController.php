@@ -27,28 +27,34 @@ class OnboardingController extends Controller
             return redirect('/dashboard');
         }
 
-        // Get active or pending tenancy
-        $tenancy = Tenancy::with('property')->where('user_id', $user->id)
-            ->whereIn('status', ['INVITED', 'ONBOARDING_IN_PROGRESS', 'AGREEMENT_PENDING', 'AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])
-            ->first();
+        $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
 
         if (!$tenancy) {
-            // Already active or no invitation found
-            $activeTenancy = Tenancy::where('user_id', $user->id)
-                ->whereIn('status', ['ACTIVE', 'NOT_CONTINUE', 'SUSPENDED'])
-                ->first();
-                
-            if ($activeTenancy) {
-                return redirect('/tenant/dashboard');
-            }
-            
             // If completely no tenancy exists (not invited properly)
             abort(403, 'Belum ada undangan sewa untuk akun Anda. Silakan hubungi Admin.');
         }
 
+        // Already active: show approval confirmation if approved via this workflow,
+        // otherwise go straight to the dashboard (existing behaviour).
+        if (in_array($tenancy->status, ['ACTIVE', 'NOT_CONTINUE', 'SUSPENDED'])) {
+            if ($tenancy->status === 'ACTIVE' && $tenancy->approval_status === 'APPROVED') {
+                $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+                return Inertia::render('Tenant/Onboarding/ApprovedApproval', [
+                    'tenancy' => $tenancy,
+                    'agreement' => $agreement
+                ]);
+            }
+            return redirect('/tenant/dashboard');
+        }
+
+        // Not in an onboarding-able status → redirect to whatever applies
+        if (!in_array($tenancy->status, ['INVITED', 'ONBOARDING_IN_PROGRESS', 'AGREEMENT_PENDING', 'AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
+            return redirect('/tenant/dashboard');
+        }
+
         $profile = TenantProfile::where('user_id', $user->id)->first();
         
-        // If agreement is already submitted, show waiting page
+        // Rejected / waiting for approval → show status page (pending or needs-revision)
         if (in_array($tenancy->status, ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
             $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
             return Inertia::render('Tenant/Onboarding/WaitingApproval', [
@@ -61,6 +67,26 @@ class OnboardingController extends Controller
             'tenancy' => $tenancy,
             'profile' => $profile ?? (object)[]
         ]);
+    }
+
+    /**
+     * Allow a rejected tenant to go back to the wizard and fix their data.
+     */
+    public function revise()
+    {
+        $user = Auth::user();
+        $tenancy = Tenancy::where('user_id', $user->id)
+            ->where('status', 'PENDING_ADMIN_APPROVAL')
+            ->where('approval_status', 'REJECTED')
+            ->firstOrFail();
+
+        $tenancy->update([
+            'status' => 'ONBOARDING_IN_PROGRESS',
+            'approval_status' => 'PENDING',
+            'rejection_reason' => null,
+        ]);
+
+        return redirect()->route('tenant.onboarding');
     }
 
     /**
