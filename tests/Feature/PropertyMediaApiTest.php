@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Property;
+use App\Models\PropertyMedia;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -99,7 +100,7 @@ test('delete media removes row and stored files, and returns remaining list', fu
     $target = $media[0];
 
     $response = $this->actingAs($admin)->deleteJson("/admin/properties/{$property->id}/media/{$target['id']}");
-    $response->assertOk();
+    $response->assertOk()->assertJson(['success' => true]);
 
     expect($response->json('media'))->toHaveCount(1);
 
@@ -108,5 +109,5 @@ test('delete media removes row and stored files, and returns remaining list', fu
     Storage::disk('local')->assertMissing($target['original_path']);
 
     // DB row gone
-    expect(\App\Models\PropertyMedia::find($target['id']))->toBeNull();
+    expect(PropertyMedia::find($target['id']))->toBeNull();
 });

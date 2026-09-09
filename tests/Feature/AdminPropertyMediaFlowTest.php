@@ -145,6 +145,63 @@ test('new property can upload media immediately after creation', function () {
     expect(count($prop['media']))->toBe(3);
 });
 
+test('create property with multiple photos via multipart stores photos, first becomes cover', function () {
+    Storage::fake('local');
+    Storage::fake('public');
+    $admin = flowAdmin();
+
+    $response = $this->actingAs($admin)->post('/admin/properties', [
+        'name' => 'Kios Baru',
+        'type' => 'KIOSK',
+        'normal_price' => 2500000,
+        'status' => 'AVAILABLE',
+        'description' => 'Kios dengan foto.',
+        'facilities' => ['Rolling Door', 'AC (Air Conditioner)'],
+        'photos' => [flowImage('a.jpg'), flowImage('b.jpg'), flowImage('c.jpg')],
+    ], ['Accept' => 'application/json']);
+
+    $response->assertStatus(201)
+        ->assertJsonStructure(['property' => ['id', 'name', 'type', 'media']]);
+
+    $created = $response->json('property');
+
+    expect(collect($created['media']))->toHaveCount(3);
+
+    // First uploaded photo is the automatic cover, no duplicates
+    expect(collect($created['media'])->where('is_cover', true)->count())->toBe(1)
+        ->and($created['media'][0]['is_cover'])->toBeTrue();
+
+    // Files physically stored on both disks
+    Storage::disk('public')->assertExists($created['media'][0]['public_path']);
+    Storage::disk('local')->assertExists($created['media'][0]['original_path']);
+
+    // Database rows carry the correct property_id
+    expect(PropertyMedia::where('property_id', $created['id'])->count())->toBe(3);
+
+    // Admin list immediately shows the count
+    $props = flowPage($this->actingAs($admin)->get('/admin/properties'));
+    $prop = collect($props['properties'])->firstWhere('id', $created['id']);
+    expect(count($prop['media']))->toBe(3)
+        ->and($prop['media_count'])->toBe(3);
+});
+
+test('create property with a single photo sets it as cover', function () {
+    Storage::fake('local');
+    Storage::fake('public');
+    $admin = flowAdmin();
+
+    $created = $this->actingAs($admin)->post('/admin/properties', [
+        'name' => 'Kamar Satu Foto',
+        'type' => 'ROOM',
+        'normal_price' => 1200000,
+        'status' => 'AVAILABLE',
+        'photos' => [flowImage('single.jpg')],
+    ], ['Accept' => 'application/json'])->json('property');
+
+    expect(collect($created['media']))->toHaveCount(1)
+        ->and($created['media'][0]['is_cover'])->toBeTrue();
+});
+
 test('only one cover is maintained per property', function () {
     Storage::fake('local');
     Storage::fake('public');
@@ -181,7 +238,9 @@ test('deleting the cover promotes the next media automatically', function () {
 
     // Delete the cover
     $coverId = collect($media)->firstWhere('is_cover', true)['id'];
-    $remaining = $this->actingAs($admin)->deleteJson("/admin/properties/{$property->id}/media/{$coverId}")->json('media');
+    $deleteResponse = $this->actingAs($admin)->deleteJson("/admin/properties/{$property->id}/media/{$coverId}");
+    $deleteResponse->assertOk()->assertJson(['success' => true]);
+    $remaining = $deleteResponse->json('media');
 
     expect($remaining)->toHaveCount(1)
         ->and($remaining[0]['is_cover'])->toBeTrue();

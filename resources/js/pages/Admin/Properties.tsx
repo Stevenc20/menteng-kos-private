@@ -40,6 +40,7 @@ interface Property {
     description: string | null;
     facilities: string[] | null;
     media?: PropertyMedia[];
+    media_count?: number;
 }
 
 interface PropertiesProps {
@@ -71,7 +72,20 @@ export default function Properties({ properties: initialProperties }: Properties
     const [customFacility, setCustomFacility] = useState('');
     const [uploading, setUploading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [pendingDelete, setPendingDelete] = useState<PropertyMedia | null>(null);
+    const [draftPhotos, setDraftPhotos] = useState<{ file: File; url: string }[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const createFileInputRef = useRef<HTMLInputElement>(null);
+    const draftPhotosRef = useRef<{ file: File; url: string }[]>([]);
+    useEffect(() => {
+        draftPhotosRef.current = draftPhotos;
+    }, [draftPhotos]);
+    useEffect(() => {
+        return () => {
+            draftPhotosRef.current.forEach(p => URL.revokeObjectURL(p.url));
+        };
+    }, []);
     
     // Mirrors server data so the list can be updated in place (no full reload)
     const [listProperties, setListProperties] = useState<Property[]>(initialProperties);
@@ -129,7 +143,10 @@ export default function Properties({ properties: initialProperties }: Properties
         setCustomFacility('');
         setUploading(false);
         setSaving(false);
+        setPendingDelete(null);
+        clearDraftPhotos();
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (createFileInputRef.current) createFileInputRef.current.value = '';
         setShowModal(true);
     };
 
@@ -148,8 +165,51 @@ export default function Properties({ properties: initialProperties }: Properties
         setCustomFacility('');
         setUploading(false);
         setSaving(false);
+        setPendingDelete(null);
+        clearDraftPhotos();
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (createFileInputRef.current) createFileInputRef.current.value = '';
         setShowModal(true);
+    };
+
+    const clearDraftPhotos = () => {
+        setDraftPhotos(prev => {
+            prev.forEach(p => URL.revokeObjectURL(p.url));
+            return [];
+        });
+    };
+
+    const removeDraftPhoto = (index: number) => {
+        setDraftPhotos(prev => {
+            const target = prev[index];
+            if (target) URL.revokeObjectURL(target.url);
+            return prev.filter((_, i) => i !== index);
+        });
+    };
+
+    const handleDraftSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        try {
+            const compressedFiles = await Promise.all(
+                files.map(f => compressImage(f, 1600, 0.8))
+            );
+            setDraftPhotos(prev => [
+                ...prev,
+                ...compressedFiles.map(file => ({ file, url: URL.createObjectURL(file) }))
+            ]);
+        } catch (error) {
+            console.error('Compression failed', error);
+        }
+
+        e.target.value = '';
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setPendingDelete(null);
+        clearDraftPhotos();
     };
 
     const submit = async (e: React.FormEvent) => {
@@ -165,18 +225,26 @@ export default function Properties({ properties: initialProperties }: Properties
             return;
         }
 
-        // Add mode: save via JSON so the modal stays open and media can be uploaded
-        // right after the property exists (media needs a valid property_id).
+        // Add mode: save via FormData so the property and its photos are created
+        // together in one request. The modal closes only after everything is stored.
         setSaving(true);
         try {
+            const formData = new FormData();
+            formData.append('name', data.name);
+            formData.append('type', data.type);
+            formData.append('normal_price', data.normal_price);
+            formData.append('status', data.status);
+            if (data.description) formData.append('description', data.description);
+            data.facilities.forEach(f => formData.append('facilities[]', f));
+            draftPhotos.forEach(p => formData.append('photos[]', p.file));
+
             const response = await fetch('/admin/properties', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
-                    'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken()
                 },
-                body: JSON.stringify(data)
+                body: formData
             });
 
             const body = await response.json().catch(() => null);
@@ -190,13 +258,19 @@ export default function Properties({ properties: initialProperties }: Properties
 
             if (body?.property) {
                 const created = body.property;
-                setEditingProp(created);
                 setListProperties(prev => {
                     const exists = prev.some(p => p.id === created.id);
                     return exists ? prev.map(p => p.id === created.id ? created : p) : [...prev, created];
                 });
-                clearErrors();
-                toast.success('Properti berhasil disimpan. Sekarang upload foto unit di panel "3. Foto & Media Unit".');
+                clearDraftPhotos();
+                reset();
+                setPendingDelete(null);
+                setShowModal(false);
+                toast.success(
+                    created.media?.length
+                        ? `Properti "${created.name}" tersimpan dengan ${created.media.length} foto.`
+                        : `Properti "${created.name}" berhasil disimpan.`
+                );
             } else {
                 setShowModal(false);
                 reset();
@@ -299,12 +373,16 @@ export default function Properties({ properties: initialProperties }: Properties
         }
     };
 
-    const deleteMedia = async (mediaId: number) => {
-        if (!editingProp) return;
-        if (!confirm('Hapus media ini?')) return;
+    const requestDeleteMedia = (mediaId: number) => {
+        const media = editingProp?.media?.find(m => m.id === mediaId);
+        if (media) setPendingDelete(media);
+    };
 
+    const confirmDeleteMedia = async () => {
+        if (!editingProp || !pendingDelete) return;
+        setDeleting(true);
         try {
-            const response = await fetch(`/admin/properties/${editingProp.id}/media/${mediaId}`, {
+            const response = await fetch(`/admin/properties/${editingProp.id}/media/${pendingDelete.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -315,17 +393,20 @@ export default function Properties({ properties: initialProperties }: Properties
             const body = await response.json().catch(() => null);
 
             if (!response.ok) {
-                throw new Error(body?.message || `Gagal hapus media (${response.status})`);
+                throw new Error(body?.message || `Gagal hapus foto (${response.status})`);
             }
 
             if (body?.media) {
                 applyMedia(editingProp.id, body.media);
             }
 
-            toast.success('Media dihapus');
+            toast.success('Foto berhasil dihapus');
+            setPendingDelete(null);
         } catch (error: any) {
             console.error(error);
             toast.error('Error: ' + error.message);
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -390,7 +471,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                     <td className="px-6 py-4 font-medium text-[#1A1A18]">
                                         {prop.name}
                                         <div className="text-[12px] text-[#8A8A84] mt-0.5 font-normal">
-                                            {prop.facilities?.length || 0} fasilitas • {prop.media?.length || 0} foto
+                                            {prop.facilities?.length || 0} fasilitas • {prop.media?.length ?? prop.media_count ?? 0} foto
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-[#6B6B67]">{prop.type === 'ROOM' ? 'Kamar Kos' : 'Kios'}</td>
@@ -479,13 +560,13 @@ export default function Properties({ properties: initialProperties }: Properties
 
             <AdminModal 
                 isOpen={showModal} 
-                onClose={() => !processing && !uploading && !saving && setShowModal(false)}
+                onClose={() => !processing && !uploading && !saving && !deleting && closeModal()}
                 maxWidth="4xl" // Wider to accommodate side-by-side or large stacked sections
             >
                 <div className="flex flex-col h-[85vh] lg:h-auto lg:max-h-[85vh] bg-white">
                     <AdminModalHeader 
                         title={editingProp ? "Edit Properti" : "Tambah Properti Baru"} 
-                        onClose={() => !processing && !uploading && !saving && setShowModal(false)}
+                        onClose={() => !processing && !uploading && !saving && !deleting && closeModal()}
                     />
                     
                     <div className="flex-1 overflow-y-auto p-0">
@@ -621,6 +702,54 @@ export default function Properties({ properties: initialProperties }: Properties
                                             </button>
                                         </div>
                                     </section>
+
+                                    {/* SECTION 3: Foto & Media (draft, only for Tambah) */}
+                                    {!editingProp && (
+                                        <section>
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-[#1A1A18] mb-4 pb-2 border-b border-[#E8E7E3]">3. Foto & Media Unit</h3>
+                                            <div>
+                                                <FormLabel>Upload Foto (Bisa lebih dari 1)</FormLabel>
+                                                <input 
+                                                    ref={createFileInputRef}
+                                                    type="file"
+                                                    multiple
+                                                    accept="image/*"
+                                                    onChange={handleDraftSelect}
+                                                    className="block w-full text-sm text-[#6B6B67] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#1A1A18] file:text-white hover:file:bg-[#333333] transition-colors cursor-pointer"
+                                                />
+                                                <p className="text-[12px] text-[#8A8A84] mt-1.5">
+                                                    Foto belum diunggah ke server. Saat "Simpan Properti Baru", properti beserta seluruh foto
+                                                    dibuat sekaligus — foto pertama otomatis menjadi sampul (cover).
+                                                </p>
+                                            </div>
+
+                                            {draftPhotos.length > 0 && (
+                                                <div className="mt-4">
+                                                    <h4 className="text-[13px] font-semibold text-[#6B6B67] mb-3">Preview Foto</h4>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                        {draftPhotos.map((photo, index) => (
+                                                            <div key={index} className="relative aspect-[4/3] rounded-lg overflow-hidden border border-[#E8E7E3] bg-white">
+                                                                <img src={photo.url} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeDraftPhoto(index)}
+                                                                    className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                                                    title="Hapus dari daftar"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                {index === 0 && (
+                                                                    <div className="absolute bottom-1 left-1 bg-[#1A1A18] text-white text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+                                                                        <Star className="w-3 h-3 fill-current" /> Cover
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </section>
+                                    )}
                                 </form>
                             </div>
 
@@ -686,13 +815,13 @@ export default function Properties({ properties: initialProperties }: Properties
                                                                 </div>
                                                             )}
                                                             
-                                                            {/* Overlays */}
-                                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                            {/* Action overlay: always visible on touch, revealed on hover for desktop */}
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                                                 {media.type === 'IMAGE' && !media.is_cover && (
                                                                     <button 
                                                                         type="button"
                                                                         onClick={() => setCover(media.id)}
-                                                                        className="p-1.5 bg-white text-[#1A1A18] rounded hover:bg-neutral-200 transition-colors"
+                                                                        className="p-2 bg-white text-[#1A1A18] rounded-lg hover:bg-neutral-200 transition-colors"
                                                                         title="Jadikan Cover"
                                                                     >
                                                                         <Star className="w-4 h-4" />
@@ -700,8 +829,9 @@ export default function Properties({ properties: initialProperties }: Properties
                                                                 )}
                                                                 <button 
                                                                     type="button"
-                                                                    onClick={() => deleteMedia(media.id)}
-                                                                    className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                                                    onClick={() => requestDeleteMedia(media.id)}
+                                                                    disabled={deleting}
+                                                                    className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
                                                                     title="Hapus"
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
@@ -720,22 +850,45 @@ export default function Properties({ properties: initialProperties }: Properties
                                         </div>
                                     </section>
                                 </div>
-                            ) : (
-                                <div className="p-8 hidden lg:flex flex-col items-center justify-center bg-[#FAFAFA] text-center border-l border-[#E8E7E3]">
-                                    <ImageIcon className="w-16 h-16 text-[#E8E7E3] mb-4" />
-                                    <p className="text-[#6B6B67] text-sm">Simpan informasi properti terlebih dahulu untuk mengelola Foto Galeri.</p>
-                                </div>
-                            )}
+                            ) : null}
                         </div>
                     </div>
+
+                    {/* Delete Media Confirm Overlay */}
+                    {pendingDelete && (
+                        <div className="absolute inset-0 z-40 bg-black/50 flex items-center justify-center p-6">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+                                <h4 className="font-bold text-[#1A1A18]">Hapus foto ini?</h4>
+                                <p className="text-sm text-[#6B6B67] mt-1.5">Foto yang dihapus tidak dapat dikembalikan.</p>
+                                <div className="flex justify-end gap-2 mt-6">
+                                    <AdminButton
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={deleting}
+                                        onClick={() => setPendingDelete(null)}
+                                    >
+                                        Batal
+                                    </AdminButton>
+                                    <AdminButton
+                                        type="button"
+                                        variant="danger"
+                                        isLoading={deleting}
+                                        onClick={confirmDeleteMedia}
+                                    >
+                                        Hapus Foto
+                                    </AdminButton>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Fixed Footer */}
                     <AdminModalFooter className="shrink-0 border-t border-[#E8E7E3]">
                         <AdminButton 
                             type="button" 
                             variant="secondary" 
-                            onClick={() => setShowModal(false)}
-                            disabled={processing || uploading || saving}
+                            onClick={closeModal}
+                            disabled={processing || uploading || saving || deleting}
                         >
                             Tutup
                         </AdminButton>

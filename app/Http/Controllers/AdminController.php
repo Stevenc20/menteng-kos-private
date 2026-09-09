@@ -43,7 +43,7 @@ class AdminController extends Controller
      */
     public function properties()
     {
-        $properties = Property::with('media')->orderBy('name')->get();
+        $properties = Property::with('media')->withCount('media')->orderBy('name')->get();
 
         return Inertia::render('Admin/Properties', [
             'properties' => $properties,
@@ -51,9 +51,9 @@ class AdminController extends Controller
     }
 
     /**
-     * Store a new Property.
+     * Store a new Property, optionally with photo uploads in the same request.
      */
-    public function storeProperty(Request $request)
+    public function storeProperty(Request $request, ImageWatermarkService $watermarkService)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -63,15 +63,57 @@ class AdminController extends Controller
             'description' => 'nullable|string',
             'facilities' => 'nullable|array',
             'facilities.*' => 'string',
+            'photos.*' => 'nullable|file|image|max:5120',
         ]);
 
-        $property = Property::create($validated);
+        // Remove the file keys so they are never mass-assigned to properties.
+        unset($validated['photos']);
 
-        if ($request->wantsJson()) {
-            return response()->json(['property' => $property->load('media')], 201);
+        $wantsJson = $request->wantsJson();
+        $storedPaths = [];
+
+        try {
+            $property = DB::transaction(function () use ($validated, $request, $watermarkService, &$storedPaths) {
+                $property = Property::create($validated);
+
+                if ($request->hasFile('photos')) {
+                    foreach ($request->file('photos') as $photo) {
+                        $paths = $watermarkService->processAndStore($photo, $property->id);
+                        $storedPaths[] = $paths;
+
+                        $property->media()->create([
+                            'type' => 'IMAGE',
+                            'original_path' => $paths['original_path'],
+                            'public_path' => $paths['public_path'],
+                            'is_cover' => ! $property->media()->where('is_cover', true)->exists(),
+                            'sort_order' => $property->media()->count(),
+                        ]);
+                    }
+                }
+
+                return $property;
+            });
+
+            $payload = ['property' => $property->load('media')];
+
+            if ($wantsJson) {
+                return response()->json($payload, 201);
+            }
+
+            return redirect()->back()->with('success', 'Property created successfully.');
+        } catch (\Throwable $e) {
+            // Rollback safety: remove any files stored during the failed attempt.
+            foreach ($storedPaths as $paths) {
+                Storage::disk('local')->delete($paths['original_path']);
+                Storage::disk('public')->delete($paths['public_path']);
+            }
+
+            if ($wantsJson) {
+                return response()->json(['message' => 'Server Error: '.$e->getMessage()], 500);
+            }
+
+            return redirect()->back()->withErrors(['photos' => 'Server Error: '.$e->getMessage()]);
         }
-
-        return redirect()->back()->with('success', 'Property created successfully.');
     }
 
     /**
@@ -199,7 +241,7 @@ class AdminController extends Controller
         $mediaList = $property->media()->orderBy('sort_order')->get();
 
         if ($request->wantsJson()) {
-            return response()->json(['media' => $mediaList]);
+            return response()->json(['success' => true, 'media' => $mediaList]);
         }
 
         return redirect()->back()->with('success', 'Cover image updated.');
@@ -220,6 +262,11 @@ class AdminController extends Controller
             Storage::disk('public')->delete($publicRelative);
         }
 
+        // Delete thumbnail if it was ever generated
+        if ($media->thumbnail_path && ! str_starts_with($media->thumbnail_path, 'http')) {
+            Storage::disk('public')->delete(str_replace('/storage/', '', $media->thumbnail_path));
+        }
+
         $media->delete();
 
         // Cover fallback: when the last cover is removed but photos remain,
@@ -234,7 +281,7 @@ class AdminController extends Controller
         $mediaList = PropertyMedia::where('property_id', $id)->orderBy('sort_order')->get();
 
         if ($request->wantsJson()) {
-            return response()->json(['media' => $mediaList]);
+            return response()->json(['success' => true, 'media' => $mediaList]);
         }
 
         return redirect()->back()->with('success', 'Media deleted.');
