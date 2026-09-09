@@ -733,6 +733,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     };
 
     return (
+        <>
         <div className="min-h-screen bg-neutral-100 py-12 px-4 sm:px-6 lg:px-8 font-sans">
             <Head title="Tenant Onboarding | Menteng Kos Private" />
             
@@ -769,5 +770,12 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                 </div>
             </div>
         </div>
+        {captureOccupant !== null && (
+            <KtpCaptureFlow
+                onCapture={(file) => handleCapturedPhoto(file, captureOccupant)}
+                onCancel={() => setCaptureOccupant(null)}
+            />
+        )}
+        </>
     );
 }
