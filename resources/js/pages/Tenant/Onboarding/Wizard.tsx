@@ -320,6 +320,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
         const payload = {
             ...data,
+            move_in_date: moveInDate,
             document_html: buildStatementHTML({ paraf1, paraf2, sig1, sig2 }),
             due_date_day: dueNum,
             denda_per_day: String(dendaNum),

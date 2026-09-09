@@ -106,9 +106,9 @@ class OnboardingController extends Controller
             'ktp_1_job' => 'required|string',
             'ktp_1_address' => 'required|string',
             'ktp_1_photo' => 'nullable|image',
-            
+
             'has_second_occupant' => 'required|boolean',
-            
+
             'ktp_2_name' => 'nullable|required_if:has_second_occupant,true|string',
             'ktp_2_nik' => 'nullable|required_if:has_second_occupant,true|string',
             'ktp_2_birth_place' => 'nullable|required_if:has_second_occupant,true|string',
@@ -119,28 +119,33 @@ class OnboardingController extends Controller
         ]);
 
         $profileData = $validated;
-        unset($profileData['has_second_occupant']);
 
-        $profile = TenantProfile::firstOrNew(['user_id' => $user->id]);
+        // Photo paths must NEVER be derived from the validated payload: storeInfo is
+        // not the upload commit point, and a missing file field must not wipe a path.
+        unset($profileData['ktp_1_photo'], $profileData['ktp_2_photo'], $profileData['has_second_occupant']);
 
-        // Secure file upload to PRIVATE storage
+        $profile = TenantProfile::where('user_id', $user->id)->first()
+            ?? new TenantProfile(['user_id' => $user->id]);
+
+        $replacedPaths = [];
+        $newPaths = [];
+
+        // Secure file upload to PRIVATE storage (disk 'local' root is already app/private).
         if ($request->hasFile('ktp_1_photo')) {
-            if ($profile->ktp_1_photo) {
-                Storage::disk('local')->delete($profile->ktp_1_photo);
-            }
-            $path = $request->file('ktp_1_photo')->store('private/ktp');
+            $path = $this->storeKtpFile($request->file('ktp_1_photo'));
+            $replacedPaths[] = $profile->ktp_1_photo;
+            $newPaths[] = $path;
             $profileData['ktp_1_photo'] = $path;
         }
 
         if ($request->boolean('has_second_occupant') && $request->hasFile('ktp_2_photo')) {
-            if ($profile->ktp_2_photo) {
-                Storage::disk('local')->delete($profile->ktp_2_photo);
-            }
-            $path = $request->file('ktp_2_photo')->store('private/ktp');
+            $path = $this->storeKtpFile($request->file('ktp_2_photo'));
+            $replacedPaths[] = $profile->ktp_2_photo;
+            $newPaths[] = $path;
             $profileData['ktp_2_photo'] = $path;
         }
 
-        // If no second occupant, clear out occupant 2 data
+        // If no second occupant, clear out occupant 2 data (including its photo path).
         if (!$request->boolean('has_second_occupant')) {
             $profileData['ktp_2_name'] = null;
             $profileData['ktp_2_nik'] = null;
@@ -152,7 +157,18 @@ class OnboardingController extends Controller
         }
 
         $profile->fill($profileData);
-        $profile->save();
+        $saved = $profile->save();
+
+        if (! $saved) {
+            foreach ($newPaths as $path) {
+                Storage::disk('local')->delete($path);
+            }
+            abort(500, 'Gagal menyimpan data profil. Silakan coba lagi.');
+        }
+
+        foreach (array_filter($replacedPaths) as $old) {
+            Storage::disk('local')->delete($old);
+        }
 
         // Update Tenancy Status
         $tenancy->update(['status' => 'AGREEMENT_PENDING']);
@@ -161,7 +177,11 @@ class OnboardingController extends Controller
     }
 
     /**
-     * Upload KTP photos (occupant 1 and/or 2) to private storage.
+     * Upload KTP photos (occupant 1 and/or 2) to PRIVATE storage, atomically.
+     *
+     * Persist order: file -> disk; path -> tenant_profiles -> commit. The response
+     * only reports success AFTER the database row persists. If the database write
+     * fails, the freshly stored files are removed so no orphan is left behind.
      */
     public function uploadKtp(Request $request)
     {
@@ -171,7 +191,7 @@ class OnboardingController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized.'], 403);
         }
 
-        $validated = $request->validate([
+        $request->validate([
             'ktp_1_photo' => 'nullable|image',
             'ktp_2_photo' => 'nullable|image',
         ]);
@@ -180,34 +200,54 @@ class OnboardingController extends Controller
             return response()->json(['ok' => false, 'message' => 'No KTP photo file was received. Silakan coba lagi.'], 422);
         }
 
-        $profile = TenantProfile::firstOrNew(['user_id' => $user->id]);
-        $paths = [];
+        $profile = TenantProfile::where('user_id', $user->id)->first()
+            ?? new TenantProfile(['user_id' => $user->id]);
+
+        $newPaths = [];
+        $replacedPaths = [];
 
         if ($request->hasFile('ktp_1_photo')) {
-            if ($profile->ktp_1_photo) {
-                Storage::disk('local')->delete($profile->ktp_1_photo);
-            }
-            $paths['ktp_1_photo'] = $request->file('ktp_1_photo')->store('private/ktp');
-            $profile->ktp_1_photo = $paths['ktp_1_photo'];
+            $path = $this->storeKtpFile($request->file('ktp_1_photo'));
+            $newPaths['ktp_1_photo'] = $path;
+            $replacedPaths[] = $profile->ktp_1_photo;
+            $profile->ktp_1_photo = $path;
         }
 
         if ($request->hasFile('ktp_2_photo')) {
-            if ($profile->ktp_2_photo) {
-                Storage::disk('local')->delete($profile->ktp_2_photo);
-            }
-            $paths['ktp_2_photo'] = $request->file('ktp_2_photo')->store('private/ktp');
-            $profile->ktp_2_photo = $paths['ktp_2_photo'];
+            $path = $this->storeKtpFile($request->file('ktp_2_photo'));
+            $newPaths['ktp_2_photo'] = $path;
+            $replacedPaths[] = $profile->ktp_2_photo;
+            $profile->ktp_2_photo = $path;
         }
 
-        $profile->save();
+        try {
+            $saved = $profile->save();
+        } catch (\Throwable $e) {
+            $saved = false;
+            Log::error('KTP upload: database persist threw. ' . $e->getMessage());
+        }
 
-        // Run OCR on uploaded photos
+        if (! $saved) {
+            foreach (array_values($newPaths) as $path) {
+                Storage::disk('local')->delete($path);
+            }
+            Log::error('KTP upload: database persist failed, removed uploaded file(s).');
+
+            return response()->json(['ok' => false, 'message' => 'Gagal menyimpan data. Silakan coba lagi.'], 500);
+        }
+
+        // Only now is it safe to remove replaced photos.
+        foreach (array_filter($replacedPaths) as $old) {
+            Storage::disk('local')->delete($old);
+        }
+
+        // Run OCR on uploaded photos (best-effort, may never break persistence).
         $ocrService = new KtpOcrService();
         $ocrResults = [];
 
-        if (isset($paths['ktp_1_photo'])) {
-            $absolutePath = Storage::disk('local')->path($paths['ktp_1_photo']);
-            Log::info('KTP upload received for occupant 1', ['path' => $paths['ktp_1_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
+        if (isset($newPaths['ktp_1_photo'])) {
+            $absolutePath = Storage::disk('local')->path($newPaths['ktp_1_photo']);
+            Log::info('KTP upload received for occupant 1', ['path' => $newPaths['ktp_1_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
             if (file_exists($absolutePath)) {
                 try {
                     Log::info('KTP OCR started for occupant 1');
@@ -229,9 +269,9 @@ class OnboardingController extends Controller
             }
         }
 
-        if (isset($paths['ktp_2_photo'])) {
-            $absolutePath = Storage::disk('local')->path($paths['ktp_2_photo']);
-            Log::info('KTP upload received for occupant 2', ['path' => $paths['ktp_2_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
+        if (isset($newPaths['ktp_2_photo'])) {
+            $absolutePath = Storage::disk('local')->path($newPaths['ktp_2_photo']);
+            Log::info('KTP upload received for occupant 2', ['path' => $newPaths['ktp_2_photo'], 'absolute' => $absolutePath, 'exists' => file_exists($absolutePath)]);
             if (file_exists($absolutePath)) {
                 try {
                     Log::info('KTP OCR started for occupant 2');
@@ -254,7 +294,19 @@ class OnboardingController extends Controller
         }
 
         Log::info('KTP OCR response returned to frontend', ['ocr' => $ocrResults]);
-        return response()->json(array_merge(['ok' => true], $paths, ['ocr' => $ocrResults]));
+        return response()->json(array_merge(['ok' => true], $newPaths, ['ocr' => $ocrResults]));
+    }
+
+    /**
+     * Persist an uploaded KTP file on the 'local' disk.
+     *
+     * Disk root is already storage/app/private (config/filesystems.php), so the
+     * relative folder passed here is the FOLDER INSIDE that root. Storing 'ktp'
+     * yields storage/app/private/ktp/<hash> — never private/private/ktp.
+     */
+    private function storeKtpFile($file): string
+    {
+        return $file->store('ktp', 'local');
     }
 
     /**
@@ -288,6 +340,7 @@ class OnboardingController extends Controller
             'paraf_1' => 'required|string',
             'signature_2' => 'nullable|string',
             'paraf_2' => 'nullable|string',
+            'move_in_date' => 'required|date',
         ]);
 
         $agreement = Agreement::updateOrCreate(
@@ -319,7 +372,10 @@ class OnboardingController extends Controller
             );
         }
 
-        $tenancy->update(['status' => 'PENDING_ADMIN_APPROVAL']);
+        $tenancy->update([
+            'status' => 'PENDING_ADMIN_APPROVAL',
+            'move_in_date' => $validated['move_in_date'],
+        ]);
 
         return redirect()->route('tenant.onboarding')->with('success', 'Agreement submitted successfully.');
     }

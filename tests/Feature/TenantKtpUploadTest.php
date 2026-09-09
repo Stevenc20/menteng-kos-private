@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Property;
+use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -33,7 +35,8 @@ test('a tenant can upload a KTP photo to private storage', function () {
     expect($savedPath)->not->toBeNull();
 
     Storage::disk('local')->assertExists($savedPath);
-    expect(str_starts_with($savedPath, 'private/ktp/'))->toBeTrue();
+    expect(str_starts_with($savedPath, 'ktp/'))->toBeTrue();
+    expect(str_contains($savedPath, 'private/private'))->toBeFalse();
 
     $this->assertDatabaseHas('tenant_profiles', [
         'user_id' => $user->id,
@@ -91,4 +94,94 @@ test('a tenant cannot fetch another users KTP photo', function () {
     $this->actingAs($other);
 
     $this->get(route('tenant.onboarding.ktp.photo', ['kind' => 'ktp_1']))->assertNotFound();
+});
+
+test('submitting profile info (storeInfo) does not wipe an already-stored KTP path', function () {
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $property = Property::create([
+        'name' => 'KTP Unit',
+        'type' => 'ROOM',
+        'normal_price' => 1000000,
+        'status' => 'AVAILABLE',
+    ]);
+    Tenancy::create([
+        'user_id' => $user->id,
+        'property_id' => $property->id,
+        'agreed_price' => 1000000,
+        'move_in_date' => now()->toDateString(),
+        'status' => 'INVITED',
+    ]);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    $posted = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload(),
+    ])->assertOk();
+    $savedPath = data_get($posted->json(), 'ktp_1_photo');
+
+    // Later the wizard submits all identity fields (without re-sending the file).
+    $this->postJson(route('tenant.onboarding.info'), [
+        'whatsapp' => '0812',
+        'ktp_1_name' => 'Budi',
+        'ktp_1_nik' => '320111',
+        'ktp_1_birth_place' => 'Jakarta',
+        'ktp_1_birth_date' => '1990-01-01',
+        'ktp_1_job' => 'Karyawan',
+        'ktp_1_address' => 'Jl. Test',
+        'has_second_occupant' => false,
+    ]);
+
+    $profile = TenantProfile::where('user_id', $user->id)->first();
+    expect($profile->ktp_1_photo)->toBe($savedPath);
+    Storage::disk('local')->assertExists($savedPath);
+});
+
+test('when the database persist fails, the freshly uploaded KTP file is removed (no orphan)', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    // Force the profile save to fail so the file would otherwise be orphaned.
+    \App\Models\TenantProfile::saving(fn () => false);
+
+    try {
+        $this->postJson(route('tenant.onboarding.ktp'), [
+            'ktp_1_photo' => makeKtpUpload(),
+        ])->assertStatus(500);
+
+        expect(Storage::disk('local')->allFiles('ktp'))->toBe([]);
+        expect(TenantProfile::count())->toBe(0);
+    } finally {
+        \App\Models\TenantProfile::flushEventListeners();
+    }
+});
+
+test('uploading a replacement KTP deletes the old file only after a successful save', function () {
+    Storage::fake('local');
+    $user = User::factory()->create(['role' => 'TENANT']);
+    $this->actingAs($user);
+    $this->withoutMiddleware(VerifyCsrfToken::class);
+
+    $first = $this->postJson(route('tenant.onboarding.ktp'), [
+        'ktp_1_photo' => makeKtpUpload('old.jpg'),
+    ])->assertOk();
+    $oldPath = data_get($first->json(), 'ktp_1_photo');
+    Storage::disk('local')->assertExists($oldPath);
+
+    // If the SECOND persist fails, the replacement file must be removed AND the
+    // original file must be kept (old cleanup only happens after a successful save).
+    \App\Models\TenantProfile::saving(fn () => false);
+
+    try {
+        $second = $this->postJson(route('tenant.onboarding.ktp'), [
+            'ktp_1_photo' => makeKtpUpload('new.jpg'),
+        ]);
+
+        expect($second->status())->toBe(500);
+        Storage::disk('local')->assertExists($oldPath);
+        expect(Storage::disk('local')->allFiles('ktp'))->toBe([$oldPath]);
+    } finally {
+        \App\Models\TenantProfile::flushEventListeners();
+    }
 });

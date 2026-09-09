@@ -13,6 +13,11 @@ interface ApprovalDetailProps {
     approvedBy: any;
     moveInDoc: any;
     waterMeter: any;
+    effectiveMoveInDate?: string | null;
+    moveInDateIsStale?: boolean;
+    dueDayNumber?: number;
+    dueDayLabel?: string;
+    nextDueDate?: string | null;
 }
 
 function Card({ title, children, className = '' }: { title?: string; children: React.ReactNode; className?: string }) {
@@ -37,7 +42,7 @@ const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { 
 
 const formatDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
-export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, waterMeter }: ApprovalDetailProps) {
+export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
     const isPending = tenancy.status === 'PENDING_ADMIN_APPROVAL' && tenancy.approval_status !== 'REJECTED';
     const isRejected = tenancy.approval_status === 'REJECTED';
     const isApproved = tenancy.status === 'ACTIVE';
@@ -85,8 +90,38 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
         ['Alamat', profile?.ktp_2_address],
     ].filter(([, v]) => v) as [string, string][] : [];
 
+    const hasSecondOccupant = occupant2.length > 0 || Boolean(profile?.ktp_2_photo);
+
+    const ktpDocuments = [
+        { label: 'KTP Penghuni 1', url: ktpUrl('1'), downloadUrl: ktpUrl('1') + '/download', has: Boolean(profile?.ktp_1_photo) },
+        { label: 'KTP Penghuni 2', url: ktpUrl('2'), downloadUrl: ktpUrl('2') + '/download', has: Boolean(profile?.ktp_2_photo) },
+    ].filter(k => k.label === 'KTP Penghuni 1' || hasSecondOccupant);
+
+    const hasAnyKtp = Boolean(profile?.ktp_1_photo) || hasSecondOccupant;
+
     return (
-        <AdminLayout title="Detail Tenant | Admin">
+        <>
+            <style>{`
+                @media print {
+                    body * { visibility: hidden !important; }
+                    .printable-statement, .printable-statement * { visibility: visible !important; }
+                    .printable-statement {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: none !important;
+                        margin: 0 !important;
+                        padding: 24px !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        background: white !important;
+                    }
+                    .no-print { display: none !important; }
+                }
+            `}</style>
+            <AdminLayout title="Detail Tenant | Admin">
             <div className="mb-8">
                 <button onClick={() => router.get('/admin/tenants')} className="text-sm font-medium text-neutral-500 hover:text-neutral-900 mb-2 flex items-center gap-2">
                     &larr; Kembali ke Daftar Tenant
@@ -115,9 +150,18 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                         <InfoRow label="Email" value={tenancy.user?.email} />
                         <InfoRow label="Unit" value={`${tenancy.property?.name} (${tenancy.property?.type === 'KIOSK' ? 'Kios' : 'Kamar'})`} />
                         <InfoRow label="Harga Deal" value={`${formatRupiah(tenancy.agreed_price)} / bulan`} />
-                        <InfoRow label="Tanggal Masuk" value={formatDate(tenancy.move_in_date)} />
+                        <InfoRow label="Tanggal Masuk" value={
+                            <span className="inline-flex items-center gap-2">
+                                {formatDate(effectiveMoveInDate || tenancy.move_in_date)}
+                                {moveInDateIsStale && (
+                                    <span className="text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                                        disesuaikan ke tanggal pengajuan
+                                    </span>
+                                )}
+                            </span>
+                        } />
                         <InfoRow label="Tanggal Pengajuan" value={formatDate(tenancy.created_at)} />
-                        <InfoRow label="Jatuh Tempo Pembayaran" value={`tanggal ${calcDueDay(tenancy.move_in_date)} setiap bulan`} />
+                        <InfoRow label="Jatuh Tempo Pembayaran" value={dueDayLabel ? `tanggal ${dueDayLabel} setiap bulan` : `tanggal ${calcDueDay(effectiveMoveInDate || tenancy.move_in_date)} setiap bulan`} />
                         {isApproved && (
                             <>
                                 <InfoRow label="Disetujui Pada" value={formatDate(tenancy.approved_at)} />
@@ -192,13 +236,17 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                         <InfoRow label="Jenis Unit" value={tenancy.property?.type === 'KIOSK' ? 'Kios' : 'Kamar'} />
                         <InfoRow label="Nama / Nomor Unit" value={tenancy.property?.name} />
                         <InfoRow label="Harga Deal" value={`${formatRupiah(tenancy.agreed_price)} / bulan`} />
-                        <InfoRow label="Tanggal Masuk" value={formatDate(tenancy.move_in_date)} />
-                        <InfoRow label="Tanggal Jatuh Tempo" value={`tanggal ${calcDueDay(tenancy.move_in_date)} setiap bulan`} />
+                        <InfoRow label="Tanggal Masuk" value={formatDate(effectiveMoveInDate || tenancy.move_in_date)} />
+                        <InfoRow label="Tanggal Jatuh Tempo" value={dueDayLabel ? `tanggal ${dueDayLabel} setiap bulan` : `tanggal ${calcDueDay(effectiveMoveInDate || tenancy.move_in_date)} setiap bulan`} />
+                        {nextDueDate && <InfoRow label="Jatuh Tempo Berikutnya" value={formatDate(nextDueDate)} />}
                     </div>
                 </Card>
 
                 {/* Data Penghuni */}
                 <Card title="Data Penghuni">
+                    <p className="text-sm text-neutral-500 mb-4">
+                        Jumlah Penghuni: <span className="font-semibold text-[#1A1A18]">{hasSecondOccupant ? 2 : 1} Orang</span>
+                    </p>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div>
                             <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Penghuni 1</p>
@@ -224,41 +272,62 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
 
                 {/* Dokumen KTP */}
                 <Card title="Dokumen KTP">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                        {[
-                            { label: 'KTP Penghuni 1', url: ktpUrl('1'), has: Boolean(profile?.ktp_1_photo) },
-                            { label: 'KTP Penghuni 2', url: ktpUrl('2'), has: Boolean(profile?.ktp_2_photo) },
-                        ].map(k => (
-                            <div key={k.label}>
-                                <p className="text-sm font-medium text-neutral-500 mb-2">{k.label}</p>
-                                {k.has ? (
-                                    <button onClick={() => { setZoom(false); setPreview({ label: k.label, url: k.url }); }} className="block w-full">
-                                        <img src={k.url} alt={k.label} className="w-full max-w-[360px] border border-[#E8E7E3] rounded-xl bg-neutral-50 hover:opacity-90 transition-opacity" />
-                                        <span className="text-xs text-neutral-400 hover:text-neutral-700 mt-1 inline-block">Klik untuk preview lebih besar &amp; zoom</span>
-                                    </button>
-                                ) : (
-                                    <div className="w-full max-w-[360px] h-40 border border-dashed border-neutral-300 rounded-xl flex items-center justify-center text-sm text-neutral-400">
-                                        Belum diupload
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    {!hasAnyKtp && !profile ? (
+                        <div className="p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
+                            Belum ada data KTP untuk tenant ini.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            {ktpDocuments.map(k => (
+                                <div key={k.label}>
+                                    <p className="text-sm font-medium text-neutral-500 mb-2">{k.label}</p>
+                                    {k.has ? (
+                                        <div>
+                                            <button onClick={() => { setZoom(false); setPreview({ label: k.label, url: k.url }); }} className="block w-full">
+                                                <img src={k.url} alt={k.label} className="w-full max-w-[360px] border border-[#E8E7E3] rounded-xl bg-neutral-50 hover:opacity-90 transition-opacity" />
+                                                <span className="text-xs text-neutral-400 hover:text-neutral-700 mt-1 inline-block">Klik untuk preview lebih besar &amp; zoom</span>
+                                            </button>
+                                            <a href={k.downloadUrl} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[#1A1A18] hover:underline">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                                Download
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="w-full max-w-[360px] h-40 border border-dashed border-neutral-300 rounded-xl flex items-center justify-center text-center text-sm text-neutral-400 px-4">
+                                            {profile?.ktp_1_name || profile?.ktp_2_name
+                                                ? 'Dokumen KTP belum terhubung ke data tenant'
+                                                : 'Belum diupload'}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </Card>
 
                 {/* Surat Pernyataan */}
                 <Card title={`Surat Pernyataan ${tenancy.property?.type === 'KIOSK' ? 'Kios' : 'Kamar'}`}>
                     {agreement?.document_html ? (
                         <>
-                            <p className="text-sm text-neutral-500 mb-3">
-                                Tampilan identik dengan dokumen yang ditandatangani tenant ({tenancy.property?.type === 'KIOSK' ? 'template Kios' : 'template Kamar'}).
-                            </p>
-                            <div className="bg-neutral-50 rounded-xl border border-neutral-200 p-4 sm:p-6 text-sm overflow-x-hidden"
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                <p className="text-sm text-neutral-500">
+                                    Tampilan identik dengan dokumen yang ditandatangani tenant ({tenancy.property?.type === 'KIOSK' ? 'template Kios' : 'template Kamar'}).
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => window.print()}
+                                    className="no-print inline-flex items-center gap-2 bg-[#1A1A18] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#333333] transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h12z" /></svg>
+                                    Cetak Surat
+                                </button>
+                            </div>
+                            <div className="printable-statement bg-neutral-50 rounded-xl border border-neutral-200 p-4 sm:p-6 text-sm overflow-x-hidden"
                                  dangerouslySetInnerHTML={{ __html: agreement.document_html }}
                             />
                         </>
                     ) : (
-                        <div className="p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
+                        <div className="no-print p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
                             (Belum ada Surat Pernyataan dari tenant)
                         </div>
                     )}
@@ -382,6 +451,7 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                 </AdminModalFooter>
             </AdminModal>
         </AdminLayout>
+        </>
     );
 }
 

@@ -12,7 +12,9 @@ use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\User;
 use App\Models\WaterMeter;
+use App\Services\DueDateService;
 use App\Services\ImageWatermarkService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -394,6 +396,18 @@ class AdminController extends Controller
         $waterMeter = WaterMeter::where('tenancy_id', $tenancy->id)->first();
         $approvedBy = $tenancy->approved_by ? User::find($tenancy->approved_by) : null;
 
+        // Single source of truth for tenancy dates (see DueDateService).
+        $effectiveMoveIn = DueDateService::effectiveMoveInDate($tenancy);
+        $displayMoveIn = $effectiveMoveIn?->toDateString() ?? $tenancy->move_in_date;
+        $rawMoveIn = $tenancy->move_in_date ? Carbon::parse($tenancy->move_in_date) : null;
+        $isStale = $rawMoveIn
+            && $tenancy->status === 'PENDING_ADMIN_APPROVAL'
+            && $rawMoveIn->lt(Carbon::today());
+        $moveInDay = $effectiveMoveIn
+            ? (int) $effectiveMoveIn->day
+            : ($tenancy->move_in_date ? (int) Carbon::parse($tenancy->move_in_date)->day : 1);
+        $dueDayNumber = DueDateService::dueDay($moveInDay);
+
         return Inertia::render('Admin/ApprovalDetail', [
             'tenancy' => $tenancy,
             'profile' => $profile,
@@ -402,6 +416,11 @@ class AdminController extends Controller
             'approvedBy' => $approvedBy,
             'moveInDoc' => $moveInDoc,
             'waterMeter' => $waterMeter,
+            'effectiveMoveInDate' => $displayMoveIn,
+            'moveInDateIsStale' => $isStale,
+            'dueDayNumber' => $dueDayNumber,
+            'dueDayLabel' => $dueDayNumber === 0 ? 'akhir bulan' : (string) $dueDayNumber,
+            'nextDueDate' => DueDateService::nextDueDate($displayMoveIn, $moveInDay)->toDateString(),
         ]);
     }
 
@@ -423,6 +442,27 @@ class AdminController extends Controller
     }
 
     /**
+     * Download a tenant's KTP photo (secure, admin only; keeps original name when available).
+     */
+    public function downloadTenantKtpPhoto($id, $kind)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->firstOrFail();
+
+        $path = $kind === '2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
+
+        if (! $path || ! Storage::disk('local')->exists($path)) {
+            abort(404);
+        }
+
+        $ext = pathinfo($path, PATHINFO_EXTENSION) ?: 'jpg';
+        $label = $kind === '2' ? 'KTP_Penghuni_2' : 'KTP_Penghuni_1';
+        $tenancyName = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenancy->user?->name ?? 'tenant');
+
+        return Storage::disk('local')->download($path, $label.'_'.$tenancyName.'.'.$ext);
+    }
+
+    /**
      * Approve a PENDING_ADMIN_APPROVAL tenant: activate account + occupied unit.
      */
     public function approveTenant($id)
@@ -432,13 +472,23 @@ class AdminController extends Controller
         abort_unless($tenancy->status === 'PENDING_ADMIN_APPROVAL', 422, 'Tenant tidak sedang dalam status menunggu persetujuan.');
 
         DB::transaction(function () use ($tenancy) {
-            $tenancy->update([
+            $data = [
                 'status' => 'ACTIVE',
                 'approval_status' => 'APPROVED',
                 'approved_at' => now(),
                 'approved_by' => \Illuminate\Support\Facades\Auth::id(),
                 'rejection_reason' => null,
-            ]);
+            ];
+
+            // Single source of truth: Tanggal Masuk harus mencerminkan tanggal aktual.
+            // Jika belum ada / masih di masa lalu (stale), pakai tanggal pengajuan efektif
+            // (tanggal agreement ditandatangani / updated_at), bukan tanggal masa lalu.
+            $effective = DueDateService::effectiveMoveInDate($tenancy);
+            if ($effective) {
+                $data['move_in_date'] = $effective->toDateString();
+            }
+
+            $tenancy->update($data);
 
             $property = Property::find($tenancy->property_id);
             if ($property && $property->status !== 'OCCUPIED') {
@@ -567,8 +617,12 @@ class AdminController extends Controller
             'excess_usage_charge' => 0,
         ]);
 
-        // Activate the tenant
-        $tenancy->update(['status' => 'ACTIVE']);
+        // Activate the tenant (single source of truth for move-in date).
+        $effective = DueDateService::effectiveMoveInDate($tenancy);
+        $tenancy->update([
+            'status' => 'ACTIVE',
+            'move_in_date' => $effective ? $effective->toDateString() : now()->toDateString(),
+        ]);
 
         // Change Property status to OCCUPIED
         $property = Property::find($tenancy->property_id);

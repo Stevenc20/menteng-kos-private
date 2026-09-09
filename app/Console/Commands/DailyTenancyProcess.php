@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Models\Tenancy;
 use App\Models\Billing;
 use App\Models\ContinuationLog;
+use App\Services\DueDateService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -43,13 +44,16 @@ class DailyTenancyProcess extends Command
                                   ->where('billing_type', 'RENT')
                                   ->orderBy('due_date', 'desc')
                                   ->first();
-            
-            // Calculate Next Due Date (30-day cycle)
+
+            // Single source of truth for due dates (see DueDateService).
+            // Same day-rule as Admin/statement: next due date is the monthly
+            // due-day (move-in minus one day; move-in day 1 => end of month).
+            $moveInDay = (int) Carbon::parse($tenancy->move_in_date)->day;
             if ($lastBilling) {
-                $nextDueDate = Carbon::parse($lastBilling->due_date)->addDays(30);
+                $nextDueDate = DueDateService::nextDueDate($lastBilling->due_date, $moveInDay);
             } else {
                 // First ever payment after move in
-                $nextDueDate = Carbon::parse($tenancy->move_in_date)->addDays(30);
+                $nextDueDate = DueDateService::nextDueDate($tenancy->move_in_date, $moveInDay);
             }
 
             $daysUntilDue = $today->diffInDays($nextDueDate, false); // Negative if overdue
