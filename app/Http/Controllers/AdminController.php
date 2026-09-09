@@ -301,7 +301,7 @@ class AdminController extends Controller
             abort(404);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('local')->response($path, basename($path), ['Content-Type' => 'image/*']);
+        return \Illuminate\Support\Facades\Storage::disk('local')->response($path, basename($path));
     }
 
     /**
