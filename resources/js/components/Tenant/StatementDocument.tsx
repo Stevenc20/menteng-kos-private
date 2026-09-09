@@ -55,6 +55,11 @@ function SheetPage({ num, meteran, meteranValue, onMeteranChange, children }: { 
                             placeholder=".........."
                             className="mt-1.5 w-24"
                         />
+                        {meteranValue && (
+                            <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-neutral-700">
+                                {meteranValue}m³ - {Number(meteranValue) + 5}m³
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

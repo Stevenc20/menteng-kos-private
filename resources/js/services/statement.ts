@@ -107,7 +107,7 @@ const meteranBoxHTML = (p: StatementParams) => `
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
-        <div style="margin-top:2px;letter-spacing:2px;font-weight:bold;">${esc(p.meteran) || '..................'}</div>
+        <div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}</div>
     </div>`;
 
 export const roomStatementHTML = (p: StatementParams) => {
@@ -255,7 +255,7 @@ export const kioskStatementHTML = (p: StatementParams) => {
         <p style="text-align:justify;">Saya menyewa kios sebesar <strong>Rp ${esc(p.sewaNumeral)}</strong> setiap tanggal <strong>${esc(p.dueDay)}</strong> namun akan direminder setiap tgl <strong>${esc(p.reminderDay)}</strong>, yang terdiri dari:</p>
         <ul style="padding-left:24px;margin:4px 0;">
             <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${esc(p.sewaNumeral)}</strong></li>
-            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${esc(p.meteran) || '_______________'}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>
+            <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '_______________'}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>
         </ul>
 
         <p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>
