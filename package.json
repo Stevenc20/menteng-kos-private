@@ -39,6 +39,7 @@
         "lucide-react": "^0.475.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
+        "react-easy-crop": "^6.2.3",
         "react-signature-canvas": "^1.1.0-alpha.2",
         "sonner": "^2.0.0",
         "tailwind-merge": "^3.0.1",

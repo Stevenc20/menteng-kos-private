@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatementDocument from '@/components/Tenant/StatementDocument';
+import KtpCaptureFlow from '@/components/KtpCaptureFlow';
 import { buildStatementHTML as buildStatementTemplateHTML, formatRupiah, indonesianToday, calcDueDay, calcReminderDay, type StatementParams } from '@/services/statement';
 
 interface Tenancy {
@@ -89,11 +90,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.property?.facilities?.[i] ?? '');
     const sewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(tenancy.agreed_price) || 0);
 
-    // Hidden file inputs for camera (capture) and gallery (file picker) per occupant
-    const cameraInput1 = useRef<HTMLInputElement>(null);
-    const galleryInput1 = useRef<HTMLInputElement>(null);
-    const cameraInput2 = useRef<HTMLInputElement>(null);
-    const galleryInput2 = useRef<HTMLInputElement>(null);
+    const [captureOccupant, setCaptureOccupant] = useState<1 | 2 | null>(null);
 
     const [uploading, setUploading] = useState<{ ktp_1: boolean; ktp_2: boolean }>({ ktp_1: false, ktp_2: false });
     const [uploadError, setUploadError] = useState<{ ktp_1: string; ktp_2: string }>({ ktp_1: '', ktp_2: '' });
@@ -171,13 +168,9 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const nextStep = () => setStep(s => Math.min(s + 1, totalSteps));
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, occupantNum: 1 | 2) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Data identitas TIDAK dikosongkan di sini: mengganti foto tidak boleh
-        // menghapus data yang sudah terisi. Nilai field hanya diganti oleh hasil
-        // OCR/backend yang benar-benar terbaca dari foto baru (lihat uploadKtp).
+    const handleCapturedPhoto = (file: File, occupantNum: 1 | 2) => {
+        setCaptureOccupant(null); // Close modal
+        
         const prefix = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
         const errKey = occupantNum === 1 ? 'ktp_1' : 'ktp_2';
         const previewUrl = URL.createObjectURL(file);
@@ -192,8 +185,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         setUploadError(s => ({ ...s, [errKey]: '' }));
         setUploading(s => ({ ...s, [errKey]: true }));
 
-        // Upload + OCR langsung saat foto dipilih, bukan menunggu tombol "Lanjut",
-        // supaya data KTP otomatis masuk ke field.
+        // Upload + OCR langsung saat foto dipilih
         void uploadKtp(occupantNum, file);
     };
 
@@ -468,23 +460,23 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                     </p>
                                 )}
                                 <div className="flex flex-wrap gap-3 justify-center">
-                                    <button type="button" onClick={() => cameraInput1.current?.click()} className="px-4 py-2.5 rounded-xl text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
+                                    <button type="button" onClick={() => setCaptureOccupant(1)} className="px-4 py-2.5 rounded-xl text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
                                         📷 Ganti dengan Kamera
                                     </button>
-                                    <button type="button" onClick={() => galleryInput1.current?.click()} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-neutral-300 text-neutral-700 hover:bg-neutral-100 transition-colors">
+                                    <button type="button" onClick={() => setCaptureOccupant(1)} className="hidden">
                                         🖼️ Ganti dari Galeri
                                     </button>
                                 </div>
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <button type="button" onClick={() => cameraInput1.current?.click()} className="w-full p-6 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex flex-col items-center gap-2">
+                                <button type="button" onClick={() => setCaptureOccupant(1)} className="w-full p-6 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex flex-col items-center gap-2">
                                     <span className="text-2xl">📷</span>
                                     <span className="text-sm font-medium text-neutral-900">Ambil Foto dengan Kamera</span>
                                     <span className="text-xs text-neutral-500">Membuka kamera belakang HP</span>
                                 </button>
                                 <div className="flex items-center gap-3 text-xs text-neutral-400"><div className="flex-1 h-px bg-neutral-200"></div>atau<div className="flex-1 h-px bg-neutral-200"></div></div>
-                                <button type="button" onClick={() => galleryInput1.current?.click()} className="w-full p-6 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex flex-col items-center gap-2">
+                                <button type="button" onClick={() => setCaptureOccupant(1)} className="hidden">
                                     <span className="text-2xl">🖼️</span>
                                     <span className="text-sm font-medium text-neutral-900">Pilih Foto dari Galeri</span>
                                     <span className="text-xs text-neutral-500">Membuka galeri HP</span>
@@ -492,8 +484,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                             </div>
                         )}
 
-                        <input ref={cameraInput1} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(e, 1)} />
-                        <input ref={galleryInput1} type="file" accept="image/*" className="hidden" onChange={(e) => handlePhotoUpload(e, 1)} />
+
+
 
                         {uploadError.ktp_1 && <p className="text-red-500 text-sm font-medium">{uploadError.ktp_1}</p>}
                         {errors.ktp_1_photo && <p className="text-red-500 text-xs">{errors.ktp_1_photo}</p>}
@@ -555,28 +547,28 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                             <img src={data.ktp_2_photo_preview} className="max-h-40 mx-auto rounded-lg shadow-sm" alt="Preview KTP Penghuni 2"/>
                                         </div>
                                         <div className="flex flex-wrap gap-3 justify-center">
-                                            <button type="button" onClick={() => cameraInput2.current?.click()} className="px-4 py-2.5 rounded-xl text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
+                                            <button type="button" onClick={() => setCaptureOccupant(2)} className="px-4 py-2.5 rounded-xl text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
                                                 📷 Ganti dengan Kamera
                                             </button>
-                                            <button type="button" onClick={() => galleryInput2.current?.click()} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-neutral-300 text-neutral-700 hover:bg-neutral-100 transition-colors">
+                                            <button type="button" onClick={() => setCaptureOccupant(2)} className="hidden">
                                                 🖼️ Ganti dari Galeri
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col sm:flex-row gap-3">
-                                        <button type="button" onClick={() => cameraInput2.current?.click()} className="flex-1 px-4 py-4 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex items-center justify-center gap-2">
+                                        <button type="button" onClick={() => setCaptureOccupant(2)} className="flex-1 px-4 py-4 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex items-center justify-center gap-2">
                                             <span>📷</span>
                                             <span className="text-sm font-medium text-neutral-900">Ambil Foto dengan Kamera</span>
                                         </button>
-                                        <button type="button" onClick={() => galleryInput2.current?.click()} className="flex-1 px-4 py-4 rounded-2xl border-2 border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-900 transition-colors flex items-center justify-center gap-2">
+                                        <button type="button" onClick={() => setCaptureOccupant(2)} className="hidden">
                                             <span>🖼️</span>
                                             <span className="text-sm font-medium text-neutral-900">Pilih dari Galeri</span>
                                         </button>
                                     </div>
                                 )}
-                                <input ref={cameraInput2} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
-                                <input ref={galleryInput2} type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(e, 2)} />
+
+
                                 {data.ktp_2_photo_preview && (
                                     <p className={`text-xs font-medium text-center ${uploading.ktp_2 ? 'text-neutral-500' : 'text-green-600'}`}>
                                         {uploading.ktp_2
