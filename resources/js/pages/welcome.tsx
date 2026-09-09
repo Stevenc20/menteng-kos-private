@@ -113,6 +113,11 @@ export default function Welcome({ properties }: WelcomeProps) {
                                                     src={cover.url} 
                                                     alt={property.name}
                                                     draggable="false"
+                                                    onError={(e) => {
+                                                        if (!e.currentTarget.src.includes('placehold.co')) {
+                                                            e.currentTarget.src = 'https://placehold.co/800x600/1A1A18/8A8A84?text=Gambar+Tidak+Tersedia';
+                                                        }
+                                                    }}
                                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"
                                                 />
                                             ) : (

@@ -4,10 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class PropertyMedia extends Model
 {
     protected $appends = ['url'];
+
+    protected function casts(): array
+    {
+        return [
+            'is_cover' => 'boolean',
+        ];
+    }
 
     /**
      * Get the property that owns the media.
@@ -32,6 +40,7 @@ class PropertyMedia extends Model
             if (str_contains($this->public_path, 'http://localhost')) {
                 return str_replace('http://localhost', config('app.url'), $this->public_path);
             }
+
             return $this->public_path;
         }
 
@@ -42,7 +51,7 @@ class PropertyMedia extends Model
 
         // Clean up paths that accidentally have public/ prefixed
         $cleanPath = str_replace('public/', '', $this->public_path);
-        
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($cleanPath);
+
+        return Storage::disk('public')->url($cleanPath);
     }
 }

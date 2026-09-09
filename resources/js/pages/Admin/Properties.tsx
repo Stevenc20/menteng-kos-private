@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useForm, router, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
@@ -69,8 +69,19 @@ export default function Properties({ properties: initialProperties }: Properties
     const [showModal, setShowModal] = useState(false);
     const [editingProp, setEditingProp] = useState<Property | null>(null);
     const [customFacility, setCustomFacility] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
-    // Sync editingProp when properties update from server (e.g. after media upload)
+    // Mirrors server data so the list can be updated in place (no full reload)
+    const [listProperties, setListProperties] = useState<Property[]>(initialProperties);
+    useEffect(() => {
+        if (props.properties && Array.isArray(props.properties)) {
+            setListProperties(props.properties);
+        }
+    }, [props.properties]);
+    
+    // Sync editingProp when properties update from server (e.g. after an Inertia visit)
     useEffect(() => {
         if (editingProp) {
             const updated = properties.find((p: any) => p.id === editingProp.id);
@@ -79,9 +90,23 @@ export default function Properties({ properties: initialProperties }: Properties
             }
         }
     }, [properties]);
+
+    // Apply a fresh media list to both the open modal gallery and the behind-list
+    const applyMedia = (propertyId: number, media: PropertyMedia[]) => {
+        setEditingProp(prev => (prev && prev.id === propertyId) ? { ...prev, media } : prev);
+        setListProperties(prev => prev.map(p => p.id === propertyId ? { ...p, media } : p));
+    };
+
+    const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    const fallbackImg = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        if (!e.currentTarget.src.includes('placehold.co')) {
+            e.currentTarget.src = 'https://placehold.co/800x600/1A1A18/8A8A84?text=Gambar+Tidak+Tersedia';
+        }
+    };
     
     // Property Form
-    const { data, setData, post, put, processing, reset, errors, clearErrors } = useForm({
+    const { data, setData, put, processing, reset, errors, clearErrors } = useForm({
         name: '',
         type: 'ROOM',
         normal_price: '',
@@ -102,6 +127,9 @@ export default function Properties({ properties: initialProperties }: Properties
         clearErrors();
         mediaForm.reset();
         setCustomFacility('');
+        setUploading(false);
+        setSaving(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setShowModal(true);
     };
 
@@ -118,10 +146,13 @@ export default function Properties({ properties: initialProperties }: Properties
         clearErrors();
         mediaForm.reset();
         setCustomFacility('');
+        setUploading(false);
+        setSaving(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setShowModal(true);
     };
 
-    const submit = (e: React.FormEvent) => {
+    const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (editingProp) {
             put(`/admin/properties/${editingProp.id}`, {
@@ -131,15 +162,51 @@ export default function Properties({ properties: initialProperties }: Properties
                 },
                 onError: () => toast.error('Gagal memperbarui properti')
             });
-        } else {
-            post('/admin/properties', {
-                onSuccess: () => {
-                    setShowModal(false);
-                    reset();
-                    toast.success('Properti berhasil ditambahkan. Silakan edit untuk upload media.');
+            return;
+        }
+
+        // Add mode: save via JSON so the modal stays open and media can be uploaded
+        // right after the property exists (media needs a valid property_id).
+        setSaving(true);
+        try {
+            const response = await fetch('/admin/properties', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken()
                 },
-                onError: () => toast.error('Gagal menyimpan properti')
+                body: JSON.stringify(data)
             });
+
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                const message = body?.errors
+                    ? Object.values(body.errors).flat().join(', ')
+                    : body?.message || `Gagal menyimpan properti (${response.status})`;
+                throw new Error(message);
+            }
+
+            if (body?.property) {
+                const created = body.property;
+                setEditingProp(created);
+                setListProperties(prev => {
+                    const exists = prev.some(p => p.id === created.id);
+                    return exists ? prev.map(p => p.id === created.id ? created : p) : [...prev, created];
+                });
+                clearErrors();
+                toast.success('Properti berhasil disimpan. Sekarang upload foto unit di panel "3. Foto & Media Unit".');
+            } else {
+                setShowModal(false);
+                reset();
+                toast.success('Properti berhasil ditambahkan.');
+            }
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error: ' + error.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -150,7 +217,7 @@ export default function Properties({ properties: initialProperties }: Properties
             toast.error('Pilih foto terlebih dahulu!');
             return;
         }
-        
+
         const formData = new FormData();
         mediaForm.data.photos.forEach((photo) => {
             formData.append('photos[]', photo);
@@ -159,29 +226,39 @@ export default function Properties({ properties: initialProperties }: Properties
             formData.append('video', mediaForm.data.video);
         }
 
+        setUploading(true);
         try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            
             const response = await fetch(`/admin/properties/${editingProp.id}/media`, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': csrfToken || ''
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken()
                 },
                 body: formData
             });
 
+            const body = await response.json().catch(() => null);
+
             if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text);
+                throw new Error(body?.message || `Upload gagal (${response.status})`);
             }
 
-            toast.success('Media berhasil diunggah');
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            if (body?.media) {
+                applyMedia(editingProp.id, body.media);
+            }
+
+            mediaForm.setData('photos', []);
+            mediaForm.setData('video', null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+
+            toast.success('Foto berhasil diunggah');
         } catch (error: any) {
             console.error(error);
             toast.error('Error: ' + error.message);
+        } finally {
+            setUploading(false);
         }
     };
 
@@ -194,21 +271,61 @@ export default function Properties({ properties: initialProperties }: Properties
         }
     };
 
-    const setCover = (mediaId: number) => {
+    const setCover = async (mediaId: number) => {
         if (!editingProp) return;
-        router.post(`/admin/properties/${editingProp.id}/media/${mediaId}/cover`, {}, {
-            preserveScroll: true,
-            onSuccess: () => toast.success('Cover berhasil diubah')
-        });
+        try {
+            const response = await fetch(`/admin/properties/${editingProp.id}/media/${mediaId}/cover`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken()
+                }
+            });
+
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(body?.message || `Gagal ubah cover (${response.status})`);
+            }
+
+            if (body?.media) {
+                applyMedia(editingProp.id, body.media);
+            }
+
+            toast.success('Cover berhasil diubah');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error: ' + error.message);
+        }
     };
 
-    const deleteMedia = (mediaId: number) => {
+    const deleteMedia = async (mediaId: number) => {
         if (!editingProp) return;
-        if (confirm('Hapus media ini?')) {
-            router.delete(`/admin/properties/${editingProp.id}/media/${mediaId}`, {
-                preserveScroll: true,
-                onSuccess: () => toast.success('Media dihapus')
+        if (!confirm('Hapus media ini?')) return;
+
+        try {
+            const response = await fetch(`/admin/properties/${editingProp.id}/media/${mediaId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken()
+                }
             });
+
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(body?.message || `Gagal hapus media (${response.status})`);
+            }
+
+            if (body?.media) {
+                applyMedia(editingProp.id, body.media);
+            }
+
+            toast.success('Media dihapus');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error: ' + error.message);
         }
     };
 
@@ -255,14 +372,14 @@ export default function Properties({ properties: initialProperties }: Properties
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E7E3]">
-                        {properties.map((prop) => {
+                        {listProperties.map((prop) => {
                             const cover = prop.media?.find(m => m.is_cover) || prop.media?.[0];
                             return (
                                 <tr key={prop.id} className="hover:bg-[#F7F7F5] transition-colors">
                                     <td className="px-6 py-4">
                                         {cover && cover.type === 'IMAGE' ? (
                                             <div className="w-16 h-12 rounded-lg overflow-hidden border border-[#E8E7E3]">
-                                                <img src={cover.url} className="w-full h-full object-cover" alt="Cover" />
+<img src={cover.url} className="w-full h-full object-cover" alt="Cover" onError={fallbackImg} />
                                             </div>
                                         ) : (
                                             <div className="w-16 h-12 bg-[#F7F7F5] rounded-lg border border-[#E8E7E3] flex items-center justify-center text-[#8A8A84]">
@@ -310,7 +427,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                 </tr>
                             );
                         })}
-                        {properties.length === 0 && (
+                        {listProperties.length === 0 && (
                             <tr>
                                 <td colSpan={6} className="px-6 py-12 text-center text-[#6B6B67]">Belum ada properti yang ditambahkan.</td>
                             </tr>
@@ -321,13 +438,13 @@ export default function Properties({ properties: initialProperties }: Properties
 
             {/* Mobile Card View */}
             <div className="md:hidden grid grid-cols-1 gap-4">
-                {properties.map((prop) => {
+                {listProperties.map((prop) => {
                     const cover = prop.media?.find(m => m.is_cover) || prop.media?.[0];
                     return (
                         <div key={prop.id} className="bg-white border border-[#E8E7E3] rounded-xl p-4 shadow-sm flex gap-4">
                             <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-[#E8E7E3] bg-[#F7F7F5] flex items-center justify-center text-[#8A8A84]">
                                 {cover && cover.type === 'IMAGE' ? (
-                                    <img src={cover.url} className="w-full h-full object-cover" alt="Cover" />
+                                    <img src={cover.url} className="w-full h-full object-cover" alt="Cover" onError={fallbackImg} />
                                 ) : (
                                     <ImageIcon className="w-6 h-6" />
                                 )}
@@ -362,13 +479,13 @@ export default function Properties({ properties: initialProperties }: Properties
 
             <AdminModal 
                 isOpen={showModal} 
-                onClose={() => !processing && setShowModal(false)}
+                onClose={() => !processing && !uploading && !saving && setShowModal(false)}
                 maxWidth="4xl" // Wider to accommodate side-by-side or large stacked sections
             >
                 <div className="flex flex-col h-[85vh] lg:h-auto lg:max-h-[85vh] bg-white">
                     <AdminModalHeader 
                         title={editingProp ? "Edit Properti" : "Tambah Properti Baru"} 
-                        onClose={() => !processing && setShowModal(false)}
+                        onClose={() => !processing && !uploading && !saving && setShowModal(false)}
                     />
                     
                     <div className="flex-1 overflow-y-auto p-0">
@@ -518,6 +635,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                                 <div>
                                                     <FormLabel>Upload Foto (Bisa lebih dari 1)</FormLabel>
                                                     <input 
+                                                        ref={fileInputRef}
                                                         type="file" 
                                                         multiple
                                                         accept="image/*"
@@ -539,11 +657,11 @@ export default function Properties({ properties: initialProperties }: Properties
                                                 </div>
                                                 <AdminButton 
                                                     type="submit" 
-                                                    disabled={mediaForm.data.photos.length === 0}
-                                                    isLoading={mediaForm.processing}
+                                                    disabled={mediaForm.data.photos.length === 0 || uploading}
+                                                    isLoading={uploading}
                                                     className="w-full"
                                                 >
-                                                    Upload Gambar
+                                                    {uploading ? 'Mengunggah...' : 'Upload Gambar'}
                                                 </AdminButton>
                                             </div>
                                         </form>
@@ -560,7 +678,7 @@ export default function Properties({ properties: initialProperties }: Properties
                                                     {editingProp.media.map(media => (
                                                         <div key={media.id} className="relative group rounded-lg overflow-hidden border border-[#E8E7E3] aspect-[4/3] bg-white shadow-sm">
                                                             {media.type === 'IMAGE' ? (
-                                                                <img src={media.url} className="w-full h-full object-cover" alt="Property Media" />
+                                                                <img src={media.url} className="w-full h-full object-cover" alt="Property Media" onError={fallbackImg} />
                                                             ) : (
                                                                 <div className="w-full h-full flex flex-col items-center justify-center text-[#8A8A84] bg-neutral-100">
                                                                     <VideoIcon className="w-6 h-6 mb-1" />
@@ -617,13 +735,14 @@ export default function Properties({ properties: initialProperties }: Properties
                             type="button" 
                             variant="secondary" 
                             onClick={() => setShowModal(false)}
+                            disabled={processing || uploading || saving}
                         >
                             Tutup
                         </AdminButton>
                         <AdminButton 
                             type="submit" 
                             form="property-form"
-                            isLoading={processing}
+                            isLoading={processing || saving}
                         >
                             {editingProp ? "Simpan Perubahan Unit" : "Simpan Properti Baru"}
                         </AdminButton>

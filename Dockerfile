@@ -23,3 +23,10 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
 RUN chown -R www-data:www-data /var/www/html
+
+# Ensure public/storage symlink exists on every start (uploads live in ./storage)
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+CMD ["apache2-foreground"]

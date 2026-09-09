@@ -2,10 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agreement;
+use App\Models\AgreementSignature;
 use App\Models\Property;
+use App\Models\PropertyMedia;
+use App\Models\RoomDocumentation;
+use App\Models\RoomDocumentationMedia;
 use App\Models\Tenancy;
+use App\Models\TenantProfile;
 use App\Models\User;
+use App\Models\WaterMeter;
+use App\Services\ImageWatermarkService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class AdminController extends Controller
@@ -23,7 +34,7 @@ class AdminController extends Controller
         ];
 
         return Inertia::render('Admin/Dashboard', [
-            'stats' => $stats
+            'stats' => $stats,
         ]);
     }
 
@@ -32,10 +43,10 @@ class AdminController extends Controller
      */
     public function properties()
     {
-        $properties = Property::orderBy('name')->get();
+        $properties = Property::with('media')->orderBy('name')->get();
 
         return Inertia::render('Admin/Properties', [
-            'properties' => $properties
+            'properties' => $properties,
         ]);
     }
 
@@ -51,10 +62,14 @@ class AdminController extends Controller
             'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE',
             'description' => 'nullable|string',
             'facilities' => 'nullable|array',
-            'facilities.*' => 'string'
+            'facilities.*' => 'string',
         ]);
 
-        Property::create($validated);
+        $property = Property::create($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json(['property' => $property->load('media')], 201);
+        }
 
         return redirect()->back()->with('success', 'Property created successfully.');
     }
@@ -73,7 +88,7 @@ class AdminController extends Controller
             'status' => 'required|in:AVAILABLE,OCCUPIED,MAINTENANCE',
             'description' => 'nullable|string',
             'facilities' => 'nullable|array',
-            'facilities.*' => 'string'
+            'facilities.*' => 'string',
         ]);
 
         $property->update($validated);
@@ -87,6 +102,18 @@ class AdminController extends Controller
     public function destroyProperty($id)
     {
         $property = Property::findOrFail($id);
+
+        // Remove stored media files before deleting, so no orphan files remain.
+        foreach ($property->media as $media) {
+            if ($media->original_path) {
+                Storage::disk('local')->delete($media->original_path);
+            }
+            if ($media->public_path) {
+                $publicRelative = str_replace([config('app.url').'/storage', '/storage/'], '', $media->public_path);
+                Storage::disk('public')->delete($publicRelative);
+            }
+        }
+
         $property->delete();
 
         return redirect()->back()->with('success', 'Property deleted successfully.');
@@ -95,7 +122,7 @@ class AdminController extends Controller
     /**
      * Store Media for a Property.
      */
-    public function storeMedia(Request $request, $id, \App\Services\ImageWatermarkService $watermarkService)
+    public function storeMedia(Request $request, $id, ImageWatermarkService $watermarkService)
     {
         $property = Property::findOrFail($id);
 
@@ -104,18 +131,22 @@ class AdminController extends Controller
             'video' => 'nullable|mimes:mp4,mov,avi|max:51200',
         ]);
 
+        $wantsJson = $request->wantsJson();
+
         try {
-            if (!$request->hasFile('photos')) {
-                return redirect()->back()->withErrors(['photos' => 'No files received by server. Keys: ' . implode(',', array_keys($request->all()))]);
+            if (! $request->hasFile('photos') && ! $request->hasFile('video')) {
+                if ($wantsJson) {
+                    return response()->json(['message' => 'Belum ada file yang dipilih.'], 422);
+                }
+
+                return redirect()->back()->withErrors(['photos' => 'No files received by server.']);
             }
 
             if ($request->hasFile('photos')) {
                 foreach ($request->file('photos') as $photo) {
                     $paths = $watermarkService->processAndStore($photo, $property->id);
-                    
-                    \Illuminate\Support\Facades\Log::info('Creating media for property ' . $property->id, $paths);
 
-                    $media = new \App\Models\PropertyMedia();
+                    $media = new PropertyMedia;
                     $media->property_id = $property->id;
                     $media->type = 'IMAGE';
                     $media->original_path = $paths['original_path'];
@@ -128,49 +159,83 @@ class AdminController extends Controller
 
             if ($request->hasFile('video')) {
                 $video = $request->file('video');
-                $filename = \Illuminate\Support\Str::random(40) . '.' . $video->getClientOriginalExtension();
-                
-                // Store on public disk
+                $filename = Str::random(40).'.'.$video->getClientOriginalExtension();
+
                 $publicRelativePath = "properties/{$property->id}/videos/{$filename}";
-                \Illuminate\Support\Facades\Storage::disk('public')->putFileAs("properties/{$property->id}/videos", $video, $filename);
-                
-                $media = new \App\Models\PropertyMedia();
+                Storage::disk('public')->putFileAs("properties/{$property->id}/videos", $video, $filename);
+
+                $media = new PropertyMedia;
                 $media->property_id = $property->id;
                 $media->type = 'VIDEO';
                 $media->original_path = $publicRelativePath;
-                $media->public_path = $publicRelativePath; // Store relative path
+                $media->public_path = $publicRelativePath;
                 $media->is_cover = false;
                 $media->sort_order = $property->media()->count();
                 $media->save();
             }
 
+            $mediaList = $property->media()->orderBy('sort_order')->get();
+
+            if ($wantsJson) {
+                return response()->json(['media' => $mediaList]);
+            }
+
             return redirect()->back()->with('success', 'Media uploaded successfully.');
         } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['photos' => 'Server Error: ' . $e->getMessage()]);
+            if ($wantsJson) {
+                return response()->json(['message' => 'Server Error: '.$e->getMessage()], 500);
+            }
+
+            return redirect()->back()->withErrors(['photos' => 'Server Error: '.$e->getMessage()]);
         }
     }
 
-    public function setCoverMedia($id, $mediaId)
+    public function setCoverMedia(Request $request, $id, $mediaId)
     {
         $property = Property::findOrFail($id);
         $property->media()->update(['is_cover' => false]);
         $property->media()->where('id', $mediaId)->update(['is_cover' => true]);
 
+        $mediaList = $property->media()->orderBy('sort_order')->get();
+
+        if ($request->wantsJson()) {
+            return response()->json(['media' => $mediaList]);
+        }
+
         return redirect()->back()->with('success', 'Cover image updated.');
     }
 
-    public function deleteMedia($id, $mediaId)
+    public function deleteMedia(Request $request, $id, $mediaId)
     {
-        $media = \App\Models\PropertyMedia::where('property_id', $id)->findOrFail($mediaId);
-        
-        // Delete files
-        \Illuminate\Support\Facades\Storage::delete($media->original_path);
+        $media = PropertyMedia::where('property_id', $id)->findOrFail($mediaId);
+
+        // Delete private original (stored on the 'local' disk)
+        if ($media->original_path) {
+            Storage::disk('local')->delete($media->original_path);
+        }
+
+        // Delete public copy (stored on the 'public' disk as a relative path)
         if ($media->public_path) {
-            $publicRelative = str_replace('/storage/', 'public/', $media->public_path);
-            \Illuminate\Support\Facades\Storage::delete($publicRelative);
+            $publicRelative = str_replace([config('app.url').'/storage', '/storage/'], '', $media->public_path);
+            Storage::disk('public')->delete($publicRelative);
         }
 
         $media->delete();
+
+        // Cover fallback: when the last cover is removed but photos remain,
+        // automatically promote the next media so is_cover stays consistent.
+        if (! PropertyMedia::where('property_id', $id)->where('is_cover', true)->exists()) {
+            PropertyMedia::where('property_id', $id)
+                ->orderBy('sort_order')
+                ->first()
+                ?->update(['is_cover' => true]);
+        }
+
+        $mediaList = PropertyMedia::where('property_id', $id)->orderBy('sort_order')->get();
+
+        if ($request->wantsJson()) {
+            return response()->json(['media' => $mediaList]);
+        }
 
         return redirect()->back()->with('success', 'Media deleted.');
     }
@@ -179,11 +244,11 @@ class AdminController extends Controller
     {
         $validated = $request->validate([
             'order' => 'required|array',
-            'order.*' => 'integer|exists:property_media,id'
+            'order.*' => 'integer|exists:property_media,id',
         ]);
 
         foreach ($validated['order'] as $index => $mediaId) {
-            \App\Models\PropertyMedia::where('property_id', $id)
+            PropertyMedia::where('property_id', $id)
                 ->where('id', $mediaId)
                 ->update(['sort_order' => $index]);
         }
@@ -203,7 +268,11 @@ class AdminController extends Controller
 
         switch ($filter) {
             case 'pending':
-                $query->where('status', 'PENDING_ADMIN_APPROVAL')->where('approval_status', 'PENDING');
+                // Waiting for review: both legacy (AGREEMENT_SUBMITTED) and current
+                // submission (PENDING_ADMIN_APPROVAL) can be pending, but never one
+                // that has been rejected.
+                $query->whereIn('status', ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])
+                    ->where('approval_status', 'PENDING');
                 break;
             case 'active':
                 $query->where('status', 'ACTIVE');
@@ -217,7 +286,9 @@ class AdminController extends Controller
 
         $counts = [
             'total' => Tenancy::count(),
-            'pending' => Tenancy::where('status', 'PENDING_ADMIN_APPROVAL')->where('approval_status', 'PENDING')->count(),
+            'pending' => Tenancy::whereIn('status', ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])
+                ->where('approval_status', 'PENDING')
+                ->count(),
             'active' => Tenancy::where('status', 'ACTIVE')->count(),
             'rejected' => Tenancy::where('approval_status', 'REJECTED')->count(),
         ];
@@ -228,7 +299,7 @@ class AdminController extends Controller
             'tenancies' => $tenancies,
             'counts' => $counts,
             'activeFilter' => $filter,
-            'availableProperties' => $availableProperties
+            'availableProperties' => $availableProperties,
         ]);
     }
 
@@ -256,7 +327,7 @@ class AdminController extends Controller
             'property_id' => $validated['property_id'],
             'agreed_price' => $validated['agreed_price'],
             'move_in_date' => $validated['move_in_date'],
-            'status' => 'INVITED'
+            'status' => 'INVITED',
         ]);
 
         return redirect()->back()->with('success', 'Tenant invited successfully.');
@@ -268,12 +339,12 @@ class AdminController extends Controller
     public function showApproval($id)
     {
         $tenancy = Tenancy::with(['user', 'property'])->findOrFail($id);
-        $profile = \App\Models\TenantProfile::where('user_id', $tenancy->user_id)->first();
-        $agreement = \App\Models\Agreement::where('tenancy_id', $tenancy->id)->first();
-        $signatures = \App\Models\AgreementSignature::where('agreement_id', $agreement?->id)->get();
-        
-        $moveInDoc = \App\Models\RoomDocumentation::where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
-        $waterMeter = \App\Models\WaterMeter::where('tenancy_id', $tenancy->id)->first();
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->first();
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        $signatures = AgreementSignature::where('agreement_id', $agreement?->id)->get();
+
+        $moveInDoc = RoomDocumentation::where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
+        $waterMeter = WaterMeter::where('tenancy_id', $tenancy->id)->first();
         $approvedBy = $tenancy->approved_by ? User::find($tenancy->approved_by) : null;
 
         return Inertia::render('Admin/ApprovalDetail', [
@@ -283,7 +354,7 @@ class AdminController extends Controller
             'signatures' => $signatures,
             'approvedBy' => $approvedBy,
             'moveInDoc' => $moveInDoc,
-            'waterMeter' => $waterMeter
+            'waterMeter' => $waterMeter,
         ]);
     }
 
@@ -293,15 +364,15 @@ class AdminController extends Controller
     public function getTenantKtpPhoto($id, $kind)
     {
         $tenancy = Tenancy::findOrFail($id);
-        $profile = \App\Models\TenantProfile::where('user_id', $tenancy->user_id)->firstOrFail();
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->firstOrFail();
 
         $path = $kind === '2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
 
-        if (!$path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
+        if (! $path || ! Storage::disk('local')->exists($path)) {
             abort(404);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('local')->response($path, basename($path));
+        return Storage::disk('local')->response($path, basename($path));
     }
 
     /**
@@ -313,7 +384,7 @@ class AdminController extends Controller
 
         abort_unless($tenancy->status === 'PENDING_ADMIN_APPROVAL', 422, 'Tenant tidak sedang dalam status menunggu persetujuan.');
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($tenancy) {
+        DB::transaction(function () use ($tenancy) {
             $tenancy->update([
                 'status' => 'ACTIVE',
                 'approval_status' => 'APPROVED',
@@ -378,6 +449,7 @@ class AdminController extends Controller
     {
         $tenancy = Tenancy::findOrFail($id);
         $tenancy->update(['status' => 'PENDING_MOVE_IN_DOCUMENTATION']);
+
         return redirect()->back()->with('success', 'Data and Agreement approved. Please proceed with Room Documentation.');
     }
 
@@ -387,14 +459,14 @@ class AdminController extends Controller
     public function storeMoveInDoc(Request $request, $id)
     {
         $tenancy = Tenancy::findOrFail($id);
-        
+
         $validated = $request->validate([
             'documentation_date' => 'required|date',
             'notes' => 'nullable|string',
             'photos.*' => 'required|image|max:5120',
         ]);
 
-        $doc = \App\Models\RoomDocumentation::create([
+        $doc = RoomDocumentation::create([
             'property_id' => $tenancy->property_id,
             'tenancy_id' => $tenancy->id,
             'documentation_type' => 'MOVE_IN',
@@ -406,7 +478,7 @@ class AdminController extends Controller
         if ($request->hasFile('photos')) {
             foreach ($request->file('photos') as $photo) {
                 $path = $photo->store('private/room_docs');
-                \App\Models\RoomDocumentationMedia::create([
+                RoomDocumentationMedia::create([
                     'documentation_id' => $doc->id,
                     'file_type' => 'IMAGE',
                     'file_path' => $path,
@@ -418,6 +490,7 @@ class AdminController extends Controller
         }
 
         $tenancy->update(['status' => 'PENDING_WATER_METER']);
+
         return redirect()->back()->with('success', 'Move-in documentation saved. Please proceed with Initial Water Meter.');
     }
 
@@ -427,7 +500,7 @@ class AdminController extends Controller
     public function storeStartWaterMeter(Request $request, $id)
     {
         $tenancy = Tenancy::findOrFail($id);
-        
+
         $validated = $request->validate([
             'date' => 'required|date',
             'start_meter' => 'required|integer|min:0',
@@ -437,7 +510,7 @@ class AdminController extends Controller
         $path = $request->file('photo')->store('private/water_meters');
 
         // Create the initial water meter record
-        \App\Models\WaterMeter::create([
+        WaterMeter::create([
             'tenancy_id' => $tenancy->id,
             'period_month' => (int) date('m', strtotime($validated['date'])),
             'period_year' => (int) date('Y', strtotime($validated['date'])),
@@ -449,10 +522,10 @@ class AdminController extends Controller
 
         // Activate the tenant
         $tenancy->update(['status' => 'ACTIVE']);
-        
+
         // Change Property status to OCCUPIED
-        $property = \App\Models\Property::find($tenancy->property_id);
-        if($property) {
+        $property = Property::find($tenancy->property_id);
+        if ($property) {
             $property->update(['status' => 'OCCUPIED']);
         }
 
