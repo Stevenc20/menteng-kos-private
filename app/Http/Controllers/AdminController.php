@@ -540,6 +540,37 @@ class AdminController extends Controller
     }
 
     /**
+     * Delete a tenant account and all of its data (permanently).
+     * Deletes the tenancy first (cascades agreements, billings, water meters,
+     * docs, etc.), frees the unit, then removes the user account.
+     */
+    public function destroyTenant($id)
+    {
+        $tenancy = Tenancy::with('property')->findOrFail($id);
+
+        DB::transaction(function () use ($tenancy) {
+            $userId = $tenancy->user_id;
+            $property = $tenancy->property;
+
+            // Delete tenancy first so all dependent rows (which reference users
+            // via payment_proofs/income_proofs/room_documentations) cascade away
+            // before we drop the user account itself.
+            $tenancy->delete();
+
+            if ($property && $property->status === 'OCCUPIED') {
+                $property->update(['status' => 'AVAILABLE']);
+            }
+
+            $user = User::find($userId);
+            if ($user && ! Tenancy::where('user_id', $user->id)->exists()) {
+                $user->delete();
+            }
+        });
+
+        return redirect()->route('admin.tenants')->with('success', 'Akun tenant beserta seluruh datanya berhasil dihapus.');
+    }
+
+    /**
      * Step 1: Admin Approves the Data/Agreement
      */
     public function approveData($id)

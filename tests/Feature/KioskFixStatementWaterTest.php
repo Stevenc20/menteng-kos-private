@@ -13,7 +13,11 @@ uses(RefreshDatabase::class);
 /** Renders the OLD kiosk "5m3 included" payment block (what was stored at sign-time). */
 function oldKioskPaymentBlock(string $meter = '100'): string
 {
-    return '<ul style="padding-left:24px;margin:4px 0;">'
+    return '<div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">'
+        . '<div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>'
+        . '<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">'
+        . $meter . 'm³ - ' . ($meter + 5) . 'm³</div></div>'
+        . '<ul style="padding-left:24px;margin:4px 0;">'
         . '<li style="margin:4px 0;">Uang sewa kios <strong>Rp 1.700.000</strong></li>'
         . '<li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>'
         . $meter . 'm³ - ' . ($meter + 5) . 'm³</strong>, lewat dari itu saya akan membayar air per 1m³ kena '
@@ -62,6 +66,10 @@ test('force rewrites the water clause for a KIOSK with deal below standard', fun
     expect($html)->toContain('TIDAK termasuk');
     expect($html)->toContain('dibayar <strong>terpisah</strong>');
     expect($html)->toContain('tarif <strong>Rp 14.000/m³</strong>');
+    expect($html)->toContain('akumulasi pemakaian aktual');
+    expect($html)->toContain('ditambahkan pada tagihan pembayaran bulanan');
+    expect($html)->toContain('100m³</div><div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>');
+    expect($html)->not->toContain('100m³ - 105m³');
 });
 
 test('leaves KIOSK statements untouched when deal price is not below standard', function () {

@@ -64,6 +64,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/tenants/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveTenant'])->name('admin.tenants.approve');
     Route::post('/tenants/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
     Route::post('/tenants/{id}/reopen', [\App\Http\Controllers\AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
+    Route::delete('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
     Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
     Route::get('/tenants/{id}/ktp/{kind}/download', [\App\Http\Controllers\AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');
 

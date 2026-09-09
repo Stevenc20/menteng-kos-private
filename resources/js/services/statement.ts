@@ -122,7 +122,12 @@ const meteranBoxHTML = (p: StatementParams) => `
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
-        <div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}</div>
+        ${
+            p.kioskSeparateWater
+                ? `<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³` : '..................'}</div>
+                   <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>`
+                : `<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}</div>`
+        }
     </div>`;
 
 export const roomStatementHTML = (p: StatementParams) => {
@@ -272,7 +277,7 @@ export const kioskStatementHTML = (p: StatementParams) => {
             <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${esc(p.sewaNumeral)}</strong>${
                 p.kioskSeparateWater
                     ? ` — harga ini <strong>TIDAK termasuk</strong> biaya pemakaian air PAM.</li>
-            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${formatRupiah(14000)}/m³</strong>. Rumus: <em>pemakaian air (m³) × Rp ${formatRupiah(14000)}</em>.</li>`
+            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan <strong>akumulasi pemakaian aktual</strong> dari <strong>start meteran</strong> sampai pembacaan pada <strong>setiap tanggal jatuh tempo</strong> sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${formatRupiah(14000)}/m³</strong>. Biaya pemakaian air PAM akan <strong>ditambahkan pada tagihan pembayaran bulanan</strong>. Rumus: <em>pemakaian air (m³) × Rp ${formatRupiah(14000)}</em>.</li>`
                     : `.</li>
             <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '_______________'}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>`
             }

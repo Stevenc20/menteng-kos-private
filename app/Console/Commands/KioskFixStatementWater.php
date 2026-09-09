@@ -83,6 +83,16 @@ class KioskFixStatementWater extends Command
                 );
                 $html = preg_replace(self::OLD_KIOSK_WATER_BULLET, $this->newWaterBullet($tenancy), $html, 1);
 
+                // The old START METERAN box shows a range (e.g. "50m³ - 55m³").
+                // For separate-water KIOSKs we keep only the start meter number
+                // because usage accumulates over each due-date cycle.
+                $html = preg_replace(
+                    '/<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">(\d+)m³ - \d+m³<\/div>/',
+                    '<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">$1m³</div><div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>',
+                    $html,
+                    1
+                );
+
                 if ($dryRun) {
                     $updated++;
                     if ($verbose) {
@@ -110,6 +120,6 @@ class KioskFixStatementWater extends Command
         $rate = WaterBillingService::WATER_RATE_PER_M3;
         $rateText = number_format($rate, 0, ',', '.');
 
-        return '<li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif <strong>Rp ' . $rateText . '/m³</strong>. Rumus: <em>pemakaian air (m³) × Rp ' . $rateText . '</em>.</li>';
+        return '<li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan <strong>akumulasi pemakaian aktual</strong> dari <strong>start meteran</strong> sampai pembacaan pada <strong>setiap tanggal jatuh tempo</strong> sesuai <strong>meter air</strong> dengan tarif <strong>Rp ' . $rateText . '/m³</strong>. Biaya pemakaian air PAM akan <strong>ditambahkan pada tagihan pembayaran bulanan</strong>. Rumus: <em>pemakaian air (m³) × Rp ' . $rateText . '</em>.</li>';
     }
 }

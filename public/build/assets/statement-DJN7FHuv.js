@@ -52,7 +52,8 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
-        <div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`..................`}</div>
+        ${e.kioskSeparateWater?`<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${e.meteran?`${t(e.meteran)}m³`:`..................`}</div>
+                   <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>`:`<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`..................`}</div>`}
     </div>`,d=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 18px;font-size:17px;">SURAT PERNYATAAN</h2>
         <p>Yang bertanda tangan di bawah ini:</p>
@@ -133,7 +134,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         <p style="text-align:justify;">Saya menyewa kios sebesar <strong>Rp ${t(n.sewaNumeral)}</strong> setiap tanggal <strong>${t(n.dueDay)}</strong> namun akan direminder setiap tgl <strong>${t(n.reminderDay)}</strong>, yang terdiri dari:</p>
         <ul style="padding-left:24px;margin:4px 0;">
             <li style="margin:4px 0;">Uang sewa kios <strong>Rp ${t(n.sewaNumeral)}</strong>${n.kioskSeparateWater?` — harga ini <strong>TIDAK termasuk</strong> biaya pemakaian air PAM.</li>
-            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${e(14e3)}/m³</strong>. Rumus: <em>pemakaian air (m³) × Rp ${e(14e3)}</em>.</li>`:`.</li>
+            <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan <strong>akumulasi pemakaian aktual</strong> dari <strong>start meteran</strong> sampai pembacaan pada <strong>setiap tanggal jatuh tempo</strong> sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${e(14e3)}/m³</strong>. Biaya pemakaian air PAM akan <strong>ditambahkan pada tagihan pembayaran bulanan</strong>. Rumus: <em>pemakaian air (m³) × Rp ${e(14e3)}</em>.</li>`:`.</li>
             <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${n.meteran?`${t(n.meteran)}m³ - ${Number(n.meteran)+5}m³`:`_______________`}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>`}
         </ul>
 

@@ -40,7 +40,7 @@ export interface StatementDocumentProps {
     kioskSeparateWater?: boolean;
 }
 
-function SheetPage({ num, meteran, meteranValue, onMeteranChange, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; children: ReactNode }) {
+function SheetPage({ num, meteran, meteranValue, onMeteranChange, kioskSeparateWater, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; kioskSeparateWater?: boolean; children: ReactNode }) {
     return (
         <div className="relative mx-auto mb-6 w-full min-w-0 max-w-[794px] min-h-[1122px] bg-white shadow-lg border border-neutral-200">
             <div className="flex justify-between items-start px-[9%] pt-6">
@@ -56,10 +56,21 @@ function SheetPage({ num, meteran, meteranValue, onMeteranChange, children }: { 
                             placeholder=".........."
                             className="mt-1.5 w-24"
                         />
-                        {meteranValue && (
-                            <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-neutral-700">
-                                {meteranValue}m³ - {Number(meteranValue) + 5}m³
-                            </div>
+                        {kioskSeparateWater ? (
+                            <>
+                                {meteranValue && (
+                                    <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-neutral-700">
+                                        {meteranValue}m³
+                                    </div>
+                                )}
+                                <div className="text-[9px] italic text-neutral-500 whitespace-nowrap">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>
+                            </>
+                        ) : (
+                            meteranValue && (
+                                <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-neutral-700">
+                                    {meteranValue}m³ - {Number(meteranValue) + 5}m³
+                                </div>
+                            )
                         )}
                     </div>
                 )}
@@ -207,7 +218,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
         return (
             <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
                 {/* HALAMAN 1 */}
-                <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran}>
+                <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} kioskSeparateWater={kioskSeparateWater}>
                     <h2 className="text-center font-bold tracking-wide uppercase text-base sm:text-lg mb-1">Surat Pernyataan</h2>
                     <h2 className="text-center font-bold tracking-wide uppercase text-base mb-4">Kios</h2>
                     <div className="space-y-1">
@@ -250,8 +261,10 @@ export default function StatementDocument(props: StatementDocumentProps) {
                                     </li>
                                     <li>
                                         Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung
-                                        berdasarkan pemakaian aktual sesuai <strong>meter air</strong> dengan tarif{' '}
-                                        <strong>Rp 14.000/m³</strong>. Rumus:{' '}
+                                        berdasarkan <strong>akumulasi pemakaian aktual</strong> dari <strong>start meteran</strong> sampai
+                                        pembacaan pada <strong>setiap tanggal jatuh tempo</strong> sesuai <strong>meter air</strong> dengan
+                                        tarif <strong>Rp 14.000/m³</strong>. Biaya pemakaian air PAM akan{' '}
+                                        <strong>ditambahkan pada tagihan pembayaran bulanan</strong>. Rumus:{' '}
                                         <em>pemakaian air (m³) × Rp 14.000</em>.
                                     </li>
                                 </>

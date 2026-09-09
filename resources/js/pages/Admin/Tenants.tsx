@@ -101,6 +101,16 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
         router.get('/admin/tenants', key === 'all' ? {} : { status: key }, { preserveState: true, replace: true });
     };
 
+    const deleteTenant = (t: Tenancy) => {
+        if (!confirm(`Yakin ingin menghapus akun "${t.user?.name}"? Seluruh data tenancy, tagihan, dan dokumen terkait akan dihapus permanen.`)) {
+            return;
+        }
+        router.delete(`/admin/tenants/${t.id}`, {
+            onSuccess: () => toast.success('Akun tenant berhasil dihapus'),
+            onError: () => toast.error('Gagal menghapus akun tenant'),
+        });
+    };
+
     const stats = [
         { label: 'Menunggu Approval', value: counts?.pending ?? 0, cls: 'bg-amber-50 border-amber-100 text-amber-800' },
         { label: 'Aktif', value: counts?.active ?? 0, cls: 'bg-emerald-50 border-emerald-100 text-emerald-700' },
@@ -195,13 +205,21 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                             >
                                                 Review
                                             </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => router.get(`/admin/tenants/${t.id}`)}
-                                                className="px-4 py-1.5 text-xs font-medium rounded-lg border border-[#E8E7E3] text-[#6B6B67] hover:border-[#1A1A18] hover:text-[#1A1A18] transition-colors"
-                                            >
-                                                Lihat Detail
-                                            </button>
+                                         ) : (
+                                            <>
+                                                <button
+                                                    onClick={() => router.get(`/admin/tenants/${t.id}`)}
+                                                    className="px-4 py-1.5 text-xs font-medium rounded-lg border border-[#E8E7E3] text-[#6B6B67] hover:border-[#1A1A18] hover:text-[#1A1A18] transition-colors"
+                                                >
+                                                    Lihat Detail
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteTenant(t)}
+                                                    className="ml-2 px-4 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                                                >
+                                                    Hapus
+                                                </button>
+                                            </>
                                         )}
                                     </td>
                                 </tr>
@@ -256,6 +274,14 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                             >
                                 {isPending ? 'Review Data' : 'Lihat Detail'}
                             </button>
+                            {!isPending && (
+                                <button
+                                    onClick={() => deleteTenant(t)}
+                                    className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                    Hapus Akun
+                                </button>
+                            )}
                         </div>
                     );
                 })}
