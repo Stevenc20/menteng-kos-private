@@ -75,7 +75,12 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         const t = new Date();
         return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     };
-    const moveInDate = tenancy.move_in_date || todayISO();
+    // Tanggal masuk = hari ini saat onboarding. Jika admin sudah mengatur tanggal
+    // resmi di masa depan, ikuti itu; jika kosong/berada di masa lalu, pakai hari ini.
+    const givenMoveIn = tenancy.move_in_date;
+    const todayStr = todayISO();
+    const moveInDate = !givenMoveIn || givenMoveIn < todayStr ? todayStr : givenMoveIn;
+    const moveInAuto = moveInDate !== givenMoveIn;
     const initDueDay = calcDueDay(moveInDate);
     const initDenda = String(Math.round(Number(tenancy.agreed_price) / 30) || 0);
     const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.property?.facilities?.[i] ?? '');
@@ -548,8 +553,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                     <span>Unit:</span> <span className="font-medium text-neutral-900">{tenancy.property.name}</span>
                                     <span>Jenis:</span> <span className="font-medium text-neutral-900">{isKiosk ? 'Kios' : 'Kamar'}</span>
                                     <span>Harga Sewa:</span> <span className="font-medium text-neutral-900">{formatRupiah(tenancy.agreed_price)} / bulan</span>
-                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}</span>
-                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {initDueDay} setiap bulan{!tenancy.move_in_date ? ' (auto = sehari sebelum tanggal masuk)' : ''}</span>
+                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}{moveInAuto ? ' (auto = hari ini)' : ''}</span>
+                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {initDueDay} setiap bulan{moveInAuto ? ' (auto = sehari sebelum tanggal masuk)' : ''}</span>
                                 </div>
                             </div>
                         </div>
