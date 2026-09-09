@@ -218,6 +218,13 @@ class KtpOcrService
             $variants['gray'] = $gray;
         }
 
+        // Threshold (B&W)
+        $bw = $this->preprocessImage($path, true);
+        if ($bw !== null) {
+            $temps[] = $bw;
+            $variants['bw'] = $bw;
+        }
+
         return $variants;
     }
 
@@ -250,7 +257,7 @@ class KtpOcrService
         }
 
         // Resize if too large
-        $maxDim = 2000;
+        $maxDim = 1200;
         if ($w > $maxDim || $h > $maxDim) {
             $scale = $maxDim / max($w, $h);
             $nw = (int)($w * $scale);
@@ -270,14 +277,18 @@ class KtpOcrService
         return $tmp;
     }
 
-    private function preprocessImage(string $path): ?string
+    private function preprocessImage(string $path, bool $threshold = false): ?string
     {
         if (!extension_loaded('gd')) return null;
         $src = @imagecreatefromstring(@file_get_contents($path));
         if (!$src) return null;
 
         imagefilter($src, IMG_FILTER_GRAYSCALE);
-        imagefilter($src, IMG_FILTER_CONTRAST, -20); // Increase contrast (negative value)
+        if ($threshold) {
+            imagefilter($src, IMG_FILTER_CONTRAST, -100); // Max contrast for B&W
+        } else {
+            imagefilter($src, IMG_FILTER_CONTRAST, -20); // Increase contrast (negative value)
+        }
 
         $tmp = tempnam(sys_get_temp_dir(), 'ktp_gray_') . '.png';
         imagepng($src, $tmp);
@@ -354,9 +365,9 @@ class KtpOcrService
             $line = $lines[$i];
 
             // Nama (Lebih robust: NAMA, Nama, Narna, Namo)
-            if ($result['name'] === '' && preg_match('/^N[aA][rmn][aAuo]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
+            if ($result['name'] === '' && preg_match('/(?:^|[^A-Za-z])N[aA][rmn][aAuo]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
                 $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $m[1]));
-            } elseif ($result['name'] === '' && preg_match('/^N[aA][rmn][aAuo]\s*$/i', $line) && isset($lines[$i + 1])) {
+            } elseif ($result['name'] === '' && preg_match('/(?:^|[^A-Za-z])N[aA][rmn][aAuo]\s*$/i', $line) && isset($lines[$i + 1])) {
                 $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $lines[$i + 1]));
             }
 
