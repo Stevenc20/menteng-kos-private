@@ -35,6 +35,13 @@ export default function KtpCaptureFlow({ onCapture, onCancel }: KtpCaptureFlowPr
         };
     }, [stream]);
 
+    // Ensure video gets the stream once it's rendered
+    useEffect(() => {
+        if (mode === 'camera' && videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [mode, stream]);
+
     const startCamera = async () => {
         try {
             setCameraError('');
