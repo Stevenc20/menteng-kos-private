@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import SignatureCanvas from 'react-signature-canvas';
+import SignaturePad from './SignaturePad';
 
 // Bagian surat yang bisa diisi dirender sebagai input tetap menyatu dengan
 // desain dokumen (garis bawah putus-putus), mengikuti template PDF/docx resmi.
@@ -97,10 +97,10 @@ function ParafSlot({ editable, side, drawn, onEnd, padRef, topClass = 'top-[63%]
     return (
         <div className={`absolute ${side === 'left' ? 'left-[0.5%]' : 'right-[0.5%]'} ${topClass} flex flex-col items-center w-[8%] min-w-[40px] max-w-[64px] z-10`}>
             {editable ? (
-                <SignatureCanvas
+                <SignaturePad
                     ref={padRef}
                     onEnd={onEnd}
-                    canvasProps={{ className: 'w-full h-16 sm:h-20 border border-neutral-400 rounded-sm bg-white' }}
+                    className="w-full h-16 sm:h-20 border border-neutral-400 rounded-sm bg-white"
                 />
             ) : drawn ? (
                 <img src={drawn} alt="Paraf" className="w-full border border-neutral-400 rounded-sm bg-white" />
@@ -415,7 +415,7 @@ function SignatureBlock({ hasSecond, occ1, occ2, sigRef1, sigRef2, label }: {
             <div>
                 <p>{label} (1),</p>
                 <div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
-                    <SignatureCanvas ref={sigRef1} canvasProps={{ className: 'w-full h-28' }} />
+                    <SignaturePad ref={sigRef1} className="w-full h-28" />
                 </div>
                 <p className="mt-3">Nama: <strong>{occ1.name}</strong>.</p>
                 <p>No. KTP: <strong>{occ1.nik}</strong>.</p>
@@ -423,9 +423,9 @@ function SignatureBlock({ hasSecond, occ1, occ2, sigRef1, sigRef2, label }: {
             {hasSecond && (
                 <div>
                     <p>{label} (2),</p>
-                    <div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
-                        <SignatureCanvas ref={sigRef2} canvasProps={{ className: 'w-full h-28' }} />
-                    </div>
+<div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
+                    <SignaturePad ref={sigRef2} className="w-full h-28" />
+                </div>
                     <p className="mt-3">Nama: <strong>{occ2.name}</strong>.</p>
                     <p>No. KTP: <strong>{occ2.nik}</strong>.</p>
                 </div>
