@@ -335,8 +335,8 @@ class KtpOcrService
 
         $fullText = implode("\n", $lines);
 
-        // NIK
-        if (preg_match('/N[I1]K[\s:]*([A-Z0-9\s]{10,24})/i', $fullText, $m)) {
+        // NIK (Lebih robust: NIK, N1K, NlK, NIK)
+        if (preg_match('/N[I1l|][Kk][\s:]*([A-Z0-9\s]{10,24})/i', $fullText, $m)) {
             $cleaned = $this->cleanNik($m[1]);
             if (preg_match('/(\d{16})/', $cleaned, $m2)) {
                 $result['nik'] = $m2[1];
@@ -352,20 +352,21 @@ class KtpOcrService
         for ($i = 0; $i < count($lines); $i++) {
             $line = $lines[$i];
 
-            // Nama
-            if ($result['name'] === '' && preg_match('/^N[aA][rm][aA]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
+            // Nama (Lebih robust: NAMA, Nama, Narna, Namo)
+            if ($result['name'] === '' && preg_match('/^N[aA][rmn][aAuo]\s*[:\-\s]\s*(.+)$/i', $line, $m)) {
                 $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $m[1]));
-            } elseif ($result['name'] === '' && preg_match('/^N[aA][rm][aA]\s*$/i', $line) && isset($lines[$i + 1])) {
+            } elseif ($result['name'] === '' && preg_match('/^N[aA][rmn][aAuo]\s*$/i', $line) && isset($lines[$i + 1])) {
                 $result['name'] = trim(preg_replace('/[^A-Za-z\s\,\.\']/', '', $lines[$i + 1]));
             }
 
             // Tempat/Tgl Lahir
-            if ($result['birth_place'] === '' && preg_match('/Tempat.*Lahir\s*[:\-\s]*\s*(.+)$/i', $line, $mIn)) {
-                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $mIn[1], $m)) {
+            if ($result['birth_place'] === '' && preg_match('/(T[eE]mp[aA]t|Tgl|L[aA]h[iI]r).*?\s*[:\-\s]*\s*(.+)$/i', $line, $mIn)) {
+                $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $mIn[2]);
+                if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
                     $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
                     $result['birth_date'] = sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]);
                 }
-            } elseif ($result['birth_place'] === '' && preg_match('/Tempat.*Lahir/i', $line) && isset($lines[$i + 1])) {
+            } elseif ($result['birth_place'] === '' && preg_match('/(T[eE]mp[aA]t|Tgl|L[aA]h[iI]r)/i', $line) && isset($lines[$i + 1])) {
                 $cleanedLine = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $lines[$i + 1]);
                 if (preg_match('/(.+?),\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $cleanedLine, $m)) {
                     $result['birth_place'] = preg_replace('/[^A-Za-z\s\-]/', '', trim($m[1]));
@@ -374,65 +375,84 @@ class KtpOcrService
             }
 
             // Jenis Kelamin
-            if ($result['gender'] === '' && preg_match('/LAKI[\s\-]*LAKI|LAK!/i', $line)) {
+            if ($result['gender'] === '' && preg_match('/LAK[I1|][\s\-]*LAK[I1|]/i', $line)) {
                 $result['gender'] = 'LAKI-LAKI';
-            } elseif ($result['gender'] === '' && preg_match('/PEREMPUAN/i', $line)) {
+            } elseif ($result['gender'] === '' && preg_match('/PEREMPUAN|PERENPUAN/i', $line)) {
                 $result['gender'] = 'PEREMPUAN';
             }
 
-            // RT/RW
-            if ($result['rt_rw'] === '' && preg_match('/RT[\/\\\]?RW\s*[:\-\s]*([0-9OIS]{1,3}[\/\\\][0-9OIS]{1,3})/i', $line, $m)) {
-                $result['rt_rw'] = str_replace(['O', 'I', 'S'], ['0', '1', '5'], trim($m[1]));
-            }
-
-            // Kel/Desa
-            if ($result['kelurahan_desa'] === '' && preg_match('/(Kel\/Desa|Kel[\s\.]+Desa)\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
-                $result['kelurahan_desa'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[2]));
-            }
-
-            // Kecamatan
-            if ($result['kecamatan'] === '' && preg_match('/Kecamatan\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
-                $result['kecamatan'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[1]));
-            }
-
-            // Agama
-            if ($result['agama'] === '' && preg_match('/Agama\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
-                $result['agama'] = trim(preg_replace('/[^A-Za-z\s]/', '', $m[1]));
-            }
-
-            // Status Perkawinan
-            if ($result['status_perkawinan'] === '' && preg_match('/(Status|Perkawinan|Kawin)\s*[:\-\s]*\s*(BELUM KAWIN|KAWIN|CERAI HIDUP|CERAI MATI)/i', $line, $m)) {
-                $result['status_perkawinan'] = strtoupper(trim($m[2]));
-            }
-
-            // Pekerjaan
-            if ($result['job'] === '' && preg_match('/Pekerjaan\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
-                $result['job'] = trim(preg_replace('/[^A-Za-z\s\/]/', '', $m[1]));
-            }
-
-            // Kewarganegaraan
-            if ($result['kewarganegaraan'] === '' && preg_match('/Kewarganegaraan\s*[:\-\s]*\s*(WNI|WNA)/i', $line, $m)) {
-                $result['kewarganegaraan'] = strtoupper(trim($m[1]));
-            }
-
-            // Alamat (multiline support)
-            if ($result['address'] === '' && preg_match('/Al[a-z]{2,}\s*[:\-\s]*\s*(.*)$/i', $line, $m)) {
+            // Alamat (multiline support diletakkan duluan untuk tangkap string panjang)
+            if ($result['address'] === '' && preg_match('/A[l1I]am[aA]t|A[l1I]arnat\s*[:\-\s]*\s*(.*)$/i', $line, $m)) {
                 $addrLines = [];
                 if (trim($m[1]) !== '') {
                     $addrLines[] = trim($m[1]);
                 }
                 for ($j = $i + 1; $j < count($lines); $j++) {
                     $nextLine = trim($lines[$j]);
-                    if (preg_match('/^(RT[\/\\\]?RW|Kel[\/\\\s\.]+Desa|Kecamatan|Agama|Status|Pekerjaan|Kewarga)/i', $nextLine)) {
+                    if (preg_match('/^(R[T7][\s\/\\\.]*[R|B][W|M]|K[eE]l|K[eE]c|A[gG]am[aA]|S[tT]at|P[eE]kerj|K[eE]warga)/i', $nextLine)) {
                         break;
                     }
                     $addrLines[] = preg_replace('/[^A-Za-z0-9\s\.\,\-]/', '', $nextLine);
                 }
                 $result['address'] = trim(implode(' ', $addrLines));
+            } elseif ($result['address'] === '' && preg_match('/A[l1I]am[aA]t|A[l1I]arnat/i', $line) && isset($lines[$i + 1])) {
+                 // Kasus bila "Alamat" di baris tersendiri dan isinya di baris berikutnya
+                 $addrLines = [];
+                 for ($j = $i + 1; $j < count($lines); $j++) {
+                    $nextLine = trim($lines[$j]);
+                    if (preg_match('/^(R[T7][\s\/\\\.]*[R|B][W|M]|K[eE]l|K[eE]c|A[gG]am[aA]|S[tT]at|P[eE]kerj|K[eE]warga)/i', $nextLine)) {
+                        break;
+                    }
+                    $addrLines[] = preg_replace('/[^A-Za-z0-9\s\.\,\-]/', '', $nextLine);
+                }
+                if (!empty($addrLines)) {
+                    $result['address'] = trim(implode(' ', $addrLines));
+                }
+            }
+
+            // RT/RW
+            if ($result['rt_rw'] === '' && preg_match('/R[T7][\s\/\\\.]*[R|B][W|M]\s*[:\-\s]*([0-9OIS]{1,3}[\/\\\][0-9OIS]{1,3})/i', $line, $m)) {
+                $result['rt_rw'] = str_replace(['O', 'I', 'S'], ['0', '1', '5'], trim($m[1]));
+            }
+
+            // Kel/Desa
+            if ($result['kelurahan_desa'] === '' && preg_match('/K[eE]l[\s\/\\\.]+D[eE]s[aA]|K[eE]l[uU]r[aA]h[aA]n\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['kelurahan_desa'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[1]));
+            }
+
+            // Kecamatan
+            if ($result['kecamatan'] === '' && preg_match('/K[eE]c[aA]m[aA]t[aA]n|K[eE]c[aA]m\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['kecamatan'] = trim(preg_replace('/[^A-Za-z\s\-0-9]/', '', $m[1]));
+            }
+
+            // Agama
+            if ($result['agama'] === '' && preg_match('/A[gG][aA]m[aA]\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['agama'] = trim(preg_replace('/[^A-Za-z\s]/', '', $m[1]));
+            } elseif ($result['agama'] === '' && preg_match('/A[gG][aA]m[aA]/i', $line) && isset($lines[$i + 1])) {
+                $result['agama'] = trim(preg_replace('/[^A-Za-z\s]/', '', $lines[$i + 1]));
+            }
+
+            // Status Perkawinan
+            if ($result['status_perkawinan'] === '' && preg_match('/(S[tT][aA]t[uU]s|P[eE]rk[aA]w[iI]n[aA]n|K[aA]w[iI]n)\s*[:\-\s]*\s*(BELUM KAWIN|KAWIN|CERAI HIDUP|CERAI MATI)/i', $line, $m)) {
+                $result['status_perkawinan'] = strtoupper(trim($m[2]));
+            } elseif ($result['status_perkawinan'] === '' && preg_match('/(S[tT][aA]t[uU]s|P[eE]rk[aA]w[iI]n[aA]n|K[aA]w[iI]n)/i', $line) && isset($lines[$i + 1]) && preg_match('/(BELUM KAWIN|KAWIN|CERAI HIDUP|CERAI MATI)/i', $lines[$i + 1], $m)) {
+                $result['status_perkawinan'] = strtoupper(trim($m[1]));
+            }
+
+            // Pekerjaan
+            if ($result['job'] === '' && preg_match('/P[eE]k[eE]r[jJ|][aA][aA]n\s*[:\-\s]*\s*(.+)$/i', $line, $m)) {
+                $result['job'] = trim(preg_replace('/[^A-Za-z\s\/]/', '', $m[1]));
+            } elseif ($result['job'] === '' && preg_match('/P[eE]k[eE]r[jJ|][aA][aA]n/i', $line) && isset($lines[$i + 1])) {
+                $result['job'] = trim(preg_replace('/[^A-Za-z\s\/]/', '', $lines[$i + 1]));
+            }
+
+            // Kewarganegaraan
+            if ($result['kewarganegaraan'] === '' && preg_match('/K[eE]w[aA]r[gG][aA].*?\s*[:\-\s]*\s*(WNI|WNA)/i', $line, $m)) {
+                $result['kewarganegaraan'] = strtoupper(trim($m[1]));
             }
         }
 
-        // Clean up any remaining noise in address
+        // Clean up any remaining noise
         $result['address'] = preg_replace('/\s+/', ' ', $result['address']);
         $result['name'] = preg_replace('/\s+/', ' ', $result['name']);
 

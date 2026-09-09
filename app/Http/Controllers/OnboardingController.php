@@ -281,16 +281,22 @@ class OnboardingController extends Controller
                     $ocrResults['ktp_1'] = ['error' => 'OCR processing failed'];
                 }
 
-                // Hanya field yang benar-benar terbaca dari foto yang di-overwrite.
-                // Data identitas yang sudah tersimpan TIDAK pernah dikosongkan hanya
-                // karena OCR gagal — mencegah data hilang saat user mengganti foto.
+                // GANTI KTP: Jangan me-merge data KTP lama dengan KTP baru.
+                // Kosongkan semua field identitas lama (untuk penghuni ini) terlebih dahulu.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    if (isset($ocr[$field]) && $ocr[$field] !== '') {
-                        $profile->{'ktp_1_' . $field} = $ocr[$field];
+                    $profile->{'ktp_1_' . $field} = null;
+                }
+
+                // Masukkan HANYA data dari OCR KTP terbaru
+                if (isset($ocr) && !isset($ocr['error'])) {
+                    foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
+                        if (isset($ocr[$field]) && $ocr[$field] !== '') {
+                            $profile->{'ktp_1_' . $field} = $ocr[$field];
+                        }
                     }
                 }
                 $profile->save();
-                Log::info('KTP photo saved for occupant 1; identity updated where OCR readable');
+                Log::info('KTP photo replaced for occupant 1; identity fully reset to new OCR result');
             }
         }
 
@@ -308,14 +314,20 @@ class OnboardingController extends Controller
                     $ocrResults['ktp_2'] = ['error' => 'OCR processing failed'];
                 }
 
-                // Sama seperti penghuni 1: tidak pernah menimpa dengan kosong.
+                // GANTI KTP: Jangan me-merge data KTP lama dengan KTP baru.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    if (isset($ocr[$field]) && $ocr[$field] !== '') {
-                        $profile->{'ktp_2_' . $field} = $ocr[$field];
+                    $profile->{'ktp_2_' . $field} = null;
+                }
+
+                if (isset($ocr) && !isset($ocr['error'])) {
+                    foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
+                        if (isset($ocr[$field]) && $ocr[$field] !== '') {
+                            $profile->{'ktp_2_' . $field} = $ocr[$field];
+                        }
                     }
                 }
                 $profile->save();
-                Log::info('KTP photo saved for occupant 2; identity updated where OCR readable');
+                Log::info('KTP photo replaced for occupant 2; identity fully reset to new OCR result');
             }
         }
 

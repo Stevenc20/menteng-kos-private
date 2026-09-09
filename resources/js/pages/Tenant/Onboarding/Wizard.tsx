@@ -224,9 +224,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             if (prefix && !backendKey.startsWith(prefix)) continue;
 
             const v = occProfile[backendKey];
-            if (v !== null && v !== undefined && v !== '') {
-                patch[formKey] = v;
-            }
+            patch[formKey] = v ?? '';
         }
         return patch;
     };
