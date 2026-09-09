@@ -80,7 +80,6 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const givenMoveIn = tenancy.move_in_date;
     const todayStr = todayISO();
     const moveInDate = !givenMoveIn || givenMoveIn < todayStr ? todayStr : givenMoveIn;
-    const moveInAuto = moveInDate !== givenMoveIn;
     const initDueDay = calcDueDay(moveInDate);
     const initDenda = String(Math.round(Number(tenancy.agreed_price) / 30) || 0);
     const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.property?.facilities?.[i] ?? '');
@@ -553,8 +552,8 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                     <span>Unit:</span> <span className="font-medium text-neutral-900">{tenancy.property.name}</span>
                                     <span>Jenis:</span> <span className="font-medium text-neutral-900">{isKiosk ? 'Kios' : 'Kamar'}</span>
                                     <span>Harga Sewa:</span> <span className="font-medium text-neutral-900">{formatRupiah(tenancy.agreed_price)} / bulan</span>
-                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}{moveInAuto ? ' (auto = hari ini)' : ''}</span>
-                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {initDueDay} setiap bulan{moveInAuto ? ' (auto = sehari sebelum tanggal masuk)' : ''}</span>
+                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}</span>
+                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {initDueDay} setiap bulan</span>
                                 </div>
                             </div>
                         </div>
