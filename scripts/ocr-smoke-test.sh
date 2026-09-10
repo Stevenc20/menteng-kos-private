@@ -35,7 +35,7 @@ echo "$RAW" | grep -o '"text": *"[^"]*"' | head -20
 
 echo "== [3/3] Pipeline KtpOcrService (4 varian preprocessing + extractor) =="
 docker compose exec -T kos-app sh -c 'cat > /tmp/ocr-smoke.jpg' < "$PHOTO"
-docker compose exec -T kos-app php -d extension=gd artisan tinker --execute='$r = app(App\Services\KtpOcrService::class)->extract("/tmp/ocr-smoke.jpg"); unset($r["raw"]); echo json_encode($r, JSON_PRETTY_PRINT), PHP_EOL;'
+docker compose exec -T kos-app php artisan tinker --execute='$r = app(App\Services\KtpOcrService::class)->extract("/tmp/ocr-smoke.jpg"); unset($r["raw"]); echo json_encode($r, JSON_PRETTY_PRINT), PHP_EOL;'
 
 echo
 echo "Verifikasi UI: upload foto yang sama lewat menu Tenancy (auto-process)."
