@@ -48,7 +48,9 @@ class KtpOcrService
 
         $variants = [
             'original' => $absolutePath,
-            'grayscale' => $this->createGrayscale($absolutePath)
+            'grayscale' => $this->createFilter($absolutePath, 'grayscale'),
+            'contrast' => $this->createFilter($absolutePath, 'contrast'),
+            'sharpen' => $this->createFilter($absolutePath, 'sharpen')
         ];
 
         $bestExtracted = null;
@@ -61,6 +63,7 @@ class KtpOcrService
             $ocrData = $this->callPaddleOcr($path);
             
             if (!empty($ocrData)) {
+                Log::info("KTP OCR RAW RESULT", $ocrData);
                 Log::info("KTP OCR detected boxes for $label", ['jumlah' => count($ocrData)]);
                 $extracted = $this->extractor->extract($ocrData);
                 
@@ -68,11 +71,27 @@ class KtpOcrService
                 $data = $extracted['data'];
                 $confidences = $extracted['confidences'];
                 
-                $fieldCount = count(array_filter($data, fn($v) => $v !== ''));
-                $avgConf = count($confidences) > 0 ? array_sum($confidences) / count($confidences) : 0;
-                $hasNik = ($data['nik'] !== '') ? 10 : 0; // NIK is super important
+                $score = 0;
+                if ($data['nik'] !== '') $score += 50;
+                if ($data['name'] !== '') $score += 20;
+                if ($data['birth_date'] !== '') $score += 10;
+                if ($data['address'] !== '') $score += 5;
+                if ($data['rt_rw'] !== '') $score += 2;
+                if ($data['kelurahan_desa'] !== '') $score += 2;
+                if ($data['kecamatan'] !== '') $score += 2;
+                if ($data['agama'] !== '') $score += 2;
+                if ($data['status_perkawinan'] !== '') $score += 2;
+                if ($data['job'] !== '') $score += 2;
+                if ($data['kewarganegaraan'] !== '') $score += 2;
                 
-                $score = ($fieldCount * 2) + $hasNik + $avgConf;
+                $avgConf = count($confidences) > 0 ? array_sum($confidences) / count($confidences) : 0;
+                $score += $avgConf;
+                
+                Log::info("KTP OCR SCORE", [
+                    'candidate' => $label,
+                    'score' => $score,
+                    'valid_fields' => count(array_filter($data, fn($v) => $v !== ''))
+                ]);
                 
                 if ($score > $bestScore) {
                     $bestScore = $score;
@@ -120,13 +139,28 @@ class KtpOcrService
         return ['data' => $result];
     }
 
-    private function createGrayscale(string $path): ?string
+    private function createFilter(string $path, string $type): ?string
     {
         if (!extension_loaded('gd')) return null;
         $src = @imagecreatefromstring(@file_get_contents($path));
         if (!$src) return null;
-        imagefilter($src, IMG_FILTER_GRAYSCALE);
-        $tmp = tempnam(sys_get_temp_dir(), 'ktp_gray_') . '.png';
+        
+        if ($type === 'grayscale') {
+            imagefilter($src, IMG_FILTER_GRAYSCALE);
+        } elseif ($type === 'contrast') {
+            imagefilter($src, IMG_FILTER_GRAYSCALE);
+            imagefilter($src, IMG_FILTER_CONTRAST, -30);
+        } elseif ($type === 'sharpen') {
+            $matrix = [
+                [-1, -1, -1],
+                [-1, 16, -1],
+                [-1, -1, -1]
+            ];
+            $divisor = array_sum(array_map('array_sum', $matrix));
+            imageconvolution($src, $matrix, $divisor ?: 1, 0);
+        }
+        
+        $tmp = tempnam(sys_get_temp_dir(), 'ktp_' . $type . '_') . '.png';
         imagepng($src, $tmp);
         imagedestroy($src);
         return $tmp;

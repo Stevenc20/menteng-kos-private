@@ -135,25 +135,56 @@ class KtpFieldExtractor
             }
         }
 
+        if ($key === 'address') {
+            $addressLines = [];
+            if ($valueBox) {
+                // If there's text right next to 'Alamat', keep it
+                $addressLines[] = preg_replace('/^[\s:\-\|\.]+/', '', $valueBox['text']);
+            }
+            
+            // Now find everything below the label and value, but stop when encountering other fields like RT/RW
+            $addressYStart = $labelBox['max_y'];
+            $addressYEnd = $labelBox['max_y'] + $labelBox['height'] * 4; // allow up to 4 lines
+            
+            $collectedBoxes = [];
+            foreach ($this->boxes as $box) {
+                if ($box === $labelBox || $box === $valueBox) continue;
+                if ($box['center_y'] > $addressYStart && $box['center_y'] < $addressYEnd) {
+                    // Check if this box is likely a different label (RT/RW, Kel/Desa)
+                    if (preg_match('/(RT\/?RW|Kel\/Desa|Kelurahan|Kecamatan|Agama)/i', $box['text'])) {
+                        // Adjust YEnd to stop before this label
+                        $addressYEnd = min($addressYEnd, $box['min_y']);
+                        continue;
+                    }
+                    if ($box['center_y'] < $addressYEnd) {
+                        $collectedBoxes[] = $box;
+                    }
+                }
+            }
+            
+            // Sort collected boxes by Y first (lines), then X
+            usort($collectedBoxes, function($a, $b) {
+                if (abs($a['center_y'] - $b['center_y']) > 10) {
+                    return $a['center_y'] <=> $b['center_y'];
+                }
+                return $a['min_x'] <=> $b['min_x'];
+            });
+            
+            foreach ($collectedBoxes as $box) {
+                $addressLines[] = preg_replace('/^[\s:\-\|\.]+/', '', $box['text']);
+            }
+            
+            if (!empty($addressLines)) {
+                $val = implode(' ', $addressLines);
+                return $this->processValue($val, 0.9, $cleanType);
+            }
+            return null;
+        }
+
         if ($valueBox) {
             $val = $valueBox['text'];
             $val = preg_replace('/^[\s:\-\|\.]+/', '', $val);
             return $this->processValue($val, $valueBox['confidence'], $cleanType);
-        }
-
-        if ($key === 'address') {
-            $belowBox = null;
-            foreach ($this->boxes as $box) {
-                if ($box['center_y'] > $labelBox['max_y'] && $box['center_y'] < $labelBox['max_y'] + $labelBox['height'] * 2) {
-                    if ($belowBox === null || $box['min_x'] < $belowBox['min_x']) {
-                        $belowBox = $box;
-                    }
-                }
-            }
-            if ($belowBox) {
-                $val = preg_replace('/^[\s:\-\|\.]+/', '', $belowBox['text']);
-                return $this->processValue($val, $belowBox['confidence'], $cleanType);
-            }
         }
 
         return null;

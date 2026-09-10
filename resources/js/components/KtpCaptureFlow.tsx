@@ -121,13 +121,12 @@ export default function KtpCaptureFlow({ onCapture, onCancel }: KtpCaptureFlowPr
         let isTooSmall = frameW < 400 || frameH < 250;
         let isTooDark = avgBrightness < 40;
         
-        // Simple blur check (variance of laplacian) would be nice, but skipping for speed unless critical.
-        // We will just set a warning if it fails basic checks.
-        if (isTooSmall || isTooDark) {
-            setCameraError('Foto kurang jelas (terlalu ' + (isTooSmall ? 'kecil' : 'gelap') + '). Pastikan KTP memenuhi kotak.');
-            return;
+        // FRAME HANYA PANDUAN. Jangan menolak foto.
+        // User want to proceed anyway even if it's considered too dark or small.
+        if (isTooDark) {
+            console.warn('Foto terdeteksi sedikit gelap, tapi tetap dilanjutkan.');
         }
-        
+
         cropCanvas.toBlob((blob) => {
             if (blob) {
                 const file = new File([blob], 'ktp-camera-crop.jpg', { type: 'image/jpeg' });
@@ -226,11 +225,14 @@ export default function KtpCaptureFlow({ onCapture, onCancel }: KtpCaptureFlowPr
                                 aspectRatio: KTP_ASPECT_RATIO,
                                 maxWidth: '600px'
                              }}>
-                             <div className="absolute top-4 left-0 w-full text-center text-white/90 font-medium text-sm drop-shadow-md px-2">
-                                LETAKKAN KTP DI DALAM KOTAK
+                             <div className="absolute top-6 left-0 w-full text-center text-white/90 font-bold text-lg drop-shadow-md px-2">
+                                LETAKKAN KTP DI SINI
                              </div>
-                             <div className="absolute bottom-4 left-0 w-full text-center text-white/70 text-xs drop-shadow-md px-2">
-                                Pastikan teks terbaca jelas dan tidak blur
+                             <div className="absolute inset-0 flex flex-col items-center justify-end pb-4 text-center text-white/90 text-xs drop-shadow-md px-2 gap-1 font-medium bg-gradient-to-t from-black/60 to-transparent">
+                                <p>Pastikan seluruh KTP masuk frame (hanya panduan)</p>
+                                <p>Pastikan tulisan terlihat jelas</p>
+                                <p>Jangan menggunakan flash jika memantul</p>
+                                <p>Pegang kamera stabil</p>
                              </div>
                         </div>
                     </div>
