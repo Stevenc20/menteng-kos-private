@@ -14,4 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+ENV FLAGS_enable_pir_api=0
+ENV FLAGS_use_mkldnn=0
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
