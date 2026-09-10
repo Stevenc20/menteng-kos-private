@@ -69,7 +69,7 @@ $rawOcr = $json['data'] ?? [];
 echo "==================================================\n";
 echo "TEST 3 — SIMPAN HASIL OCR RAW\n";
 echo "==================================================\n";
-echo json_encode($rawOcr, JSON_PRETTY_PRINT) . "\n\n";
+echo json_encode($json, JSON_PRETTY_PRINT) . "\n\n";
 
 echo "==================================================\n";
 echo "TEST 4 — BANDINKAN RAW OCR VS EXTRACTOR\n";
