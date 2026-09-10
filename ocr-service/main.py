@@ -22,11 +22,15 @@ async def process_image(file: UploadFile = File(...)):
             return JSONResponse(status_code=400, content={"error": "Invalid image"})
 
         # Run OCR
+        print(f"DEBUG: image shape {img.shape}")
         result = ocr.ocr(img)
+        print(f"DEBUG: OCR result raw type {type(result)}")
+        print(f"DEBUG: OCR result raw {result}")
         
         parsed_results = []
-        if result and result[0]:
+        if result and len(result) > 0 and result[0] is not None:
             for line in result[0]:
+
                 box = line[0]
                 text = line[1][0]
                 confidence = line[1][1]
