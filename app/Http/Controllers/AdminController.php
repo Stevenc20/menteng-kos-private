@@ -425,6 +425,47 @@ class AdminController extends Controller
     }
 
     /**
+     * Admin update tenant profile data (name, NIK, birth, job, address, whatsapp).
+     */
+    public function updateTenantProfile(Request $request, $id)
+    {
+        $tenancy = Tenancy::with('user')->findOrFail($id);
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->first()
+            ?? new TenantProfile(['user_id' => $tenancy->user_id]);
+
+        $validated = $request->validate([
+            'whatsapp'          => 'nullable|string',
+            'ktp_1_name'        => 'nullable|string',
+            'ktp_1_nik'         => 'nullable|string',
+            'ktp_1_birth_place' => 'nullable|string',
+            'ktp_1_birth_date'  => 'nullable|date',
+            'ktp_1_job'         => 'nullable|string',
+            'ktp_1_address'     => 'nullable|string',
+            'has_second_occupant' => 'nullable|boolean',
+            'ktp_2_name'        => 'nullable|string',
+            'ktp_2_nik'         => 'nullable|string',
+            'ktp_2_birth_place' => 'nullable|string',
+            'ktp_2_birth_date'  => 'nullable|date',
+            'ktp_2_job'         => 'nullable|string',
+            'ktp_2_address'     => 'nullable|string',
+        ]);
+
+        $profileData = $validated;
+        unset($profileData['has_second_occupant']);
+
+        if (isset($validated['has_second_occupant']) && !$validated['has_second_occupant']) {
+            foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address', 'photo'] as $field) {
+                $profileData['ktp_2_' . $field] = null;
+            }
+        }
+
+        $profile->fill($profileData);
+        $profile->save();
+
+        return redirect()->back()->with('success', 'Profil tenant berhasil diperbarui.');
+    }
+
+    /**
      * Serve a tenant's private KTP photo to admin reviewers.
      */
     public function getTenantKtpPhoto($id, $kind)

@@ -326,6 +326,22 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     const submitInfo = () => {
         post('/tenant/onboarding/info', {
             preserveScroll: true,
+            data: {
+                whatsapp: data.whatsapp,
+                ktp_1_name: data.ktp_1_name,
+                ktp_1_nik: data.ktp_1_nik,
+                ktp_1_birth_place: data.ktp_1_birth_place,
+                ktp_1_birth_date: data.ktp_1_birth_date,
+                ktp_1_job: data.ktp_1_job,
+                ktp_1_address: data.ktp_1_address,
+                has_second_occupant: data.has_second_occupant,
+                ktp_2_name: data.ktp_2_name || null,
+                ktp_2_nik: data.ktp_2_nik || null,
+                ktp_2_birth_place: data.ktp_2_birth_place || null,
+                ktp_2_birth_date: data.ktp_2_birth_date || null,
+                ktp_2_job: data.ktp_2_job || null,
+                ktp_2_address: data.ktp_2_address || null,
+            },
             onSuccess: () => nextStep(),
         });
     };
@@ -635,6 +651,16 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                                 </div>
                             </div>
                         </div>
+                        {Object.keys(errors).length > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                                <p className="font-bold mb-1">Ada data yang belum lengkap:</p>
+                                <ul className="list-disc list-inside space-y-0.5">
+                                    {Object.entries(errors).map(([key, msg]) => (
+                                        <li key={key}>{msg}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         <div className="flex gap-3 pt-4">
                             <button onClick={() => setStep(3)} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 w-1/3">Edit Data</button>
                             <button onClick={() => { submitInfo(); }} disabled={processing} className="px-6 py-3 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 w-2/3 disabled:opacity-50">

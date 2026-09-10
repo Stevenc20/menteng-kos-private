@@ -70,6 +70,31 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
     const [preview, setPreview] = useState<{ label: string; url: string } | null>(null);
     const [zoom, setZoom] = useState(false);
 
+    // Edit Profile Modal
+    const [editModal, setEditModal] = useState(false);
+    const editForm = useForm({
+        whatsapp: profile?.whatsapp ?? '',
+        ktp_1_name: profile?.ktp_1_name ?? '',
+        ktp_1_nik: profile?.ktp_1_nik ?? '',
+        ktp_1_birth_place: profile?.ktp_1_birth_place ?? '',
+        ktp_1_birth_date: profile?.ktp_1_birth_date ?? '',
+        ktp_1_job: profile?.ktp_1_job ?? '',
+        ktp_1_address: profile?.ktp_1_address ?? '',
+        has_second_occupant: hasSecondOccupant,
+        ktp_2_name: profile?.ktp_2_name ?? '',
+        ktp_2_nik: profile?.ktp_2_nik ?? '',
+        ktp_2_birth_place: profile?.ktp_2_birth_place ?? '',
+        ktp_2_birth_date: profile?.ktp_2_birth_date ?? '',
+        ktp_2_job: profile?.ktp_2_job ?? '',
+        ktp_2_address: profile?.ktp_2_address ?? '',
+    });
+    const submitEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+        editForm.put(`/admin/tenants/${tenancy.id}/profile`, {
+            onSuccess: () => setEditModal(false),
+        });
+    };
+
     const ktpUrl = (kind: string) => `/admin/tenants/${tenancy.id}/ktp/${kind}`;
 
     const occupant1 = [
@@ -255,9 +280,12 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
 
                 {/* Data Penghuni */}
                 <Card title="Data Penghuni">
-                    <p className="text-sm text-neutral-500 mb-4">
-                        Jumlah Penghuni: <span className="font-semibold text-[#1A1A18]">{hasSecondOccupant ? 2 : 1} Orang</span>
-                    </p>
+                    <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-neutral-500">
+                            Jumlah Penghuni: <span className="font-semibold text-[#1A1A18]">{hasSecondOccupant ? 2 : 1} Orang</span>
+                        </p>
+                        <AdminButton variant="secondary" onClick={() => setEditModal(true)}>Edit Data Penghuni</AdminButton>
+                    </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div>
                             <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Penghuni 1</p>
@@ -460,6 +488,55 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                     <span className="text-xs text-neutral-400 mr-auto">Klik gambar untuk zoom {zoom ? 'keluar' : 'masuk'}</span>
                     <AdminButton variant="secondary" onClick={() => setPreview(null)}>Tutup</AdminButton>
                 </AdminModalFooter>
+            </AdminModal>
+
+            {/* Edit Profile Modal */}
+            <AdminModal isOpen={editModal} onClose={() => !editForm.processing && setEditModal(false)} maxWidth="lg">
+                <form onSubmit={submitEdit} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalHeader
+                        title="Edit Data Penghuni"
+                        description="Perbarui data KTP dan kontak tenant."
+                        onClose={() => !editForm.processing && setEditModal(false)}
+                    />
+                    <AdminModalContent>
+                        <div className="space-y-6">
+                            <div>
+                                <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Penghuni 1</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <label className="block text-sm font-medium">Nama Lengkap<input type="text" value={editForm.data.ktp_1_name} onChange={e => editForm.setData('ktp_1_name', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">NIK<input type="text" value={editForm.data.ktp_1_nik} onChange={e => editForm.setData('ktp_1_nik', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">Tempat Lahir<input type="text" value={editForm.data.ktp_1_birth_place} onChange={e => editForm.setData('ktp_1_birth_place', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">Tanggal Lahir<input type="date" value={editForm.data.ktp_1_birth_date} onChange={e => editForm.setData('ktp_1_birth_date', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">Pekerjaan<input type="text" value={editForm.data.ktp_1_job} onChange={e => editForm.setData('ktp_1_job', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">No. WhatsApp<input type="text" value={editForm.data.whatsapp} onChange={e => editForm.setData('whatsapp', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium sm:col-span-2">Alamat Sesuai KTP<textarea value={editForm.data.ktp_1_address} onChange={e => editForm.setData('ktp_1_address', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" rows={2} /></label>
+                                </div>
+                            </div>
+                            {hasSecondOccupant && (
+                                <div>
+                                    <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Penghuni 2</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <label className="block text-sm font-medium">Nama Lengkap<input type="text" value={editForm.data.ktp_2_name} onChange={e => editForm.setData('ktp_2_name', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                        <label className="block text-sm font-medium">NIK<input type="text" value={editForm.data.ktp_2_nik} onChange={e => editForm.setData('ktp_2_nik', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                        <label className="block text-sm font-medium">Tempat Lahir<input type="text" value={editForm.data.ktp_2_birth_place} onChange={e => editForm.setData('ktp_2_birth_place', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                        <label className="block text-sm font-medium">Tanggal Lahir<input type="date" value={editForm.data.ktp_2_birth_date} onChange={e => editForm.setData('ktp_2_birth_date', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                        <label className="block text-sm font-medium">Pekerjaan<input type="text" value={editForm.data.ktp_2_job} onChange={e => editForm.setData('ktp_2_job', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                        <label className="block text-sm font-medium sm:col-span-2">Alamat Sesuai KTP<textarea value={editForm.data.ktp_2_address} onChange={e => editForm.setData('ktp_2_address', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" rows={2} /></label>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {Object.keys(editForm.errors).length > 0 && (
+                            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                                {Object.entries(editForm.errors).map(([k, v]) => <p key={k}>{v}</p>)}
+                            </div>
+                        )}
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton variant="secondary" onClick={() => setEditModal(false)} disabled={editForm.processing}>Batal</AdminButton>
+                        <AdminButton type="submit" isLoading={editForm.processing}>Simpan Perubahan</AdminButton>
+                    </AdminModalFooter>
+                </form>
             </AdminModal>
         </AdminLayout>
         </>

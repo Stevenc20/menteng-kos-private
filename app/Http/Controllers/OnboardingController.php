@@ -126,7 +126,7 @@ class OnboardingController extends Controller
             'ktp_1_birth_date' => 'required|date',
             'ktp_1_job' => 'required|string',
             'ktp_1_address' => 'required|string',
-            'ktp_1_photo' => 'nullable|image',
+            'ktp_1_photo' => 'nullable',
 
             'has_second_occupant' => 'required|boolean',
 
@@ -136,7 +136,7 @@ class OnboardingController extends Controller
             'ktp_2_birth_date' => 'nullable|required_if:has_second_occupant,true|date',
             'ktp_2_job' => 'nullable|required_if:has_second_occupant,true|string',
             'ktp_2_address' => 'nullable|required_if:has_second_occupant,true|string',
-            'ktp_2_photo' => 'nullable|image',
+            'ktp_2_photo' => 'nullable',
         ]);
 
         $profileData = $validated;
