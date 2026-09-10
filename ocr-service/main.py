@@ -8,8 +8,8 @@ import io
 app = FastAPI()
 
 # Initialize PaddleOCR
-# lang='id' uses Indonesian dictionary if available, else 'en'
-ocr = PaddleOCR(use_angle_cls=True, lang='id')
+# lang='en' uses Indonesian dictionary if available, else 'en'
+ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
 @app.post("/ocr")
 async def process_image(file: UploadFile = File(...)):
