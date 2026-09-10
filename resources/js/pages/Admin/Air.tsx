@@ -391,7 +391,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                     description="Catat meter awal unit. Angka ini menjadi acuan meter akhir berikutnya."
                     onClose={closeStart}
                 />
-                <form onSubmit={submitStart}>
+                <form onSubmit={submitStart} className="flex flex-col flex-1 min-h-0">
                     <AdminModalContent>
                         <FormSection title="Meter Awal" />
                         <FormLabel htmlFor="meter_start">Angka Meter (m³)</FormLabel>
@@ -443,7 +443,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                     description="Catat meter akhir. Pemakaian dihitung otomatis (akhir − awal)."
                     onClose={closeRecord}
                 />
-                <form onSubmit={submitRecord}>
+                <form onSubmit={submitRecord} className="flex flex-col flex-1 min-h-0">
                     <AdminModalContent>
                         {selectedPeriod && (
                             <div className="flex items-center gap-4 bg-[#F7F7F5] rounded-[10px] px-4 py-3 text-sm mb-4">
@@ -499,7 +499,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                     description="Nomor admin WhatsApp, tarif air, dan jadwal pengingat. Nomor ini tidak dikunci di kode."
                     onClose={() => setModal(null)}
                 />
-                <form onSubmit={submitSettings}>
+                <form onSubmit={submitSettings} className="flex flex-col flex-1 min-h-0">
                     <AdminModalContent>
                         <FormSection title="Admin WhatsApp" />
                         <FormLabel htmlFor="wa">Nomor WhatsApp Admin</FormLabel>
