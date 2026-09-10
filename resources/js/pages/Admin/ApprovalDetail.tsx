@@ -70,6 +70,18 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
     const [preview, setPreview] = useState<{ label: string; url: string } | null>(null);
     const [zoom, setZoom] = useState(false);
 
+    const occupant2 = profile?.ktp_2_name ? [
+        ['Nama Lengkap', profile?.ktp_2_name],
+        ['NIK', profile?.ktp_2_nik],
+
+        ['Tempat Lahir', profile?.ktp_2_birth_place],
+        ['Tanggal Lahir', profile?.ktp_2_birth_date],
+        ['Pekerjaan', profile?.ktp_2_job],
+        ['Alamat', profile?.ktp_2_address],
+    ].filter(([, v]) => v) as [string, string][] : [];
+
+    const hasSecondOccupant = occupant2.length > 0 || Boolean(profile?.ktp_2_photo);
+
     // Edit Profile Modal
     const [editModal, setEditModal] = useState(false);
     const editForm = useForm({
@@ -107,17 +119,6 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
         ['Pekerjaan', profile?.ktp_1_job],
         ['Alamat', profile?.ktp_1_address],
     ].filter(([, v]) => v) as [string, string][];
-
-    const occupant2 = profile?.ktp_2_name ? [
-        ['Nama Lengkap', profile?.ktp_2_name],
-        ['NIK', profile?.ktp_2_nik],
-        ['Tempat Lahir', profile?.ktp_2_birth_place],
-        ['Tanggal Lahir', profile?.ktp_2_birth_date],
-        ['Pekerjaan', profile?.ktp_2_job],
-        ['Alamat', profile?.ktp_2_address],
-    ].filter(([, v]) => v) as [string, string][] : [];
-
-    const hasSecondOccupant = occupant2.length > 0 || Boolean(profile?.ktp_2_photo);
 
     const ktpDocuments = [
         { label: 'KTP Penghuni 1', url: ktpUrl('1'), downloadUrl: ktpUrl('1') + '/download', has: Boolean(profile?.ktp_1_photo) },
