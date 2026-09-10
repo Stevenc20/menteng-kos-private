@@ -162,3 +162,130 @@ it('menangani file yang tidak ditemukan dengan aman', function () {
     expect($result['name'])->toBe('');
     expect($result['nik'])->toBe('');
 });
+
+it('tidak pernah memasukkan nilai TTL ke Nama (field kosong bila nilai tidak ditemukan)', function () {
+    // box nilai GHAIDTSA hilang dari baris Nama; baris TTL ada di bawah
+    $result = paddleExtract(ktpBoxesFromPairs([
+        ['NIK', '3216066503050006'],
+        ['Nama', ''],
+        ['Tempat/Tgl Lahir', 'BEKASI, 25-03-2005'],
+        ['Jenis Kelamin', 'PEREMPUAN'],
+        ['Pekerjaan', 'PELAJAR/MAHASISWA'],
+    ]));
+
+    expect($result['name'])->toBe('');
+    expect($result['birth_place'])->toBe('BEKASI');
+    expect($result['birth_date'])->toBe('2005-03-25');
+    expect($result['nik'])->toBe('3216066503050006');
+});
+
+it('menolak fragmen label (Tg/Tgl) dan memilih box nilai TTL yang benar', function () {
+    $boxes = [
+        ktpBox('Nama', 0, 20),
+        ktpBox('GHAIDTSA ZANUBA', 300, 20, 0.95),
+        ktpBox('Tempat/Tgl Lahir', 0, 50),
+        ktpBox('Tg', 300, 50, 0.5),
+        ktpBox('BEKASI, 25-03-2005', 450, 50, 0.9),
+    ];
+
+    $result = paddleExtract($boxes);
+
+    expect($result['name'])->toBe('GHAIDTSA ZANUBA');
+    expect($result['birth_place'])->toBe('BEKASI');
+    expect($result['birth_date'])->toBe('2005-03-25');
+});
+
+it('menolak nilai berisi tanggal masuk ke Nama (contoh: BEKASI,25-03-2005)', function () {
+    $boxes = [
+        ktpBox('Nama', 0, 20),
+        ktpBox('Tempat/Tgl Lahir', 0, 50),
+        ktpBox('BEKASI,25-03-2005', 300, 50, 0.9),
+    ];
+
+    $result = paddleExtract($boxes);
+
+    expect($result['name'])->toBe('');
+    expect($result['birth_place'])->toBe('BEKASI');
+    expect($result['birth_date'])->toBe('2005-03-25');
+});
+
+it('ekstraksi tiap KTP independen (tidak ada nilai silang antar tenant)', function () {
+    if (!extension_loaded('gd')) {
+        $this->markTestSkipped('GD extension not available');
+    }
+
+    $fA = ktpBoxesFromPairs([
+        ['NIK', '3216066503050006'],
+        ['Nama', 'GHAIDTSA ZANUBA'],
+        ['Tempat/Tgl Lahir', 'BEKASI, 25-03-2005'],
+        ['Alamat', 'KP. JALEN'],
+    ]);
+    $fB = ktpBoxesFromPairs([
+        ['NIK', '3201110203920001'],
+        ['Nama', 'BUDI SETIAWAN'],
+        ['Tempat/Tgl Lahir', 'BANDUNG, 02-03-1992'],
+        ['Alamat', 'JL. BERKAH NO 9'],
+    ]);
+    $fC = ktpBoxesFromPairs([
+        ['NIK', '3275011503020001'],
+        ['Nama', 'STEVEN CHRISTIAN'],
+        ['Tempat/Tgl Lahir', 'JAKARTA, 07-03-2002'],
+        ['Alamat', 'JL. TEST NO 1'],
+    ]);
+
+    Http::fakeSequence()
+        ->push(['data' => $fA])->push(['data' => $fA])->push(['data' => $fA])->push(['data' => $fA])
+        ->push(['data' => $fB])->push(['data' => $fB])->push(['data' => $fB])->push(['data' => $fB])
+        ->push(['data' => $fC])->push(['data' => $fC])->push(['data' => $fC])->push(['data' => $fC]);
+
+    $path = base_path('tests/fixtures/ktp_realistic.jpg');
+    $svc = app(KtpOcrService::class);
+    $a = $svc->extract($path);
+    $b = $svc->extract($path);
+    $c = $svc->extract($path);
+
+    expect($a['name'])->toBe('GHAIDTSA ZANUBA');
+    expect($b['name'])->toBe('BUDI SETIAWAN');
+    expect($c['name'])->toBe('STEVEN CHRISTIAN');
+    expect($a['birth_place'])->toBe('BEKASI');
+    expect($b['birth_place'])->toBe('BANDUNG');
+    expect($c['birth_place'])->toBe('JAKARTA');
+    expect($a['address'])->not->toContain('BERKAH');
+    expect($b['address'])->not->toContain('JALEN');
+});
+
+it('upload KTP baru menghasilkan profil baru (tidak mencampur field lama)', function () {
+    if (!extension_loaded('gd')) {
+        $this->markTestSkipped('GD extension not available');
+    }
+
+    $svc = app(KtpOcrService::class);
+    $pathA = base_path('tests/fixtures/ktp_realistic.jpg');
+    $pathB = base_path('tests/fixtures/ktp.jpg');
+
+    $fA = ktpBoxesFromPairs([
+        ['NIK', '3201110203920001'],
+        ['Nama', 'BUDI SETIAWAN'],
+        ['Tempat/Tgl Lahir', 'BEKASI, 02-03-1992'],
+        ['Alamat', 'JL. BERKAH NO 9'],
+    ]);
+    $fB = ktpBoxesFromPairs([
+        ['NIK', '3216066503050006'],
+        ['Nama', 'GHAIDTSA ZANUBA'],
+        ['Tempat/Tgl Lahir', 'BEKASI, 25-03-2005'],
+        ['Alamat', 'KP. JALEN'],
+    ]);
+
+    Http::fakeSequence()
+        ->push(['data' => $fA])->push(['data' => $fA])->push(['data' => $fA])->push(['data' => $fA])
+        ->push(['data' => $fB])->push(['data' => $fB])->push(['data' => $fB])->push(['data' => $fB]);
+
+    $rA = $svc->extract($pathA);
+    $rB = $svc->extract($pathB);
+
+    expect($rA['name'])->toBe('BUDI SETIAWAN');
+    expect($rB['name'])->toBe('GHAIDTSA ZANUBA');
+    expect($rB['nik'])->toBe('3216066503050006');
+    expect($rB['birth_date'])->toBe('2005-03-25');
+    expect($rB['address'])->toBe('KP. JALEN');
+});
