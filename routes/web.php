@@ -65,6 +65,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/tenants/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
     Route::post('/tenants/{id}/reopen', [\App\Http\Controllers\AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
     Route::put('/tenants/{id}/profile', [\App\Http\Controllers\AdminController::class, 'updateTenantProfile'])->name('admin.tenants.profile.update');
+    Route::put('/tenants/{id}/details', [\App\Http\Controllers\AdminController::class, 'updateTenancyDetails'])->name('admin.tenants.details.update');
     Route::delete('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
     Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
     Route::get('/tenants/{id}/ktp/{kind}/download', [\App\Http\Controllers\AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');

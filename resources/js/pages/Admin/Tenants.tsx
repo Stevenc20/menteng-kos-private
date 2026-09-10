@@ -69,12 +69,19 @@ function badgeInfo(t: Tenancy) {
 
 export default function Tenants({ tenancies, counts, activeFilter, availableProperties }: TenantsProps) {
     const [showModal, setShowModal] = useState(false);
+    const [editTenancy, setEditTenancy] = useState<Tenancy | null>(null);
     
     const { data, setData, post, processing, reset, errors } = useForm({
         email: '',
         property_id: '',
         agreed_price: '',
         move_in_date: ''
+    });
+
+    const editForm = useForm({
+        agreed_price: '',
+        move_in_date: '',
+        due_day: '',
     });
 
     const submit = (e: React.FormEvent) => {
@@ -108,6 +115,27 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
         router.delete(`/admin/tenants/${t.id}`, {
             onSuccess: () => toast.success('Akun tenant berhasil dihapus'),
             onError: () => toast.error('Gagal menghapus akun tenant'),
+        });
+    };
+
+    const openEdit = (t: Tenancy) => {
+        setEditTenancy(t);
+        editForm.setData({
+            agreed_price: String(t.agreed_price ?? ''),
+            move_in_date: t.move_in_date || '',
+            due_day: (t as any).due_day != null ? String((t as any).due_day) : '',
+        });
+    };
+
+    const submitEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editTenancy) return;
+        editForm.put(`/admin/tenants/${editTenancy.id}/details`, {
+            onSuccess: () => {
+                setEditTenancy(null);
+                toast.success('Data penyewaan berhasil diperbarui');
+            },
+            onError: () => toast.error('Gagal menyimpan perubahan'),
         });
     };
 
@@ -214,6 +242,12 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                                     Lihat Detail
                                                 </button>
                                                 <button
+                                                    onClick={() => openEdit(t)}
+                                                    className="ml-2 px-4 py-1.5 text-xs font-medium rounded-lg border border-[#E8E7E3] text-[#1A1A18] hover:border-[#1A1A18] transition-colors"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
                                                     onClick={() => deleteTenant(t)}
                                                     className="ml-2 px-4 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
                                                 >
@@ -275,12 +309,20 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                 {isPending ? 'Review Data' : 'Lihat Detail'}
                             </button>
                             {!isPending && (
-                                <button
-                                    onClick={() => deleteTenant(t)}
-                                    className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                                >
-                                    Hapus Akun
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => openEdit(t)}
+                                        className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-[#E8E7E3] text-[#1A1A18] hover:border-[#1A1A18] transition-colors"
+                                    >
+                                        Edit Data
+                                    </button>
+                                    <button
+                                        onClick={() => deleteTenant(t)}
+                                        className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                        Hapus Akun
+                                    </button>
+                                </>
                             )}
                         </div>
                     );
@@ -395,6 +437,59 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                             isLoading={processing}
                         >
                             Kirim Undangan
+                        </AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
+
+            <AdminModal
+                isOpen={Boolean(editTenancy)}
+                onClose={() => !editForm.processing && setEditTenancy(null)}
+                maxWidth="md"
+            >
+                <form onSubmit={submitEdit} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalHeader
+                        title="Edit Data Penyewaan"
+                        description={editTenancy ? `Perbarui data sewa ${editTenancy.user?.name || ''} (${editTenancy.property?.name || ''}).` : ''}
+                        onClose={() => !editForm.processing && setEditTenancy(null)}
+                    />
+                    <AdminModalContent>
+                        <div className="mb-5">
+                            <FormLabel>Harga Deal Bulanan (Rp)</FormLabel>
+                            <CurrencyInput
+                                value={editForm.data.agreed_price}
+                                onChange={val => editForm.setData('agreed_price', val)}
+                            />
+                            <FormError>{editForm.errors.agreed_price}</FormError>
+                        </div>
+                        <div className="mb-5">
+                            <FormLabel>Tanggal Masuk</FormLabel>
+                            <DateInput
+                                value={editForm.data.move_in_date}
+                                onChange={e => editForm.setData('move_in_date', e.target.value)}
+                            />
+                            <FormError>{editForm.errors.move_in_date}</FormError>
+                        </div>
+                        <div className="mb-2">
+                            <FormLabel>Jatuh Tempo (tanggal setiap bulan)</FormLabel>
+                            <TextInput
+                                type="number"
+                                min={0}
+                                max={31}
+                                placeholder="0 = akhir bulan"
+                                value={editForm.data.due_day}
+                                onChange={e => editForm.setData('due_day', e.target.value)}
+                            />
+                            <FormHelper>Isi 0 untuk jatuh tempo di akhir bulan.</FormHelper>
+                            <FormError>{editForm.errors.due_day}</FormError>
+                        </div>
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton type="button" variant="secondary" onClick={() => setEditTenancy(null)} disabled={editForm.processing}>
+                            Batal
+                        </AdminButton>
+                        <AdminButton type="submit" isLoading={editForm.processing}>
+                            Simpan Perubahan
                         </AdminButton>
                     </AdminModalFooter>
                 </form>

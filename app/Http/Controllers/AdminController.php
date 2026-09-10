@@ -478,6 +478,32 @@ class AdminController extends Controller
     }
 
     /**
+     * Admin quick-edit tenancy details (price, move-in date, due day).
+     */
+    public function updateTenancyDetails(Request $request, $id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+
+        $validated = $request->validate([
+            'agreed_price' => 'nullable|numeric|min:0',
+            'move_in_date' => 'nullable|date',
+            'due_day'      => 'nullable|integer|min:0|max:31',
+        ]);
+
+        $data = array_filter($validated, fn ($v) => $v !== null && $v !== '');
+
+        if (array_key_exists('due_day', $validated)) {
+            $data['due_day'] = $validated['due_day'] !== null && $validated['due_day'] !== ''
+                ? (int) $validated['due_day']
+                : null;
+        }
+
+        $tenancy->update($data);
+
+        return redirect()->back()->with('success', 'Data penyewaan berhasil diperbarui.');
+    }
+
+    /**
      * Serve a tenant's private KTP photo to admin reviewers.
      */
     public function getTenantKtpPhoto($id, $kind)
