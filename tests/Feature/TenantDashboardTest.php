@@ -68,7 +68,7 @@ test('the tenant dashboard renders the next rent billing', function () {
     expect(data_get($props, 'nextBilling.status'))->toBe('PENDING_PAYMENT');
 });
 
-test('a tenant awaiting approval cannot open the dashboard and is sent to onboarding', function () {
+test('a tenant awaiting approval can open the dashboard (admin fills onboarding)', function () {
     $tenant = makeDashboardTenant();
 
     makeDashboardTenancy([
@@ -79,7 +79,8 @@ test('a tenant awaiting approval cannot open the dashboard and is sent to onboar
 
     $this->actingAs($tenant)
         ->get(route('tenant.dashboard'))
-        ->assertRedirect(route('tenant.onboarding'));
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Tenant/Dashboard'));
 });
 
 test('a tenant without any tenancy is sent to onboarding', function () {

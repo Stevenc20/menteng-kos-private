@@ -371,7 +371,7 @@ class AdminController extends Controller
         );
 
         // Create tenancy
-        Tenancy::create([
+        $tenancy = Tenancy::create([
             'user_id' => $user->id,
             'property_id' => $validated['property_id'],
             'agreed_price' => $validated['agreed_price'],
@@ -379,7 +379,8 @@ class AdminController extends Controller
             'status' => 'INVITED',
         ]);
 
-        return redirect()->back()->with('success', 'Tenant invited successfully.');
+        // Continue straight into the admin-driven onboarding wizard.
+        return redirect()->route('admin.tenants.onboarding', $tenancy)->with('success', 'Tenant invited successfully.');
     }
 
     /**

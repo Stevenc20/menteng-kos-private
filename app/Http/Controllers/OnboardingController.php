@@ -6,9 +6,11 @@ use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\Agreement;
 use App\Models\AgreementSignature;
+use App\Models\Property;
 use App\Services\KtpOcrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -16,22 +18,66 @@ use Inertia\Inertia;
 class OnboardingController extends Controller
 {
     /**
+     * Resolve the tenancy this request operates on.
+     *
+     * When the route carries a {tenancy} parameter (admin-driven onboarding) the
+     * explicitly targeted tenancy is used. Otherwise (tenant self-onboarding) the
+     * tenancy of the currently authenticated TENANT is used (existing behaviour).
+     *
+     * When $require is false the tenancy may be null (tenant with no tenancy yet),
+     * which several KTP/profile helpers legitimately tolerate.
+     */
+    protected function contextTenancy(Request $request, bool $require = true): ?Tenancy
+    {
+        if ($request->route() && $request->route()->hasParameter('tenancy')) {
+            $tenancy = Tenancy::with(['user', 'property'])->findOrFail((int) $request->route('tenancy'));
+            abort_unless($tenancy->user && $tenancy->user->role === 'TENANT', 403, 'Target bukan tenant.');
+            return $tenancy;
+        }
+
+        $user = $request->user();
+        abort_unless($user && $user->role === 'TENANT', 403, 'Unauthorized.');
+
+        $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
+
+        if ($require && !$tenancy) {
+            abort(404, 'Belum ada tenancy.');
+        }
+
+        return $tenancy;
+    }
+
+    /**
      * Display the onboarding wizard.
      */
-    public function show()
+    public function show(Request $request)
     {
+        $isAdminContext = $request->route() && $request->route()->hasParameter('tenancy');
+
         $user = Auth::user();
-        
-        // Ensure user is a TENANT
-        if ($user->role !== 'TENANT') {
+
+        // Ensure user is a TENANT (tenant-facing route only)
+        if (!$isAdminContext && $user->role !== 'TENANT') {
             return redirect('/dashboard');
         }
 
-        $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
+        $tenancy = $isAdminContext
+            ? Tenancy::with('property')->findOrFail((int) $request->route('tenancy'))
+            : Tenancy::with('property')->where('user_id', $user->id)->first();
 
         if (!$tenancy) {
             // If completely no tenancy exists (not invited properly)
             abort(403, 'Belum ada undangan sewa untuk akun Anda. Silakan hubungi Admin.');
+        }
+
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->first();
+
+        // Admin-driven onboarding: always render the wizard so the admin can fill/continue.
+        if ($isAdminContext) {
+            return Inertia::render('Admin/TenantOnboarding', [
+                'tenancy' => $tenancy,
+                'profile' => $profile ?? (object)[],
+            ]);
         }
 
         // Already active: show approval confirmation if approved via this workflow,
@@ -47,13 +93,6 @@ class OnboardingController extends Controller
             return redirect('/tenant/dashboard');
         }
 
-        // Not in an onboarding-able status → redirect to whatever applies
-        if (!in_array($tenancy->status, ['INVITED', 'ONBOARDING_IN_PROGRESS', 'AGREEMENT_PENDING', 'AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
-            return redirect('/tenant/dashboard');
-        }
-
-        $profile = TenantProfile::where('user_id', $user->id)->first();
-        
         // Rejected / waiting for approval → show status page (pending or needs-revision)
         if (in_array($tenancy->status, ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
             $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
@@ -63,23 +102,21 @@ class OnboardingController extends Controller
             ]);
         }
 
-        return Inertia::render('Tenant/Onboarding/Wizard', [
-            'tenancy' => $tenancy,
-            'profile' => $profile ?? (object)[]
-        ]);
+        // Onboarding data is now filled by the admin. Tenants (invited, in progress,
+        // or agreement pending) are never pushed into the wizard — go straight to the
+        // dashboard. Legacy tenants mid-onboarding are not forced to complete it.
+        return redirect('/tenant/dashboard');
     }
 
     /**
      * Returns the latest profile from the database to hydrate the wizard.
      */
-    public function getProfile()
+    public function getProfile(Request $request)
     {
-        $user = Auth::user();
-        if ($user->role !== 'TENANT') {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        $tenancy = $this->contextTenancy($request, false);
+        $userId = $tenancy?->user_id ?? $request->user()->id;
 
-        $profile = TenantProfile::where('user_id', $user->id)->first();
+        $profile = TenantProfile::where('user_id', $userId)->first();
         
         return response()->json([
             'ok' => true,
@@ -115,8 +152,7 @@ class OnboardingController extends Controller
      */
     public function storeInfo(Request $request)
     {
-        $user = Auth::user();
-        $tenancy = Tenancy::where('user_id', $user->id)->firstOrFail();
+        $tenancy = $this->contextTenancy($request);
 
         $validated = $request->validate([
             'whatsapp' => 'required|string',
@@ -145,8 +181,8 @@ class OnboardingController extends Controller
         // not the upload commit point, and a missing file field must not wipe a path.
         unset($profileData['ktp_1_photo'], $profileData['ktp_2_photo'], $profileData['has_second_occupant']);
 
-        $profile = TenantProfile::where('user_id', $user->id)->first()
-            ?? new TenantProfile(['user_id' => $user->id]);
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->first()
+            ?? new TenantProfile(['user_id' => $tenancy->user_id]);
 
         $replacedPaths = [];
         $newPaths = [];
@@ -206,11 +242,8 @@ class OnboardingController extends Controller
      */
     public function uploadKtp(Request $request)
     {
-        $user = Auth::user();
-
-        if ($user->role !== 'TENANT') {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized.'], 403);
-        }
+        $tenancy = $this->contextTenancy($request, false);
+        $userId = $tenancy?->user_id ?? $request->user()->id;
 
         $request->validate([
             'ktp_1_photo' => 'nullable|image',
@@ -221,8 +254,8 @@ class OnboardingController extends Controller
             return response()->json(['ok' => false, 'message' => 'No KTP photo file was received. Silakan coba lagi.'], 422);
         }
 
-        $profile = TenantProfile::where('user_id', $user->id)->first()
-            ?? new TenantProfile(['user_id' => $user->id]);
+        $profile = TenantProfile::where('user_id', $userId)->first()
+            ?? new TenantProfile(['user_id' => $userId]);
 
         $newPaths = [];
         $replacedPaths = [];
@@ -360,10 +393,11 @@ class OnboardingController extends Controller
     /**
      * Serve the uploaded KTP photo to its owner (private storage).
      */
-    public function getKtpPhoto(string $kind)
+    public function getKtpPhoto(Request $request, string $kind)
     {
-        $user = Auth::user();
-        $profile = TenantProfile::where('user_id', $user->id)->first();
+        $tenancy = $this->contextTenancy($request, false);
+        $userId = $tenancy?->user_id ?? $request->user()->id;
+        $profile = TenantProfile::where('user_id', $userId)->first();
 
         $path = $kind === 'ktp_2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
 
@@ -379,8 +413,8 @@ class OnboardingController extends Controller
      */
     public function submitAgreement(Request $request)
     {
-        $user = Auth::user();
-        $tenancy = Tenancy::where('user_id', $user->id)->firstOrFail();
+        $tenancy = $this->contextTenancy($request);
+        $isAdminContext = $request->route() && $request->route()->hasParameter('tenancy');
 
         $validated = $request->validate([
             'document_html' => 'required|string',
@@ -418,6 +452,28 @@ class OnboardingController extends Controller
                     'paraf_image' => $validated['paraf_2']
                 ]
             );
+        }
+
+        // Admin-driven onboarding: the admin has already reviewed & verified the
+        // data, so the tenancy is activated immediately (no further approval step).
+        if ($isAdminContext) {
+            DB::transaction(function () use ($tenancy, $validated) {
+                $tenancy->update([
+                    'status' => 'ACTIVE',
+                    'approval_status' => 'APPROVED',
+                    'approved_at' => now(),
+                    'approved_by' => Auth::id(),
+                    'rejection_reason' => null,
+                    'move_in_date' => $validated['move_in_date'],
+                ]);
+
+                $property = Property::find($tenancy->property_id);
+                if ($property && $property->status !== 'OCCUPIED') {
+                    $property->update(['status' => 'OCCUPIED']);
+                }
+            });
+
+            return redirect()->route('admin.tenants')->with('success', 'Data penghuni berhasil disimpan dan tenant diaktifkan.');
         }
 
         $tenancy->update([

@@ -70,6 +70,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
     Route::get('/tenants/{id}/ktp/{kind}/download', [\App\Http\Controllers\AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');
 
+    // Admin-driven Onboarding Wizard (admin fills tenant onboarding using the same Wizard)
+    Route::get('/tenants/{tenancy}/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('admin.tenants.onboarding');
+    Route::get('/tenants/{tenancy}/onboarding/profile', [\App\Http\Controllers\OnboardingController::class, 'getProfile'])->name('admin.tenants.onboarding.profile');
+    Route::post('/tenants/{tenancy}/onboarding/info', [\App\Http\Controllers\OnboardingController::class, 'storeInfo'])->name('admin.tenants.onboarding.info');
+    Route::post('/tenants/{tenancy}/onboarding/ktp', [\App\Http\Controllers\OnboardingController::class, 'uploadKtp'])->name('admin.tenants.onboarding.ktp');
+    Route::get('/tenants/{tenancy}/onboarding/ktp/{kind}', [\App\Http\Controllers\OnboardingController::class, 'getKtpPhoto'])->name('admin.tenants.onboarding.ktp.photo');
+    Route::post('/tenants/{tenancy}/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('admin.tenants.onboarding.agreement');
+
     // Tenant Approvals & Onboarding (Phase 5 - legacy multi-step)
     Route::get('/approvals/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.approvals.show');
     Route::post('/approvals/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveData'])->name('admin.approvals.approve');
@@ -97,16 +105,17 @@ Route::middleware(['auth'])->prefix('tenant')->group(function () {
     Route::post('/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('tenant.onboarding.agreement');
     Route::post('/onboarding/revise', [\App\Http\Controllers\OnboardingController::class, 'revise'])->name('tenant.onboarding.revise');
     
-    // Tenant Dashboard (Active)
+    // Tenant Dashboard
     Route::get('/dashboard', function () {
         $user = \Illuminate\Support\Facades\Auth::user();
         $tenancy = \App\Models\Tenancy::with('property')->where('user_id', $user->id)->first();
-        
-        if (!$tenancy || !in_array($tenancy->status, ['ACTIVE', 'NOT_CONTINUE', 'SUSPENDED'])) {
-            return redirect('/tenant/onboarding'); // Redirect to onboarding if not active
+
+        if (!$tenancy) {
+            return redirect('/tenant/onboarding'); // No tenancy at all
         }
 
-        // Fetch Next Payment (Active Billing)
+        // Onboarding data is now filled by the admin; the tenant lands straight on
+        // the dashboard for every status (INVITED → ACTIVE).
         $nextBilling = \App\Models\Billing::where('tenancy_id', $tenancy->id)
                             ->where('billing_type', 'RENT')
                             ->orderBy('due_date', 'asc')

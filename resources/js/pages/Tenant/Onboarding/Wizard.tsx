@@ -39,11 +39,15 @@ interface Profile {
 interface WizardProps {
     tenancy: Tenancy;
     profile: Profile;
+    adminTenancyId?: number;
 }
 
-export default function Wizard({ tenancy, profile }: WizardProps) {
+export default function Wizard({ tenancy, profile, adminTenancyId }: WizardProps) {
     const [step, setStep] = useState(1);
     const totalSteps = 8;
+
+    // Admin-driven flow targets the selected tenancy; tenant flow uses /tenant/onboarding.
+    const apiBase = adminTenancyId ? `/admin/tenants/${adminTenancyId}/onboarding` : '/tenant/onboarding';
 
     // React Signature Canvas refs
     const sigPad1 = useRef<any>(null);
@@ -105,7 +109,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         ktp_1_job: p.ktp_1_job ?? '',
         ktp_1_address: p.ktp_1_address ?? '',
         ktp_1_photo: null as File | null,
-        ktp_1_photo_preview: (p.ktp_1_photo ? `/tenant/onboarding/ktp/ktp_1` : null) as string | null,
+        ktp_1_photo_preview: (p.ktp_1_photo ? `${apiBase}/ktp/ktp_1` : null) as string | null,
         ktp_1_photo_path: p.ktp_1_photo ?? '',
         
         has_second_occupant: false,
@@ -117,7 +121,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         ktp_2_job: p.ktp_2_job ?? '',
         ktp_2_address: p.ktp_2_address ?? '',
         ktp_2_photo: null as File | null,
-        ktp_2_photo_preview: (p.ktp_2_photo ? `/tenant/onboarding/ktp/ktp_2` : null) as string | null,
+        ktp_2_photo_preview: (p.ktp_2_photo ? `${apiBase}/ktp/ktp_2` : null) as string | null,
         ktp_2_photo_path: p.ktp_2_photo ?? '',
 
         // Field interaktif Surat Pernyataan
@@ -138,7 +142,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     // ─── Draft recovery: simpan draft form ke sessionStorage dan pulihkan
     // setelah refresh browser. Profil backend tetap menang — draft hanya mengisi
     // field yang masih kosong (data yang belum sempat tersimpan tidak hilang).
-    const DRAFT_KEY = 'tenant_onboarding_draft_v2';
+    const DRAFT_KEY = adminTenancyId ? `admin_onboarding_draft_${adminTenancyId}` : 'tenant_onboarding_draft_v2';
 
     useEffect(() => {
         try {
@@ -223,7 +227,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
 
     const fetchLatestProfileAndHydrate = async () => {
         try {
-            const res = await fetch('/tenant/onboarding/profile', {
+            const res = await fetch(`${apiBase}/profile`, {
                 headers: { 'Accept': 'application/json' },
             });
             if (!res.ok) return;
@@ -256,7 +260,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
         fd.append(occupant === 1 ? 'ktp_1_photo' : 'ktp_2_photo', file);
 
         try {
-            const res = await fetch('/tenant/onboarding/ktp', {
+            const res = await fetch(`${apiBase}/ktp`, {
                 method: 'POST',
                 body: fd,
                 headers: {
@@ -331,7 +335,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
     };
 
     const submitInfo = () => {
-        post('/tenant/onboarding/info', {
+        post(`${apiBase}/info`, {
             preserveScroll: true,
             data: {
                 whatsapp: data.whatsapp,
@@ -439,7 +443,7 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             paraf_2: paraf2,
         };
 
-        router.post('/tenant/onboarding/agreement', payload, {
+        router.post(`${apiBase}/agreement`, payload, {
             onSuccess: () => {
                 // Onboarding selesai & data tersimpan permanen → draft tidak perlu lagi.
                 try {
@@ -459,7 +463,15 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
                         </div>
                         <h2 className="text-3xl font-bold tracking-tight">Selamat Datang!</h2>
                         <p className="text-neutral-500 max-w-sm mx-auto">
-                            Anda telah diundang menempati unit <strong>{tenancy.property.name}</strong>. Silakan selesaikan proses <i>onboarding</i> untuk mengaktifkan akun Anda.
+                            {adminTenancyId ? (
+                                <>
+                                    Lengkapi data penghuni untuk unit <strong>{tenancy.property.name}</strong>. Data akan tersimpan pada tenant dan tenant langsung diaktifkan setelah selesai.
+                                </>
+                            ) : (
+                                <>
+                                    Anda telah diundang menempati unit <strong>{tenancy.property.name}</strong>. Silakan selesaikan proses <i>onboarding</i> untuk mengaktifkan akun Anda.
+                                </>
+                            )}
                         </p>
                         <button onClick={nextStep} className="mt-8 bg-neutral-900 text-white px-8 py-3 rounded-full font-medium hover:bg-neutral-800 transition-colors w-full max-w-xs mx-auto block">
                             Mulai Onboarding

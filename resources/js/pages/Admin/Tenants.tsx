@@ -70,6 +70,9 @@ function badgeInfo(t: Tenancy) {
 export default function Tenants({ tenancies, counts, activeFilter, availableProperties }: TenantsProps) {
     const [showModal, setShowModal] = useState(false);
     const [editTenancy, setEditTenancy] = useState<Tenancy | null>(null);
+
+    // Admin fills the onboarding wizard for these states (data not yet complete).
+    const onboardingStates = ['INVITED', 'ONBOARDING_IN_PROGRESS', 'AGREEMENT_PENDING'];
     
     const { data, setData, post, processing, reset, errors } = useForm({
         email: '',
@@ -235,6 +238,14 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                             </button>
                                          ) : (
                                             <>
+                                                {onboardingStates.includes(t.status) && (
+                                                    <button
+                                                        onClick={() => router.get(`/admin/tenants/${t.id}/onboarding`)}
+                                                        className="px-4 py-1.5 text-xs font-semibold rounded-lg border border-[#1A1A18] text-[#1A1A18] hover:bg-[#1A1A18] hover:text-white transition-colors"
+                                                    >
+                                                        Lanjut Isi Data
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => router.get(`/admin/tenants/${t.id}`)}
                                                     className="px-4 py-1.5 text-xs font-medium rounded-lg border border-[#E8E7E3] text-[#6B6B67] hover:border-[#1A1A18] hover:text-[#1A1A18] transition-colors"
@@ -310,6 +321,14 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                             </button>
                             {!isPending && (
                                 <>
+                                    {onboardingStates.includes(t.status) && (
+                                        <button
+                                            onClick={() => router.get(`/admin/tenants/${t.id}/onboarding`)}
+                                            className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-[#1A1A18] text-[#1A1A18] hover:bg-[#1A1A18] hover:text-white transition-colors"
+                                        >
+                                            Lanjut Isi Data Penghuni
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => openEdit(t)}
                                         className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-[#E8E7E3] text-[#1A1A18] hover:border-[#1A1A18] transition-colors"
