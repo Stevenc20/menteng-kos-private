@@ -1,3 +1,7 @@
+import os
+os.environ["FLAGS_enable_pir_api"] = "0"
+os.environ["FLAGS_use_mkldnn"] = "0"
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 from paddleocr import PaddleOCR
@@ -9,7 +13,7 @@ app = FastAPI()
 
 # Initialize PaddleOCR
 # lang='en' uses Indonesian dictionary if available, else 'en'
-ocr = PaddleOCR(use_angle_cls=True, lang='en')
+ocr = PaddleOCR(use_angle_cls=True, lang='en', enable_mkldnn=False)
 
 @app.post("/ocr")
 async def process_image(file: UploadFile = File(...)):
