@@ -9,6 +9,12 @@ set -euo pipefail
 PHOTO="${1:?Usage: $0 <foto-ktp> [--ui-only]}"
 UI_ONLY="${2:-}"
 
+if [ ! -f "$PHOTO" ]; then
+  echo "GAGAL: file '$PHOTO' tidak ada. Beri path file foto KTP yang benar."
+  echo "Cek lokasi foto: find ~ -maxdepth 3 -iname \"*.jpg\" 2>/dev/null | head"
+  exit 1
+fi
+
 echo "== [1/3] Container OCR hidup? =="
 docker compose ps --status running | grep -q ocr-service \
   && echo "OK: ocr-service running" \
