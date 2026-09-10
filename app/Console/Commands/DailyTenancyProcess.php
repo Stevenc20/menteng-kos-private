@@ -50,10 +50,10 @@ class DailyTenancyProcess extends Command
             // due-day (move-in minus one day; move-in day 1 => end of month).
             $moveInDay = (int) Carbon::parse($tenancy->move_in_date)->day;
             if ($lastBilling) {
-                $nextDueDate = DueDateService::nextDueDate($lastBilling->due_date, $moveInDay);
+                $nextDueDate = DueDateService::nextDueDate($lastBilling->due_date, $moveInDay, $tenancy->due_day);
             } else {
                 // First ever payment after move in
-                $nextDueDate = DueDateService::nextDueDate($tenancy->move_in_date, $moveInDay);
+                $nextDueDate = DueDateService::nextDueDate($tenancy->move_in_date, $moveInDay, $tenancy->due_day);
             }
 
             $daysUntilDue = $today->diffInDays($nextDueDate, false); // Negative if overdue

@@ -406,7 +406,7 @@ class AdminController extends Controller
         $moveInDay = $effectiveMoveIn
             ? (int) $effectiveMoveIn->day
             : ($tenancy->move_in_date ? (int) Carbon::parse($tenancy->move_in_date)->day : 1);
-        $dueDayNumber = DueDateService::dueDay($moveInDay);
+        $dueDayNumber = DueDateService::dueDay($moveInDay, $tenancy->due_day);
 
         return Inertia::render('Admin/ApprovalDetail', [
             'tenancy' => $tenancy,
@@ -420,7 +420,7 @@ class AdminController extends Controller
             'moveInDateIsStale' => $isStale,
             'dueDayNumber' => $dueDayNumber,
             'dueDayLabel' => $dueDayNumber === 0 ? 'akhir bulan' : (string) $dueDayNumber,
-            'nextDueDate' => DueDateService::nextDueDate($displayMoveIn, $moveInDay)->toDateString(),
+            'nextDueDate' => DueDateService::nextDueDate($displayMoveIn, $moveInDay, $tenancy->due_day)->toDateString(),
         ]);
     }
 
@@ -435,6 +435,8 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'whatsapp'          => 'nullable|string',
+            'move_in_date'      => 'nullable|date',
+            'due_day'           => 'nullable|integer|min:0|max:31',
             'ktp_1_name'        => 'nullable|string',
             'ktp_1_nik'         => 'nullable|string',
             'ktp_1_birth_place' => 'nullable|string',
@@ -450,8 +452,18 @@ class AdminController extends Controller
             'ktp_2_address'     => 'nullable|string',
         ]);
 
+        if (array_key_exists('move_in_date', $validated)) {
+            $tenancy->move_in_date = $validated['move_in_date'] ?: null;
+        }
+        if (array_key_exists('due_day', $validated)) {
+            $tenancy->due_day = $validated['due_day'] !== null && $validated['due_day'] !== ''
+                ? (int) $validated['due_day']
+                : null;
+        }
+        $tenancy->save();
+
         $profileData = $validated;
-        unset($profileData['has_second_occupant']);
+        unset($profileData['has_second_occupant'], $profileData['move_in_date'], $profileData['due_day']);
 
         if (isset($validated['has_second_occupant']) && !$validated['has_second_occupant']) {
             foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address', 'photo'] as $field) {

@@ -230,7 +230,14 @@ export default function Wizard({ tenancy, profile }: WizardProps) {
             const json = await res.json();
             if (json.profile) {
                 const patch = buildProfilePatch(json.profile);
-                setData(prev => ({ ...prev, ...patch }));
+                // Jangan menimpa data yang sudah diisi manual / OCR di form.
+                // Hanya isi field yang masih kosong dengan data server.
+                const merged: Record<string, any> = {};
+                for (const [k, v] of Object.entries(patch)) {
+                    const current = (data as any)[k];
+                    if (!current || current === '') merged[k] = v;
+                }
+                setData(prev => ({ ...prev, ...merged }));
             }
         } catch {
             // Jika gagal fetch, lanjutkan dengan state yang ada

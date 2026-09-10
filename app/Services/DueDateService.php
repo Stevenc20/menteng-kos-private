@@ -16,8 +16,12 @@ use Carbon\Carbon;
  */
 class DueDateService
 {
-    public static function dueDay(int $moveInDay): int
+    public static function dueDay(int $moveInDay, ?int $override = null): int
     {
+        if ($override !== null) {
+            return $override;
+        }
+
         if ($moveInDay <= 1) {
             return 0; // sentinel: caller resolves to last day of previous month
         }
@@ -28,13 +32,13 @@ class DueDateService
     /**
      * Resolve an actual calendar due-day for a given month.
      */
-    public static function dueDayOfMonth(Carbon $month, int $moveInDay): int
+    public static function dueDayOfMonth(Carbon $month, int $moveInDay, ?int $override = null): int
     {
-        if ($moveInDay <= 1) {
+        $day = self::dueDay($moveInDay, $override);
+
+        if ($day <= 0) {
             return $month->copy()->subMonthNoOverflow()->daysInMonth;
         }
-
-        $day = $moveInDay - 1;
 
         return min($day, $month->daysInMonth);
     }
@@ -78,17 +82,18 @@ class DueDateService
     /**
      * Next monthly due date for reminders/billing, following the same day rule.
      */
-    public static function nextDueDate(Carbon|string $anchor, int $moveInDay): Carbon
+    public static function nextDueDate(Carbon|string $anchor, int $moveInDay, ?int $override = null): Carbon
     {
         $fallback = $anchor instanceof Carbon ? $anchor->copy()->addDays(30) : Carbon::parse($anchor)->addDays(30);
 
         for ($i = 0; $i <= 3; $i++) {
             $month = Carbon::today()->copy()->addMonthsNoOverflow($i);
 
-            if ($moveInDay <= 1) {
+            $dueDay = self::dueDay($moveInDay, $override);
+            if ($dueDay <= 0) {
                 $due = $month->copy()->endOfMonth();
             } else {
-                $due = $month->copy()->startOfMonth()->addDays($moveInDay - 2);
+                $due = $month->copy()->startOfMonth()->addDays($dueDay - 1);
                 if ($due->gt($month->copy()->endOfMonth())) {
                     $due = $month->copy()->endOfMonth();
                 }

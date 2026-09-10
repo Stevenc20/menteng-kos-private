@@ -42,7 +42,7 @@ const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { 
 
 const formatDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
-export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
+export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayNumber, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
     const isPending = tenancy.status === 'PENDING_ADMIN_APPROVAL' && tenancy.approval_status !== 'REJECTED';
     const isRejected = tenancy.approval_status === 'REJECTED';
     const isApproved = tenancy.status === 'ACTIVE';
@@ -74,6 +74,8 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
     const [editModal, setEditModal] = useState(false);
     const editForm = useForm({
         whatsapp: profile?.whatsapp ?? '',
+        move_in_date: effectiveMoveInDate || tenancy.move_in_date || '',
+        due_day: (dueDayNumber != null ? String(dueDayNumber) : ''),
         ktp_1_name: profile?.ktp_1_name ?? '',
         ktp_1_nik: profile?.ktp_1_nik ?? '',
         ktp_1_birth_place: profile?.ktp_1_birth_place ?? '',
@@ -500,6 +502,15 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                     />
                     <AdminModalContent>
                         <div className="space-y-6">
+                            <div>
+                                <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Data Penyewaan</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <label className="block text-sm font-medium">Tanggal Masuk<input type="date" value={editForm.data.move_in_date} onChange={e => editForm.setData('move_in_date', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" /></label>
+                                    <label className="block text-sm font-medium">Jatuh Tempo (tanggal setiap bulan)<input type="number" min="0" max="31" value={editForm.data.due_day} onChange={e => editForm.setData('due_day', e.target.value)} className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]" placeholder="0 = akhir bulan" />
+                                        <span className="text-xs text-neutral-400">0 = akhir bulan</span>
+                                    </label>
+                                </div>
+                            </div>
                             <div>
                                 <p className="text-sm font-semibold text-[#6B6B67] uppercase tracking-wider mb-3">Penghuni 1</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
