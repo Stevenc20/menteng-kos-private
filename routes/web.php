@@ -96,6 +96,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/water/periods/{period}/confirm', [\App\Http\Controllers\WaterPeriodController::class, 'confirmPayment'])->name('admin.water.confirm');
     Route::get('/water/periods/{period}/photo/{kind}', [\App\Http\Controllers\WaterPeriodController::class, 'getPhoto'])->name('admin.water.photo');
     Route::post('/water/settings', [\App\Http\Controllers\WaterPeriodController::class, 'updateSettings'])->name('admin.water.settings');
+    Route::post('/water/notification/test-email', [\App\Http\Controllers\WaterPeriodController::class, 'testEmail'])->name('admin.water.testEmail');
+    Route::post('/water/notification/test-whatsapp', [\App\Http\Controllers\WaterPeriodController::class, 'testWhatsApp'])->name('admin.water.testWhatsApp');
 
     // Move Out & Archiving
     Route::get('/move-out/{tenancyId}', [\App\Http\Controllers\MoveOutController::class, 'show'])->name('admin.moveOut.show');

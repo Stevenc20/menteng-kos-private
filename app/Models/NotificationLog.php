@@ -10,6 +10,7 @@ class NotificationLog extends Model
     public const TRIGGER_H4_METER = 'WATER_H4_METER';
     public const TRIGGER_PAYMENT_DUE = 'WATER_PAYMENT_DUE';
     public const TRIGGER_NEW_PERIOD = 'WATER_NEW_PERIOD';
+    public const TRIGGER_TEST = 'WATER_TEST';
 
     public function period(): BelongsTo
     {

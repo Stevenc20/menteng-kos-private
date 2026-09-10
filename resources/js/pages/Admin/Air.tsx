@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { Link, router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { Droplets, Camera, CheckCircle2, AlertTriangle, Timer, Settings2, ScrollText, ExternalLink } from 'lucide-react';
+import { Droplets, Camera, CheckCircle2, AlertTriangle, Timer, Settings2, ScrollText, ExternalLink, Mail, MessageSquare, Send, Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
 import {
     AdminModal,
     AdminModalHeader,
@@ -59,6 +59,8 @@ interface WaterSettings {
     whatsapp_enabled: boolean;
     whatsapp_provider: string;
     mail_mailer: string;
+    email_configured: boolean;
+    whatsapp_configured: boolean;
 }
 
 interface LogEntry {
@@ -119,12 +121,22 @@ const TRIGGER_LABEL: Record<string, string> = {
     WATER_H4_METER: 'Pengingat H-4 · Meter Akhir',
     WATER_PAYMENT_DUE: 'Tagihan Jatuh Tempo',
     WATER_NEW_PERIOD: 'Periode Baru',
+    WATER_TEST: 'Test Notifikasi (Manual)',
 };
 
 export default function Air({ properties, stats, activeFilter, settings, logs }: AirProps) {
-    const [modal, setModal] = useState<'start' | 'record' | 'settings' | 'logs' | null>(null);
+    const [modal, setModal] = useState<'start' | 'record' | 'settings' | 'logs' | 'test-email' | 'test-whatsapp' | null>(null);
     const [selectedProperty, setSelectedProperty] = useState<PropertyRow | null>(null);
     const [selectedPeriod, setSelectedPeriod] = useState<WaterPeriod | null>(null);
+
+    const authProps = usePage().props as { auth?: { user?: { email?: string } } };
+    const adminEmail = authProps.auth?.user?.email ?? '';
+
+    const [testEmailForm, setTestEmailForm] = useState({ email: '' });
+    const [testWaForm, setTestWaForm] = useState({ number: '' });
+    const [testEmailResult, setTestEmailResult] = useState<{ status: 'sent' | 'failed'; message: string } | null>(null);
+    const [testWaResult, setTestWaResult] = useState<{ status: 'sent' | 'failed'; message: string } | null>(null);
+    const [testSending, setTestSending] = useState(false);
 
     const startForm = useForm({ meter_start: '', photo: null as File | null, note: '' });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
@@ -220,6 +232,60 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
 
     const photoUrl = (periodId: number, kind: string) => `/admin/water/periods/${periodId}/photo/${kind}`;
 
+    const postTest = async (url: string, payload: Record<string, string>): Promise<{ status: 'sent' | 'failed'; message: string }> => {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+        const data = (await res.json()) as { status: 'sent' | 'failed'; message: string };
+        return { status: ['sent', 'failed'].includes(data.status) ? data.status : 'failed', message: data.message };
+    };
+
+    const openTestEmail = () => {
+        setTestEmailForm({ email: adminEmail });
+        setTestEmailResult(null);
+        setModal('test-email');
+    };
+
+    const openTestWhatsApp = () => {
+        setTestWaForm({ number: settings.to_admin_whatsapp });
+        setTestWaResult(null);
+        setModal('test-whatsapp');
+    };
+
+    const sendTestEmail = async () => {
+        if (!testEmailForm.email.trim()) return;
+        setTestSending(true);
+        setTestEmailResult(null);
+        try {
+            const result = await postTest('/admin/water/notification/test-email', { email: testEmailForm.email.trim() });
+            setTestEmailResult(result);
+        } catch {
+            setTestEmailResult({ status: 'failed', message: 'Terjadi kesalahan saat menghubungi server.' });
+        } finally {
+            setTestSending(false);
+        }
+    };
+
+    const sendTestWhatsApp = async () => {
+        if (!testWaForm.number.trim()) return;
+        setTestSending(true);
+        setTestWaResult(null);
+        try {
+            const result = await postTest('/admin/water/notification/test-whatsapp', { number: testWaForm.number.trim() });
+            setTestWaResult(result);
+        } catch {
+            setTestWaResult({ status: 'failed', message: 'Terjadi kesalahan saat menghubungi server.' });
+        } finally {
+            setTestSending(false);
+        }
+    };
+
     return (
         <AdminLayout title="Meter Air">
             <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
@@ -253,6 +319,68 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                         </div>
                     );
                 })}
+            </div>
+
+            {/* Test Notification */}
+            <div className="mt-8 bg-white rounded-2xl border border-[#E8E7E3] shadow-sm p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                        <h2 className="text-base font-bold text-[#1A1A18] flex items-center gap-2">
+                            <Send className="w-4 h-4 text-[#6B6B67]" /> Test Notifikasi
+                        </h2>
+                        <p className="text-sm text-[#6B6B67] mt-1.5 max-w-xl">
+                            Gunakan fitur ini untuk memastikan konfigurasi Email dan WhatsApp sudah berjalan sebelum reminder otomatis diaktifkan.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <AdminButton variant="secondary" onClick={openTestEmail}>
+                            <Mail className="w-4 h-4" /> Test Email
+                        </AdminButton>
+                        <AdminButton variant="secondary" onClick={openTestWhatsApp}>
+                            <MessageSquare className="w-4 h-4" /> Test WhatsApp
+                        </AdminButton>
+                    </div>
+                </div>
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex items-center gap-3 border border-[#E8E7E3] rounded-[10px] px-4 py-3">
+                        {settings.email_configured
+                            ? <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                            : <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-semibold text-[#1A1A18]">Email</p>
+                            <p className="text-[12px] text-[#6B6B67] truncate">Mailer: {settings.mail_mailer}</p>
+                        </div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-bold border shrink-0 ${
+                            settings.email_configured
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                            {settings.email_configured ? 'Configured' : 'Not Configured'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3 border border-[#E8E7E3] rounded-[10px] px-4 py-3">
+                        {settings.whatsapp_configured
+                            ? <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                            : <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-semibold text-[#1A1A18]">WhatsApp</p>
+                            <p className="text-[12px] text-[#6B6B67] truncate">
+                                {settings.whatsapp_configured
+                                    ? `Provider: ${settings.whatsapp_provider}`
+                                    : settings.whatsapp_provider
+                                        ? `Provider: ${settings.whatsapp_provider} (belum ada driver)`
+                                        : 'Belum ada provider WhatsApp'}
+                            </p>
+                        </div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-bold border shrink-0 ${
+                            settings.whatsapp_configured
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                            {settings.whatsapp_configured ? 'Configured' : 'Not Configured'}
+                        </span>
+                    </div>
+                </div>
             </div>
 
             {/* Filters */}
@@ -573,6 +701,80 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                         <AdminButton isLoading={settingsForm.processing}>Simpan Pengaturan</AdminButton>
                     </AdminModalFooter>
                 </form>
+            </AdminModal>
+
+            {/* TEST EMAIL MODAL */}
+            <AdminModal isOpen={modal === 'test-email'} onClose={() => setModal(null)} maxWidth="sm">
+                <AdminModalHeader
+                    title="Test Email Notifikasi"
+                    description="Tujuan email diisi; jika mailer aktif (SMTP) email benar-benar dikirim ke tujuan."
+                    onClose={() => setModal(null)}
+                />
+                <AdminModalContent>
+                    <FormLabel htmlFor="test_email">Email tujuan</FormLabel>
+                    <TextInput
+                        id="test_email"
+                        type="email"
+                        placeholder="cth: admin@mentengkos.id"
+                        value={testEmailForm.email}
+                        onChange={(e) => setTestEmailForm({ email: e.target.value })}
+                    />
+                    <p className="text-[12px] text-[#8A8A84] mt-2">
+                        Subjek: "Test Notifikasi Meter Air - Menteng Kos Private". Pesan uji: konfirmasi bahwa pipeline email berjalan.
+                    </p>
+                    {testEmailResult && (
+                        <div className={`mt-4 rounded-[10px] border px-4 py-3 text-[13px] font-medium ${
+                            testEmailResult.status === 'sent'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : 'border-red-200 bg-red-50 text-red-800'
+                        }`}>
+                            {testEmailResult.status === 'sent' ? '✓ ' : '✕ '}{testEmailResult.message}
+                        </div>
+                    )}
+                </AdminModalContent>
+                <AdminModalFooter>
+                    <AdminButton variant="secondary" type="button" onClick={() => setModal(null)}>Batal</AdminButton>
+                    <AdminButton type="button" onClick={sendTestEmail} disabled={testSending || !testEmailForm.email.trim()}>
+                        {testSending && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {testSending ? 'Mengirim…' : 'Kirim Test Email'}
+                    </AdminButton>
+                </AdminModalFooter>
+            </AdminModal>
+
+            {/* TEST WHATSAPP MODAL */}
+            <AdminModal isOpen={modal === 'test-whatsapp'} onClose={() => setModal(null)} maxWidth="sm">
+                <AdminModalHeader
+                    title="Test WhatsApp Notifikasi"
+                    description="Nomor diambil dari pengaturan. WhatsApp baru benar-benar terkirim setelah provider WhatsApp terhubung."
+                    onClose={() => setModal(null)}
+                />
+                <AdminModalContent>
+                    <FormLabel htmlFor="test_wa">Nomor WhatsApp</FormLabel>
+                    <TextInput
+                        id="test_wa"
+                        value={testWaForm.number}
+                        onChange={(e) => setTestWaForm({ number: e.target.value })}
+                    />
+                    <p className="text-[12px] text-[#8A8A84] mt-2">
+                        Pesan uji: konfirmasi bahwa konfigurasi WhatsApp notification berhasil.
+                    </p>
+                    {testWaResult && (
+                        <div className={`mt-4 rounded-[10px] border px-4 py-3 text-[13px] font-medium ${
+                            testWaResult.status === 'sent'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : 'border-red-200 bg-red-50 text-red-800'
+                        }`}>
+                            {testWaResult.status === 'sent' ? '✓ ' : '✕ '}{testWaResult.message}
+                        </div>
+                    )}
+                </AdminModalContent>
+                <AdminModalFooter>
+                    <AdminButton variant="secondary" type="button" onClick={() => setModal(null)}>Batal</AdminButton>
+                    <AdminButton type="button" onClick={sendTestWhatsApp} disabled={testSending || !testWaForm.number.trim()}>
+                        {testSending && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {testSending ? 'Mengirim…' : 'Kirim Test WhatsApp'}
+                    </AdminButton>
+                </AdminModalFooter>
             </AdminModal>
 
             {/* LOG NOTIFIKASI MODAL */}

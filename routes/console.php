@@ -9,4 +9,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('tenancy:daily-process')->dailyAt('00:01');
-Schedule::command('water:daily-process')->dailyAt('00:05');
+
+// NOTE: the automatic water reminders (H-4 meter akhir & tagihan jatuh tempo)
+// are intentionally NOT scheduled yet. Manual Test Notification on /admin/water
+// must be confirmed first (TEST EMAIL really reaches an inbox, TEST WHATSAPP
+// reaches the admin number) before the automatic reminders are enabled.

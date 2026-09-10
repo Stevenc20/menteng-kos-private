@@ -7,6 +7,7 @@ use App\Models\Property;
 use App\Models\Setting;
 use App\Models\Tenancy;
 use App\Models\WaterPeriod;
+use App\Services\WaterNotificationService;
 use App\Services\WaterPeriodService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -15,8 +16,10 @@ use Inertia\Inertia;
 
 class WaterPeriodController extends Controller
 {
-    public function __construct(protected WaterPeriodService $periodService)
-    {
+    public function __construct(
+        protected WaterPeriodService $periodService,
+        protected WaterNotificationService $notificationService,
+    ) {
     }
 
     /**
@@ -297,6 +300,43 @@ class WaterPeriodController extends Controller
         return redirect()->back();
     }
 
+    /**
+     * [ADMIN] Send a manual test email from the Air console.
+     *
+     * Honest reporting: with MAIL_MAILER=log the response says the message was
+     * NOT delivered to an inbox, so the admin never mistakes accepted-for-log
+     * as accepted-for-delivery. Returns JSON for the modal in the UI.
+     */
+    public function testEmail(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|max:190',
+        ]);
+
+        $result = $this->notificationService->sendTestEmail($validated['email']);
+        $result['status'] = $result['status'] === 'SENT' ? 'sent' : 'failed';
+
+        return response()->json($result);
+    }
+
+    /**
+     * [ADMIN] Send a manual test WhatsApp from the Air console.
+     *
+     * Never pretends success: without a configured provider+driver this returns
+     * FAILED with a clear message telling the admin to connect a WhatsApp API.
+     */
+    public function testWhatsApp(Request $request)
+    {
+        $validated = $request->validate([
+            'number' => 'required|string|max:30',
+        ]);
+
+        $result = $this->notificationService->sendTestWhatsApp($validated['number']);
+        $result['status'] = $result['status'] === 'SENT' ? 'sent' : 'failed';
+
+        return response()->json($result);
+    }
+
     protected function periodPayload(WaterPeriod $period): array
     {
         return [
@@ -332,6 +372,8 @@ class WaterPeriodController extends Controller
             'whatsapp_enabled' => filter_var(Setting::get('water.whatsapp_enabled', '0'), FILTER_VALIDATE_BOOLEAN),
             'whatsapp_provider' => (string) Setting::get('water.whatsapp_provider', ''),
             'mail_mailer' => (string) config('mail.default'),
+            'email_configured' => $this->notificationService->emailConfigured(),
+            'whatsapp_configured' => $this->notificationService->whatsappConfigured(),
         ];
     }
 }
