@@ -15,10 +15,14 @@ docker compose ps --status running | grep -q ocr-service \
   || echo "PERINGATAN: ocr-service tidak terlihat running — cek 'docker compose ps'"
 
 echo "== [2/3] Engine PaddleOCR membaca foto? =="
-RAW=$(curl -sf -F "file=@${PHOTO};type=image/jpeg" http://menteng-kos-ocr:8000/ocr || true)
+# Port 8000 di-publish ke host (lihat docker-compose.yml). Hostname
+# "menteng-kos-ocr" hanya valid DI DALAM jaringan Docker — dipakai oleh
+# Laravel app, bukan dari shell host.
+RAW=$(curl -sf -F "file=@${PHOTO};type=image/jpeg" http://localhost:8000/ocr || true)
 if [ -z "$RAW" ]; then
-  echo "GAGAL: tidak ada respons dari http://menteng-kos-ocr:8000/ocr"
-  echo "  - cek 'docker compose logs ocr-service'"
+  echo "GAGAL: tidak ada respons dari http://localhost:8000/ocr"
+  echo "  - cek 'docker compose logs ocr-service | tail -50'"
+  echo "  - pastikan port 8000 tidak dipakai proses lain: 'ss -ltnp | grep 8000'"
   echo "  - pastikan model ter-download: log berisi 'download ... to ~/.paddleocr'"
   exit 1
 fi
