@@ -27,4 +27,28 @@ class Property extends Model
     {
         return $this->hasMany(PropertyMedia::class);
     }
+
+    /**
+     * Water meter periods, newest first (per-unit history).
+     */
+    public function waterPeriods(): HasMany
+    {
+        return $this->hasMany(WaterPeriod::class)->latest('period_year')->latest('period_month')->latest('id');
+    }
+
+    /**
+     * The single currently open water period (METER_DUE / WAITING_PAYMENT), if any.
+     */
+    public function openWaterPeriod(): ?WaterPeriod
+    {
+        return $this->waterPeriods()->whereIn('status', ['METER_DUE', 'WAITING_PAYMENT'])->first();
+    }
+
+    /**
+     * The tenancy currently occupying this unit (ACTIVE), if any.
+     */
+    public function currentTenancy(): ?Tenancy
+    {
+        return $this->hasOne(Tenancy::class)->where('status', 'ACTIVE')->latest('id')->first();
+    }
 }

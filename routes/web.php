@@ -88,6 +88,15 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/payments/{billingId}/verify', [\App\Http\Controllers\PaymentController::class, 'verifyPayment'])->name('admin.payments.verify');
     Route::post('/tenants/{tenancyId}/water-meter', [\App\Http\Controllers\WaterMeterController::class, 'store'])->name('admin.waterMeter.store');
 
+    // Water Meter Monitoring & Billing (Meter Air)
+    Route::get('/water', [\App\Http\Controllers\WaterPeriodController::class, 'index'])->name('admin.water');
+    Route::get('/water/{property}', [\App\Http\Controllers\WaterPeriodController::class, 'show'])->name('admin.water.show');
+    Route::post('/water/{property}/start', [\App\Http\Controllers\WaterPeriodController::class, 'startPeriod'])->name('admin.water.start');
+    Route::post('/water/periods/{period}/record', [\App\Http\Controllers\WaterPeriodController::class, 'recordEnd'])->name('admin.water.record');
+    Route::post('/water/periods/{period}/confirm', [\App\Http\Controllers\WaterPeriodController::class, 'confirmPayment'])->name('admin.water.confirm');
+    Route::get('/water/periods/{period}/photo/{kind}', [\App\Http\Controllers\WaterPeriodController::class, 'getPhoto'])->name('admin.water.photo');
+    Route::post('/water/settings', [\App\Http\Controllers\WaterPeriodController::class, 'updateSettings'])->name('admin.water.settings');
+
     // Move Out & Archiving
     Route::get('/move-out/{tenancyId}', [\App\Http\Controllers\MoveOutController::class, 'show'])->name('admin.moveOut.show');
     Route::post('/move-out/{tenancyId}/doc', [\App\Http\Controllers\MoveOutController::class, 'storeDocumentation'])->name('admin.moveOut.storeDoc');

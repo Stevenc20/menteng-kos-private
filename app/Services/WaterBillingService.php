@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Property;
+use App\Models\Setting;
 use App\Models\Tenancy;
 
 /**
@@ -66,6 +68,23 @@ class WaterBillingService
     }
 
     /**
+     * Effective water rate (Rupiah / m³) for a unit.
+     *
+     * Resolution order:
+     *   1. The property's own `water_rate` override (if > 0)
+     *   2. The global `water.rate_per_m3` setting
+     *   3. The WATER_RATE_PER_M3 constant fallback
+     */
+    public static function ratePerM3(?Property $property = null): float
+    {
+        if ($property && $property->water_rate !== null && (float) $property->water_rate > 0) {
+            return (float) $property->water_rate;
+        }
+
+        return (float) Setting::get('water.rate_per_m3', self::WATER_RATE_PER_M3);
+    }
+
+    /**
      * Compute the water charge (Rupiah) for the given usage.
      *
      * @param Tenancy $tenancy
@@ -74,6 +93,6 @@ class WaterBillingService
      */
     public static function chargeFor(Tenancy $tenancy, int $usageM3): int
     {
-        return self::billableUsage($tenancy, $usageM3) * self::WATER_RATE_PER_M3;
+        return (int) round(self::billableUsage($tenancy, $usageM3) * self::ratePerM3($tenancy->property));
     }
 }

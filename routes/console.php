@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('tenancy:daily-process')->dailyAt('00:01');
+Schedule::command('water:daily-process')->dailyAt('00:05');

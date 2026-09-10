@@ -42,4 +42,20 @@ class Tenancy extends Model
         return $this->hasOne(RoomDocumentation::class)
             ->where('documentation_type', 'MOVE_IN');
     }
+
+    /**
+     * Water meter periods linked to this tenancy.
+     */
+    public function waterPeriods(): HasMany
+    {
+        return $this->hasMany(WaterPeriod::class);
+    }
+
+    /**
+     * The single currently open water period for this tenancy, if any.
+     */
+    public function openWaterPeriod(): ?WaterPeriod
+    {
+        return $this->waterPeriods()->whereIn('status', ['METER_DUE', 'WAITING_PAYMENT'])->latest('id')->first();
+    }
 }
