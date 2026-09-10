@@ -37,7 +37,7 @@ class KtpOcrService
 
         if (!file_exists($absolutePath)) {
             Log::error('KTP OCR failed: file not found');
-            return ['data' => $result];
+            return array_merge($result, ['success' => false, 'fields_found' => []]);
         }
 
         $info = @getimagesize($absolutePath);
@@ -55,6 +55,7 @@ class KtpOcrService
 
         $bestExtracted = null;
         $bestScore = -1;
+        $bestRaw = '';
 
         foreach ($variants as $label => $path) {
             if (!$path) continue;
@@ -77,12 +78,12 @@ class KtpOcrService
                 if ($data['birth_date'] !== '') $score += 10;
                 if ($data['address'] !== '') $score += 5;
                 if ($data['rt_rw'] !== '') $score += 2;
-                if ($data['kelurahan_desa'] !== '') $score += 2;
-                if ($data['kecamatan'] !== '') $score += 2;
-                if ($data['agama'] !== '') $score += 2;
-                if ($data['status_perkawinan'] !== '') $score += 2;
-                if ($data['job'] !== '') $score += 2;
-                if ($data['kewarganegaraan'] !== '') $score += 2;
+                if ($data['village'] !== '') $score += 2;
+                if ($data['district'] !== '') $score += 2;
+                if ($data['religion'] !== '') $score += 2;
+                if ($data['marital_status'] !== '') $score += 2;
+                if ($data['occupation'] !== '') $score += 2;
+                if ($data['nationality'] !== '') $score += 2;
                 
                 $avgConf = count($confidences) > 0 ? array_sum($confidences) / count($confidences) : 0;
                 $score += $avgConf;
@@ -96,13 +97,14 @@ class KtpOcrService
                 if ($score > $bestScore) {
                     $bestScore = $score;
                     $bestExtracted = $extracted;
+                    $bestRaw = implode("\n", array_column($ocrData, 'text'));
                 }
             }
         }
 
         if (!$bestExtracted) {
             Log::warning('KTP OCR paddleocr returned empty for all variants.');
-            return ['data' => $result];
+            return array_merge($result, ['success' => false, 'fields_found' => []]);
         }
 
         $data = $bestExtracted['data'];
@@ -121,22 +123,30 @@ class KtpOcrService
         $result['agama'] = $data['religion'] ?? '';
         $result['status_perkawinan'] = $data['marital_status'] ?? '';
         $result['kewarganegaraan'] = $data['nationality'] ?? '';
+        $result['raw'] = $bestRaw;
 
         foreach ($confidences as $field => $conf) {
             Log::info('KTP OCR field', ['field' => $field, 'confidence' => $conf]);
         }
         
         $fieldsFound = count(array_filter($result, fn($v) => $v !== ''));
-        
+
         if ($fieldsFound < 2 && $result['nik'] === '') {
-            Log::warning('KTP OCR below confidence threshold; identity data preserved');
+            Log::warning('KTP OCR below confidence threshold; returning empty result');
             foreach (['name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address', 'rt_rw', 'kelurahan_desa', 'kecamatan', 'agama', 'status_perkawinan', 'kewarganegaraan'] as $f) {
                 $result[$f] = '';
             }
+            $fieldsFound = 0;
         }
 
+        $result['fields_found'] = array_values(array_filter([
+            'name', 'nik', 'birth_place', 'birth_date', 'gender', 'job', 'address',
+            'rt_rw', 'kelurahan_desa', 'kecamatan', 'agama', 'status_perkawinan', 'kewarganegaraan',
+        ], fn($f) => !empty($result[$f])));
+        $result['success'] = $fieldsFound >= 2 || $result['nik'] !== '';
+
         Log::info('KTP OCR FINAL PROFILE', $result);
-        return ['data' => $result];
+        return $result;
     }
 
     private function createFilter(string $path, string $type): ?string

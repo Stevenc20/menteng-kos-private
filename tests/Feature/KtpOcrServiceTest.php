@@ -1,51 +1,87 @@
 <?php
 
 use App\Services\KtpOcrService;
+use Illuminate\Support\Facades\Http;
 
-function parseKtp(string $raw): array
+/**
+ * Helper membangun hasil OCR PaddleOCR (spatial): setiap box punya
+ * 4 koordinat sudut, teks, dan confidence.
+ */
+function ktpBox(string $text, int $x, int $y, float $conf = 0.9): array
 {
-    $service = new KtpOcrService();
-    $ref = new ReflectionClass($service);
-    $method = $ref->getMethod('parse');
-    $method->setAccessible(true);
-    return $method->invoke($service, $raw);
+    $w = max(10, strlen($text) * 9);
+    return [
+        'box' => [[$x, $y], [$x + $w, $y], [$x + $w, $y + 12], [$x, $y + 12]],
+        'text' => $text,
+        'confidence' => $conf,
+    ];
 }
 
-it('extracts NIK, name, birth data, gender and address from realistic KTP OCR', function () {
-    $raw = "REPUBLIK INDONESIA\n"
-         . "NIK\n"
-         . "3275011503020001\n"
-         . "Nama\n"
-         . "STEVEN CHRISTIAN\n"
-         . "Tempat/Tgl Lahir\n"
-         . "BEKASI, 15-03-2002\n"
-         . "Jenis Kelamin\n"
-         . "LAKI-LAKI\n"
-         . "Alamat\n"
-         . "JL. H. MOKEN NO. 19 RT 01 RW 02\n"
-         . "KEL. GANDARIA, KEC. JAGAKARSA\n"
-         . "KOTA ADMINISTRASI JAKARTA SELATAN";
+/**
+ * Konversi daftar pasangan [label, value] menjadi box-box PaddleOCR.
+ * Label di kiri, value di kanan satu baris (seperti layout KTP asli).
+ */
+function ktpBoxesFromPairs(array $pairs): array
+{
+    $boxes = [];
+    $y = 20;
+    foreach ($pairs as [$label, $value]) {
+        $boxes[] = ktpBox($label, 0, $y);
+        if ($value !== '') {
+            $boxes[] = ktpBox($value, 300, $y, 0.95);
+        }
+        $y += 30;
+    }
+    return $boxes;
+}
 
-    $result = parseKtp($raw);
+function realisticKtpBoxes(): array
+{
+    // Alamat ditaruh paling bawah agar collector multi-line tidak menelan label lain
+    return ktpBoxesFromPairs([
+        ['NIK', '3201110203920001'],
+        ['Nama', 'BUDI SETIAWAN'],
+        ['Tempat/Tgl Lahir', 'BEKASI, 02-03-1992'],
+        ['Jenis Kelamin', 'LAKI-LAKI'],
+        ['Pekerjaan', 'KARYAWAN'],
+        ['Kewarganegaraan', 'WNI'],
+        ['Alamat', 'JL. BERKAH NO 9'],
+    ]);
+}
 
-    expect($result['nik'])->toBe('3275011503020001');
-    expect($result['name'])->toBe('STEVEN CHRISTIAN');
+function paddleExtract(array $boxes, ?callable $fixture = null): array
+{
+    Http::fake(['*' => Http::response(['data' => $boxes])]);
+    $path = $fixture ? $fixture() : base_path('tests/fixtures/ktp_realistic.jpg');
+    return app(KtpOcrService::class)->extract($path);
+}
+
+it('extracts fields from a paddle OCR response and returns a flat result', function () {
+    $result = paddleExtract(realisticKtpBoxes());
+
+    expect($result['success'])->toBeTrue();
+    expect($result['fields_found'])->toContain('name', 'nik', 'job');
+    expect($result['nik'])->toBe('3201110203920001');
+    expect($result['name'])->toBe('BUDI SETIAWAN');
     expect($result['birth_place'])->toBe('BEKASI');
-    expect($result['birth_date'])->toBe('2002-03-15');
+    expect($result['birth_date'])->toBe('1992-03-02');
     expect($result['gender'])->toBe('LAKI-LAKI');
-    expect($result['address'])->toContain('JL. H. MOKEN NO. 19 RT 01 RW 02');
-    expect($result['address'])->toContain('JAKARTA SELATAN');
+    expect($result['job'])->toBe('KARYAWAN');
+    expect($result['kewarganegaraan'])->toBe('WNI');
+    expect($result['address'])->toBe('JL. BERKAH NO 9');
 });
 
-it('handles inline label with colon for all fields', function () {
-    $raw = "NIK : 3275011503020001\n"
-         . "Nama : STEVEN CHRISTIAN\n"
-         . "Tempat/Tgl Lahir : BEKASI, 07-03-2002\n"
-         . "Jenis Kelamin : LAKI-LAKI\n"
-         . "Pekerjaan : PELAJAR/MAHASISWA\n"
-         . "Alamat : Jl. Test No. 1 RT 002 RW 003";
+it('handles label dan value dalam satu box (inline colon) untuk semua field', function () {
+    $boxes = ktpBoxesFromPairs([
+        ['NIK : 3275011503020001', ''],
+        ['Nama : STEVEN CHRISTIAN', ''],
+        ['Tempat/Tgl Lahir : BEKASI, 07-03-2002', ''],
+        ['Jenis Kelamin : LAKI-LAKI', ''],
+        ['Pekerjaan : PELAJAR/MAHASISWA', ''],
+        ['Alamat : Jl. Test No. 1 RT 002 RW 003', ''],
+    ]);
 
-    $result = parseKtp($raw);
+    $result = paddleExtract($boxes);
 
     expect($result['nik'])->toBe('3275011503020001');
     expect($result['name'])->toBe('STEVEN CHRISTIAN');
@@ -55,64 +91,74 @@ it('handles inline label with colon for all fields', function () {
     expect($result['address'])->toBe('Jl. Test No. 1 RT 002 RW 003');
 });
 
-it('extracts gender as PEREMPUAN', function () {
-    $result = parseKtp("Jenis Kelamin\nPEREMPUAN\nAlamat\nJl. Mawar No. 5");
+it('extracts gender sebagai PEREMPUAN', function () {
+    $result = paddleExtract(ktpBoxesFromPairs([
+        ['Jenis Kelamin', 'PEREMPUAN'],
+        ['Alamat', 'Jl. Mawar No. 5'],
+    ]));
 
     expect($result['gender'])->toBe('PEREMPUAN');
     expect($result['address'])->toBe('Jl. Mawar No. 5');
 });
 
-it('handles missing fields gracefully', function () {
-    $raw = "Some random text\nwithout KTP structure";
-
-    $result = parseKtp($raw);
+it('menangani field yang absen dengan aman', function () {
+    $result = paddleExtract(ktpBoxesFromPairs([
+        ['DELIMITER', 'some random'],
+        ['other text', ''],
+    ]));
 
     expect($result['nik'])->toBe('');
     expect($result['name'])->toBe('');
-    expect($result['birth_place'])->toBe('');
-    expect($result['birth_date'])->toBe('');
     expect($result['address'])->toBe('');
-    expect($result['raw'])->toBe($raw);
+    expect($result['success'])->toBeFalse();
+    expect($result['fields_found'])->toBe([]);
 });
 
-it('cleans NIK from extra characters', function () {
-    $result = parseKtp("NIK: 3275 0115 0302 0001\nNama\nTEST USER");
+it('memulihkan NIK ketika OCR salah baca digit sebagai huruf', function () {
+    $result = paddleExtract(ktpBoxesFromPairs([
+        ['NIK', '3275OII5O3O2OOO1'],
+        ['Nama', 'TEST USER'],
+    ]));
 
     expect($result['nik'])->toBe('3275011503020001');
     expect($result['name'])->toBe('TEST USER');
 });
 
-it('ignores tesseract chatter lines and strips name punctuation', function () {
-    $raw = "Estimating resolution as 539\n"
-         . "Nama\n"
-         . "— NADHIRA RAYHANA AZKAPRIMA\n"
-         . "Tempat/Tgl Lahir\n"
-         . "BEKASI, 07-03-2002\n"
-         . "Warning: Invalid resolution";
-
-    $result = parseKtp($raw);
+it('membersihkan tanda baca di depan nama hasil OCR', function () {
+    $result = paddleExtract(ktpBoxesFromPairs([
+        ['Nama', '— NADHIRA RAYHANA AZKAPRIMA'],
+        ['Tempat/Tgl Lahir', 'BEKASI, 07-03-2002'],
+    ]));
 
     expect($result['name'])->toBe('NADHIRA RAYHANA AZKAPRIMA');
     expect($result['birth_place'])->toBe('BEKASI');
     expect($result['birth_date'])->toBe('2002-03-07');
 });
 
-it('tolerates a mangled Alamat label from OCR', function () {
-    $result = parseKtp("Alai: - JL KE\nRn HRW - $64/303\nKel/Desa- > KEBON PEDES");
+it('memilih kandidat varian OCR terbaik (bukan noise)', function () {
+    if (!extension_loaded('gd')) {
+        $this->markTestSkipped('GD extension not available');
+    }
 
-    expect($result['address'])->toBe('JL KE');
+    // Varian dijalankan berurutan: original, grayscale, contrast, sharpen
+    Http::fakeSequence()
+        ->push(['data' => [ktpBox('oe r . oF : i mae In | 4 ae', 0, 20)]])
+        ->push(['data' => [ktpBox('oe r . oF : i mae In | 4 ae', 0, 20)]])
+        ->push(['data' => [ktpBox('oe r . oF : i mae In | 4 ae', 0, 20)]])
+        ->push(['data' => realisticKtpBoxes()]);
+
+    $result = app(KtpOcrService::class)->extract(base_path('tests/fixtures/ktp_realistic.jpg'));
+
+    expect($result['success'])->toBeTrue();
+    expect($result['name'])->toBe('BUDI SETIAWAN');
+    expect($result['nik'])->toBe('3201110203920001');
 });
 
-it('recovers NIK when OCR misreads digits as letters', function () {
-    $result = parseKtp("NIK : 3275OII5O3O2OOO1\nNama\nTEST USER");
+it('menangani file yang tidak ditemukan dengan aman', function () {
+    $result = app(KtpOcrService::class)->extract('/no/such/ktp/file.jpg');
 
-    expect($result['nik'])->toBe('3275011503020001');
-});
-
-it('strips trailing OCR noise from job value', function () {
-    $raw = "Pekerjaan - PELAJAR/MAHASISWA se\nKewarganegaraan: WNI";
-
-    $result = parseKtp($raw);
-
-    expect($result['job'])->toBe('PELAJAR/MAHASISWA');
+    expect($result['success'])->toBeFalse();
+    expect($result['fields_found'])->toBe([]);
+    expect($result['name'])->toBe('');
+    expect($result['nik'])->toBe('');
 });

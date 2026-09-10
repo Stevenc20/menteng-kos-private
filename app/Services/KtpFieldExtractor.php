@@ -95,12 +95,10 @@ class KtpFieldExtractor
             }
         }
 
-        if (!$labelBox) {
+if (!$labelBox) {
             return null;
         }
 
-        $tolerance = $labelBox['height'] * 0.8;
-        
         $valueBox = null;
         $minDist = 999999;
         
@@ -111,20 +109,26 @@ class KtpFieldExtractor
                 return $this->processValue($val, $labelBox['confidence'], $cleanType);
             }
         } else {
-            // Try to strip the label itself using the regex
+// Try to strip the label itself using the regex
             $val = trim(preg_replace($labelRegex, '', $labelBox['text']));
-            if ($val !== '' && $val !== $labelBox['text']) {
-                $val = preg_replace('/^[\s:\-\|\.]+/', '', $val);
+            // Sisa teks yang MASIH mengandung kata label (mis. "Tempat/Tgl Lahir"
+            // hanya terpotong "Tempat" menjadi "/Tgl Lahir") bukan nilai field —
+            // lanjut ke pencarian box tetangga.
+if ($val !== '' && $val !== $labelBox['text'] && !preg_match($labelRegex, $val)) {
+                $val = preg_replace('/^[^A-Za-z0-9]+/', '', $val);
                 if ($val !== '') {
                     return $this->processValue($val, $labelBox['confidence'], $cleanType);
                 }
             }
         }
 
-        foreach ($this->boxes as $box) {
+foreach ($this->boxes as $box) {
             if ($box === $labelBox) continue;
             
-            if (abs($box['center_y'] - $labelBox['center_y']) < $tolerance) {
+            // Box PaddleOCR asli sering miring (quad), sehingga center_y meleset
+            // dari baris label walau sebenarnya satu baris. Pakai overlap/rapat
+            // vertikal (toleransi 2px) sebagai pengganti pusat baris.
+            if ($this->sameRow($box, $labelBox, 2)) {
                 if ($box['min_x'] > $labelBox['min_x']) {
                     $dist = $box['min_x'] - $labelBox['max_x'];
                     if ($dist > -20 && $dist < $minDist) {
@@ -150,8 +154,11 @@ class KtpFieldExtractor
             foreach ($this->boxes as $box) {
                 if ($box === $labelBox || $box === $valueBox) continue;
                 if ($box['center_y'] > $addressYStart && $box['center_y'] < $addressYEnd) {
-                    // Check if this box is likely a different label (RT/RW, Kel/Desa)
-                    if (preg_match('/(RT\/?RW|Kel\/Desa|Kelurahan|Kecamatan|Agama)/i', $box['text'])) {
+// Berhenti hanya pada LABEL field lain (teks pendek, tanpa digit)
+                // — "RT 001/RW 002, JL. ..." berisi digit dan bagian dari alamat.
+                if (preg_match('/(RT\/?RW|Kel\/Desa|Kelurahan|Kecamatan|Agama)/i', $box['text'])
+                    && !preg_match('/\d/', $box['text'])
+                    && strlen($box['text']) <= 12) {
                         // Adjust YEnd to stop before this label
                         $addressYEnd = min($addressYEnd, $box['min_y']);
                         continue;
@@ -181,7 +188,7 @@ class KtpFieldExtractor
             return null;
         }
 
-        if ($valueBox) {
+if ($valueBox) {
             $val = $valueBox['text'];
             $val = preg_replace('/^[\s:\-\|\.]+/', '', $val);
             return $this->processValue($val, $valueBox['confidence'], $cleanType);
@@ -207,7 +214,8 @@ class KtpFieldExtractor
             return null;
         }
 
-        if ($type === 'blood_type') {
+if ($type === 'blood_type') {
+            $val = str_replace('0', 'O', $val);
             $val = preg_replace('/[^ABO\-]/i', '', $val);
             if (in_array(strtoupper($val), ['A', 'B', 'AB', 'O', '-'])) {
                 return ['value' => strtoupper($val), 'confidence' => $conf];
@@ -215,14 +223,23 @@ class KtpFieldExtractor
             return null;
         }
 
-        if ($type === 'birth_place' || $type === 'birth_date') {
+if ($type === 'birth_place') {
+            // JANGAN substitusi O/I/l di nama tempat — huruf bisa ikut berubah
+            // (BEKASI → BEKAS1). Ambil nama kota hanya, tidak tanggal.
+            if (preg_match('/([A-Za-z][A-Za-z\s\-]*)[,\.]?\s*\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}/i', $val, $m)) {
+                return ['value' => trim($m[1]), 'confidence' => $conf];
+            }
+            if (preg_match('/^[A-Za-z][A-Za-z\s\-]*$/', $val)) {
+                return ['value' => trim($val), 'confidence' => $conf];
+            }
+            return null;
+        }
+
+        if ($type === 'birth_date') {
+            // Hanya digit tanggal yang dinormalisasi (O→0, I→1, l→1).
             $clean = str_replace(['O', 'l', 'I'], ['0', '1', '1'], $val);
-            if (preg_match('/([A-Za-z\s\-]+)[,\.]?\s*(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/i', $clean, $m)) {
-                if ($type === 'birth_place') return ['value' => trim($m[1]), 'confidence' => $conf];
-                if ($type === 'birth_date') return ['value' => sprintf('%04d-%02d-%02d', $m[4], $m[3], $m[2]), 'confidence' => $conf];
-            } else {
-                if ($type === 'birth_place' && preg_match('/^[A-Za-z\s\-]+$/', $val)) return ['value' => trim($val), 'confidence' => $conf];
-                if ($type === 'birth_date' && preg_match('/(\d{2})[\-\/\.](\d{2})[\-\/\.](\d{4})/', $clean, $m)) return ['value' => sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]), 'confidence' => $conf];
+            if (preg_match('/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/', $clean, $m)) {
+                return ['value' => sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]), 'confidence' => $conf];
             }
             return null;
         }
@@ -248,10 +265,10 @@ class KtpFieldExtractor
                 }
             }
 
-            $tolerance = $labelBox['height'] * 1.5;
+$tolerance = 0;
             foreach ($this->boxes as $box) {
                 if ($box === $labelBox) continue;
-                if (abs($box['center_y'] - $labelBox['center_y']) < $tolerance) {
+                if ($this->sameRow($box, $labelBox, 3)) {
                     if ($box['min_x'] > $labelBox['min_x']) {
                         $nik = $this->cleanNik($box['text']);
                         if (strlen($nik) === 16 && $box['confidence'] > 0.8) {
@@ -272,11 +289,17 @@ class KtpFieldExtractor
         return null;
     }
 
-    private function cleanNik(string $value): string
+private function cleanNik(string $value): string
     {
         $value = strtoupper($value);
         $value = preg_replace('/^[^0-9A-Z]+/', '', $value);
         $value = str_replace(['O', 'I', 'l', 'S', 'B'], ['0', '1', '1', '5', '8'], $value);
         return preg_replace('/[^0-9]/', '', $value);
+    }
+
+    private function sameRow(array $a, array $b, int $maxGap = 2): bool
+    {
+        $gap = max($a['min_y'], $b['min_y']) - min($a['max_y'], $b['max_y']);
+        return $gap <= $maxGap;
     }
 }
