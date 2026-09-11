@@ -14,13 +14,16 @@ use Illuminate\Support\Facades\Mail;
  * Sends water reminders to the ADMIN (never to tenants in v1).
  *
  * Channels:
- *  - EMAIL   : a real mail shipment through the configured Laravel mailer
- *              (MAIL_MAILER=log on staging still routes through the mailer).
- *  - WHATSAPP: abstraction only. Until a real provider + credential exists the
+ *  - EMAIL   : professional HTML email via Laravel Mail (SMTP). Dedupe per
+ *              (period, trigger, channel, day) PLUS a one-shot guard so a
+ *              reminder type is ever delivered only once per period.
+ *  - WHATSAPP: abstraction only. Until a real provider + driver exists the
  *              delivery is logged as SKIPPED with a clear reason — this service
  *              NEVER pretends a WhatsApp was delivered.
  *
- * Dedupe: one NotificationLog row per (period, trigger, channel, date).
+ * Status honesty: "SENT" means the mailer accepted the message for delivery;
+ * the app cannot claim inbox delivery (no tracking). With log/array/null
+ * mailers a test email is reported FAILED because it never leaves the machine.
  */
 class WaterNotificationService
 {
@@ -35,21 +38,32 @@ class WaterNotificationService
     /** Mailers that actually hand the message to a delivery provider. */
     protected const DELIVERY_MAILERS = ['smtp', 'sendmail', 'mailgun', 'postmark', 'ses', 'resend'];
 
+    protected const MONTHS_ID = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
     public function notifyPeriod(WaterPeriod $period, string $trigger): void
     {
         $reminderDate = now()->toDateString();
 
         $subject = $this->subject($trigger, $period);
         $body = $this->body($trigger, $period);
+        $data = $this->viewData($trigger, $period);
 
         // ----- EMAIL -----
-        if ($this->boolSetting('water.email_enabled', true)) {
-            $this->viaEmail($period, $trigger, $subject, $body, $reminderDate);
-        } else {
-            $this->log($period, $trigger, 'EMAIL', $subject, "Email dinonaktifkan (water.email_enabled=0).", 'SKIPPED', $reminderDate);
+        if ($this->alreadyDelivered($period, $trigger, 'EMAIL')) {
+            return; // a reminder type is only ever delivered once per period
         }
 
-        // ----- WHATSAPP -----
+        if ($this->boolSetting('water.email_enabled', true)) {
+            $this->viaEmail($period, $trigger, $subject, $body, $data, $reminderDate);
+        } else {
+            $this->log($period, $trigger, 'EMAIL', $subject, 'Email dinonaktifkan (water.email_enabled=0).', 'SKIPPED', $reminderDate);
+        }
+
+        // ----- WHATSAPP (abstraction only) -----
+        if ($this->alreadyTried($period, $trigger, 'WHATSAPP')) {
+            return;
+        }
+
         $waNumber = (string) Setting::get('water.to_admin_whatsapp', env('WATER_ADMIN_WHATSAPP', '081291903483'));
 
         if (! $this->boolSetting('water.whatsapp_enabled', false)) {
@@ -70,10 +84,117 @@ class WaterNotificationService
     }
 
     /**
+     * Email recipients: a configured WATER_ADMIN_EMAIL (setting or env) wins;
+     * otherwise all registered ADMIN/SUPER_ADMIN users with an email.
+     */
+    protected function adminRecipients(): array
+    {
+        $configured = trim((string) Setting::get('water.to_admin_email', (string) env('WATER_ADMIN_EMAIL', '')));
+
+        if ($configured !== '') {
+            return [$configured];
+        }
+
+        return User::query()
+            ->whereIn('role', ['ADMIN', 'SUPER_ADMIN'])
+            ->whereNotNull('email')
+            ->pluck('email')
+            ->all();
+    }
+
+    /**
+     * True only when a notification log already recorded a real SENT delivery
+     * for this (period, trigger, channel) — regardless of the day. Makes a
+     * reminder type one-shot ever per period, while FAILED logs can be retried.
+     */
+    protected function alreadyDelivered(WaterPeriod $period, string $trigger, string $channel): bool
+    {
+        return NotificationLog::query()
+            ->where('period_id', $period->id)
+            ->where('trigger', $trigger)
+            ->where('channel', $channel)
+            ->where('purpose', 'REMINDER')
+            ->where('status', 'SENT')
+            ->whereNotNull('reminder_date')
+            ->exists();
+    }
+
+    /**
+     * True when any reminder row exists for this (period, trigger, channel)
+     * regardless of its outcome — used so the WhatsApp channel (which can only
+     * SKIP today) is not re-evaluated on every daily run.
+     */
+    protected function alreadyTried(WaterPeriod $period, string $trigger, string $channel): bool
+    {
+        return NotificationLog::query()
+            ->where('period_id', $period->id)
+            ->where('trigger', $trigger)
+            ->where('channel', $channel)
+            ->where('purpose', 'REMINDER')
+            ->exists();
+    }
+
+    protected function viaEmail(WaterPeriod $period, string $trigger, string $subject, string $body, array $data, string $reminderDate): void
+    {
+        if ($this->alreadyLogged($period, $trigger, 'EMAIL', $reminderDate)) {
+            return;
+        }
+
+        $recipients = $this->adminRecipients();
+
+        if (empty($recipients)) {
+            $this->log($period, $trigger, 'EMAIL', $subject, 'Tidak ada email admin yang terdaftar. Pesan TIDAK dikirim.', 'SKIPPED', $reminderDate);
+
+            return;
+        }
+
+        try {
+            Mail::to($recipients)->send(new WaterReminderMail($subject, $data));
+            $this->log($period, $trigger, 'EMAIL', $subject, 'Email reminder terkirim ke: '.implode(', ', $recipients).\PHP_EOL.$body, 'SENT', $reminderDate);
+        } catch (\Throwable $e) {
+            $this->log($period, $trigger, 'EMAIL', $subject, 'Gagal mengirim email: '.$this->sanitizeError($e->getMessage()), 'FAILED', $reminderDate);
+        }
+    }
+
+    protected function alreadyLogged(WaterPeriod $period, string $trigger, string $channel, string $reminderDate): bool
+    {
+        return NotificationLog::query()
+            ->where('period_id', $period->id)
+            ->where('trigger', $trigger)
+            ->where('channel', $channel)
+            ->where('reminder_date', $reminderDate)
+            ->exists();
+    }
+
+    protected function log(WaterPeriod $period, string $trigger, string $channel, string $subject, string $body, string $status, string $reminderDate): void
+    {
+        if ($this->alreadyLogged($period, $trigger, $channel, $reminderDate)) {
+            return;
+        }
+
+        NotificationLog::create([
+            'period_id' => $period->id,
+            'trigger' => $trigger,
+            'channel' => $channel,
+            'recipient' => $channel === 'EMAIL'
+                ? implode(', ', $this->adminRecipients())
+                : (string) Setting::get('water.to_admin_whatsapp', env('WATER_ADMIN_WHATSAPP', '081291903483')),
+            'subject' => $subject,
+            'body' => $body,
+            'status' => $status,
+            'error' => $status === 'SENT' ? null : $body,
+            'reminder_date' => $reminderDate,
+            'purpose' => 'REMINDER',
+            'sent_at' => $status === 'SENT' ? now() : null,
+        ]);
+    }
+
+    // ---------------------------------------------------------------------
+    // Manual test notifications (Admin → Air → Test Notifikasi)
+    // ---------------------------------------------------------------------
+
+    /**
      * True when notifications (reminders) are actually sendable right now.
-     *
-     * Email is "configured" only when the active Laravel mailer hands the
-     * message to a real delivery provider (log/array just write locally).
      */
     public function emailConfigured(): bool
     {
@@ -84,11 +205,6 @@ class WaterNotificationService
         return in_array((string) config('mail.default'), self::DELIVERY_MAILERS, true);
     }
 
-    /**
-     * True only when a WhatsApp provider with a real driver is configured.
-     * No driver is implemented yet, so this stays false until one exists —
-     * the panel must never claim WhatsApp is ready when it cannot send.
-     */
     public function whatsappConfigured(): bool
     {
         if (! $this->boolSetting('water.whatsapp_enabled', false)) {
@@ -100,22 +216,11 @@ class WaterNotificationService
         return $provider !== '' && in_array($provider, self::supportedWhatsAppProviders(), true);
     }
 
-    /**
-     * WhatsApp providers for which an actual delivery driver exists.
-     * Currently none — an empty list is the honest state of the project.
-     */
     public static function supportedWhatsAppProviders(): array
     {
         return [];
     }
 
-    /**
-     * Manual "Test Email" from the Admin console. Distinguishes REQUEST ACCEPTED
-     * from MESSAGE ACTUALLY DELIVERED: with MAIL_MAILER=log the message goes to
-     * the local log, not an inbox, so it is reported as FAILED (not delivered).
-     *
-     * @return array{status: string, message: string, mailer?: string}
-     */
     public function sendTestEmail(string $email): array
     {
         $subject = TestNotificationMail::SUBJECT;
@@ -151,13 +256,6 @@ class WaterNotificationService
         return ['status' => $status, 'message' => $message, 'mailer' => $mailer];
     }
 
-    /**
-     * Manual "Test WhatsApp" from the Admin console. This never pretends a
-     * message was delivered: without a real provider+driver it reports FAILED
-     * with a clear reason so the admin knows the channel is not ready.
-     *
-     * @return array{status: string, message: string}
-     */
     public function sendTestWhatsApp(string $number): array
     {
         $subject = '[WATER-TEST] Test WhatsApp Notifikasi - Menteng Kos Private';
@@ -184,9 +282,6 @@ class WaterNotificationService
         return ['status' => $status, 'message' => $error];
     }
 
-    /**
-     * Record a manual test notification (purpose=TEST).
-     */
     protected function logTest(string $channel, string $recipient, string $subject, string $body, string $status, ?string $error): void
     {
         NotificationLog::create([
@@ -216,75 +311,19 @@ class WaterNotificationService
         return mb_substr($message, 0, 300);
     }
 
-    protected function viaEmail(WaterPeriod $period, string $trigger, string $subject, string $body, string $reminderDate): void
-    {
-        if ($this->alreadyLogged($period, $trigger, 'EMAIL', $reminderDate)) {
-            return;
-        }
+    // ---------------------------------------------------------------------
+    // Content builders
+    // ---------------------------------------------------------------------
 
-        $recipients = User::query()
-            ->whereIn('role', ['ADMIN', 'SUPER_ADMIN'])
-            ->whereNotNull('email')
-            ->pluck('email')
-            ->all();
-
-        if (empty($recipients)) {
-            $this->log($period, $trigger, 'EMAIL', $subject, 'Tidak ada email admin yang terdaftar. Pesan TIDAK dikirim.', 'SKIPPED', $reminderDate);
-
-            return;
-        }
-
-        try {
-            Mail::to($recipients)->send(new WaterReminderMail($subject, $body));
-            $this->log($period, $trigger, 'EMAIL', $subject, 'Email terkirim ke: '.implode(', ', $recipients), 'SENT', $reminderDate);
-        } catch (\Throwable $e) {
-            $this->log($period, $trigger, 'EMAIL', $subject, 'Gagal mengirim email: '.$e->getMessage(), 'FAILED', $reminderDate);
-        }
-    }
-
-    protected function alreadyLogged(WaterPeriod $period, string $trigger, string $channel, string $reminderDate): bool
-    {
-        return NotificationLog::query()
-            ->where('period_id', $period->id)
-            ->where('trigger', $trigger)
-            ->where('channel', $channel)
-            ->where('reminder_date', $reminderDate)
-            ->exists();
-    }
-
-    protected function log(WaterPeriod $period, string $trigger, string $channel, string $subject, string $body, string $status, string $reminderDate): void
-    {
-        if ($this->alreadyLogged($period, $trigger, $channel, $reminderDate)) {
-            return;
-        }
-
-        NotificationLog::create([
-            'period_id' => $period->id,
-            'trigger' => $trigger,
-            'channel' => $channel,
-            'recipient' => $channel === 'EMAIL'
-                ? implode(', ', User::query()->whereIn('role', ['ADMIN', 'SUPER_ADMIN'])->whereNotNull('email')->pluck('email')->all())
-                : (string) Setting::get('water.to_admin_whatsapp', env('WATER_ADMIN_WHATSAPP', '081291903483')),
-            'subject' => $subject,
-            'body' => $body,
-            'status' => $status,
-            'error' => $status === 'SENT' ? null : $body,
-            'reminder_date' => $reminderDate,
-        ]);
-    }
-
-    /**
-     * H-4 reminder: meter-end reading is due soon.
-     */
     protected function subject(string $trigger, WaterPeriod $period): string
     {
         $unit = $period->property?->name ?? "Unit #{$period->property_id}";
 
         return match ($trigger) {
-            self::TRIGGER_H4_METER => "[PAM] H-4: Foto meter akhir {$unit}",
-            self::TRIGGER_PAYMENT_DUE => "[PAM] Tagihan air {$unit} jatuh tempo",
-            self::TRIGGER_NEW_PERIOD => "[PAM] Periode baru {$unit} dimulai",
-            default => "[PAM] Notifikasi {$unit}",
+            self::TRIGGER_H4_METER => "Reminder Meter Air — H-4 — {$unit}",
+            self::TRIGGER_PAYMENT_DUE => "Meter Air Jatuh Tempo Hari Ini — {$unit}",
+            self::TRIGGER_NEW_PERIOD => "Update Meter Air Berikutnya — {$unit}",
+            default => "Reminder Meter Air — {$unit}",
         };
     }
 
@@ -295,27 +334,125 @@ class WaterNotificationService
     {
         $unit = $period->property?->name ?? "Unit #{$period->property_id}";
         $tenant = $period->tenant?->name ?? '-';
-
-        $start = $period->meter_start !== null ? number_format((int) $period->meter_start) : '-';
-        $end = $period->meter_end !== null ? number_format((int) $period->meter_end) : 'Belum dicatat';
-        $usage = $period->usage !== null ? number_format((int) $period->usage).' m³' : '-';
-        $due = $period->due_date?->toDateString() ?? '-';
         $amount = $period->total_amount !== null ? 'Rp '.number_format((float) $period->total_amount, 0, ',', '.') : '-';
 
         $header = match ($trigger) {
-            self::TRIGGER_H4_METER => "Meter air unit {$unit} (penghuni: {$tenant}) perlu difoto meter akhirnya sebelum jatuh tempo.",
-            self::TRIGGER_PAYMENT_DUE => "Tagihan air unit {$unit} (penghuni: {$tenant}) sudah jatuh tempo dan belum dibayar.",
-            self::TRIGGER_NEW_PERIOD => "Periode air baru unit {$unit} (penghuni: {$tenant}) sudah dimulai. Meter akhir periode sebelumnya menjadi meter awal periode ini.",
+            self::TRIGGER_H4_METER => "Pencatatan meter air unit {$unit} (penghuni: {$tenant}) akan jatuh tempo dalam ".Setting::get('water.reminder_days', 4).' hari.',
+            self::TRIGGER_PAYMENT_DUE => "Periode meter air unit {$unit} (penghuni: {$tenant}) telah memasuki tanggal jatuh tempo.",
+            self::TRIGGER_NEW_PERIOD => "Pembayaran meter air unit {$unit} (penghuni: {$tenant}) dikonfirmasi. Catat meter akhir untuk periode berikutnya.",
             default => 'Notifikasi meter air.',
         };
 
         return "{$header}\n"
-            . "Meter awal: {$start}\n"
-            . "Meter akhir: {$end}\n"
-            . "Pemakaian: {$usage}\n"
+            . "Periode: {$this->periodLabel($period)}\n"
+            . "Jatuh tempo: {$period->due_date?->toDateString()}\n"
+            . "Meter awal: {$this->fmt($period->meter_start)}\n"
+            . "Meter akhir: {$this->fmt($period->meter_end)}\n"
+            . "Pemakaian: ".(($period->usage !== null) ? number_format((int) $period->usage).' m³' : '-')."\n"
             . "Wajib bayar: {$amount}\n"
-            . "Jatuh tempo: {$due}\n"
-            . "Silakan cek /admin/water.";
+            . 'Silakan cek /admin/water.';
+    }
+
+    /**
+     * Data for the professional HTML Blade template (mails/water/reminder).
+     *
+     * @return array<string, mixed>
+     */
+    protected function viewData(string $trigger, WaterPeriod $period): array
+    {
+        $unit = $period->property?->name ?? "Unit #{$period->property_id}";
+        $tenant = $period->tenant?->name ?? '-';
+        $dueDateParts = $period->due_date
+            ? $period->due_date->format('d').' '.self::MONTHS_ID[(int) $period->due_date->format('n')].' '.$period->due_date->format('Y')
+            : '-';
+
+        $data = [
+            'unit' => $unit,
+            'tenant' => $tenant,
+            'period' => $this->periodLabel($period),
+            'due_date' => $dueDateParts,
+            'meter_start' => $this->fmt($period->meter_start).' m³',
+            'meter_end' => $period->meter_end !== null ? $this->fmt($period->meter_end).' m³' : 'Belum tercatat',
+            'usage' => $period->usage !== null ? number_format((int) $period->usage).' m³' : '-',
+            'amount' => $period->total_amount !== null ? 'Rp '.number_format((float) $period->total_amount, 0, ',', '.') : '-',
+            'header_tagline' => 'Sistem Meter Air',
+            'action_label' => 'Update Meter Air',
+            'action_url' => route('admin.water.show', ['property' => $period->property_id]),
+        ];
+
+        if ($trigger === self::TRIGGER_H4_METER) {
+            $days = Setting::get('water.reminder_days', 4);
+
+            return array_merge($data, [
+                'title' => 'Reminder Meter Air',
+                'intro' => "Halo Admin, ini adalah pengingat bahwa pencatatan meter air untuk unit berikut akan memasuki jatuh tempo dalam {$days} hari.",
+                'rows' => [
+                    ['Unit', e($unit)],
+                    ['Tenant', e($tenant)],
+                    ['Periode', e($data['period'])],
+                    ['Jatuh Tempo', e($data['due_date'])],
+                    ['Meter Awal', e($data['meter_start'])],
+                ],
+                'status_badge' => 'Menunggu Update Meter',
+                'status_color' => '#B45309',
+                'actions_title' => 'Tindakan yang diperlukan',
+                'actions' => ['Update meter air.', 'Foto meter air terbaru.', 'Simpan hasil pembacaan meter.'],
+                'note' => 'Periode yang belum di-update tetap berjalan. Data penghuni dan unit tidak berubah.',
+            ]);
+        }
+
+        if ($trigger === self::TRIGGER_PAYMENT_DUE) {
+            return array_merge($data, [
+                'title' => 'Meter Air Jatuh Tempo Hari Ini',
+                'intro' => 'Halo Admin, periode meter air berikut telah memasuki tanggal jatuh tempo.',
+                'rows' => [
+                    ['Unit', e($unit)],
+                    ['Tenant', e($tenant)],
+                    ['Periode', e($data['period'])],
+                    ['Jatuh Tempo', e($data['due_date'])],
+                    ['Meter Awal', e($data['meter_start'])],
+                    ['Meter Akhir', e($data['meter_end'])],
+                ],
+                'status_badge' => 'Menunggu Update / Pembayaran',
+                'status_color' => '#B91C1C',
+                'actions_title' => 'Tindakan yang diperlukan',
+                'actions' => ['Mohon lakukan update meter air.', 'Unggah foto meter air terbaru.', 'Setelah tagihan tersedia, konfirmasi pembayaran.'],
+                'note' => 'Periode yang melewati jatuh tempo tetap harus dicatat pada kesempatan pertama. Data penghuni dan unit tidak berubah.',
+            ]);
+        }
+
+        // WATER_NEW_PERIOD — next METER_DUE period after the payment was confirmed
+        return array_merge($data, [
+            'title' => 'Update Meter Air Berikutnya',
+            'intro' => 'Halo Admin, pembayaran meter air telah dikonfirmasi. Silakan lakukan pencatatan meter akhir untuk melanjutkan periode berikutnya.',
+            'rows' => [
+                ['Unit', e($unit)],
+                ['Tenant', e($tenant)],
+                ['Periode', e($data['period'])],
+                ['Jatuh Tempo', e($data['due_date'])],
+                ['Meter Awal', e($data['meter_start'])],
+                ['Meter Akhir', e($data['meter_end'])],
+                ['Status Pembayaran', 'PAID'],
+                ['Status Meter', 'Menunggu Update Meter'],
+            ],
+            'status_badge' => 'Menunggu Update Meter',
+            'status_color' => '#1E6F50',
+            'actions_title' => 'Tindakan yang diperlukan',
+            'actions' => ['Buka unit ini pada halaman Meter Air.', 'Catat pembacaan meter akhir.', 'Upload foto meter terbaru.'],
+            'note' => 'Meter akhir periode sebelumnya otomatis menjadi meter awal periode ini — tidak perlu dimasukkan ulang.',
+        ]);
+    }
+
+    protected function periodLabel(WaterPeriod $period): string
+    {
+        $month = self::MONTHS_ID[(int) $period->period_month] ?? $period->period_month;
+
+        return "{$month} {$period->period_year}";
+    }
+
+    protected function fmt(int|float|null $value): string
+    {
+        return $value === null ? '-' : number_format((int) $value);
     }
 
     protected function boolSetting(string $key, bool $default): bool

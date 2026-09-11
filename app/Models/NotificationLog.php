@@ -12,6 +12,11 @@ class NotificationLog extends Model
     public const TRIGGER_NEW_PERIOD = 'WATER_NEW_PERIOD';
     public const TRIGGER_TEST = 'WATER_TEST';
 
+    protected $casts = [
+        'reminder_date' => 'date',
+        'sent_at' => 'datetime',
+    ];
+
     public function period(): BelongsTo
     {
         return $this->belongsTo(WaterPeriod::class, 'period_id');

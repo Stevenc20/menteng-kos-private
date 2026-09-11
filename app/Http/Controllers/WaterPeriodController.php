@@ -283,12 +283,14 @@ class WaterPeriodController extends Controller
     {
         $validated = $request->validate([
             'to_admin_whatsapp' => 'required|string|max:30',
+            'to_admin_email' => 'nullable|email|max:190',
             'rate_per_m3' => 'required|numeric|min:0',
             'reminder_days' => 'required|integer|min:1|max:30',
             'whatsapp_provider' => 'nullable|string|max:100',
         ]);
 
         Setting::set('water.to_admin_whatsapp', $validated['to_admin_whatsapp']);
+        Setting::set('water.to_admin_email', $validated['to_admin_email'] ?? '');
         Setting::set('water.rate_per_m3', $validated['rate_per_m3']);
         Setting::set('water.reminder_days', $validated['reminder_days']);
         Setting::set('water.email_enabled', $request->boolean('email_enabled') ? '1' : '0');
@@ -374,6 +376,25 @@ class WaterPeriodController extends Controller
             'mail_mailer' => (string) config('mail.default'),
             'email_configured' => $this->notificationService->emailConfigured(),
             'whatsapp_configured' => $this->notificationService->whatsappConfigured(),
+            'to_admin_email' => (string) Setting::get('water.to_admin_email', (string) env('WATER_ADMIN_EMAIL', '')),
+            'email_reminder_active' => $this->notificationService->emailConfigured(),
+            'scheduler_active' => (bool) config('water.scheduler_enabled'),
+            'last_reminder' => $this->lastReminder(),
         ];
+    }
+
+    /**
+     * When the last automatic reminder was delivered/attempted.
+     */
+    protected function lastReminder(): ?string
+    {
+        $log = NotificationLog::query()
+            ->where('purpose', 'REMINDER')
+            ->orderByDesc('sent_at')
+            ->orderByDesc('created_at')
+            ->first();
+
+        return $log?->sent_at?->toDateTimeString()
+            ?? $log?->created_at?->toDateTimeString();
     }
 }

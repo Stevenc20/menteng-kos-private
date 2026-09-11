@@ -296,7 +296,7 @@ test('H-4 scheduler sends one email and logs an honest WhatsApp SKIPPED', functi
         'due_date' => today()->addDays((int) Setting::get('water.reminder_days', 4))->toDateString(),
     ]);
 
-    $this->artisan('water:daily-process')->assertSuccessful();
+    $this->artisan('water:send-reminders')->assertSuccessful();
 
     Mail::assertSent(WaterReminderMail::class, 1);
 
@@ -308,7 +308,7 @@ test('H-4 scheduler sends one email and logs an honest WhatsApp SKIPPED', functi
     expect($wa->error)->toContain('belum dikonfigurasi');
 
     // Dedupe: running the command again does not send duplicates on the same day.
-    $this->artisan('water:daily-process')->assertSuccessful();
+    $this->artisan('water:send-reminders')->assertSuccessful();
     expect(NotificationLog::where('period_id', $period->id)->count())->toBe(2); // 1 EMAIL + 1 WHATSAPP
 });
 
@@ -333,7 +333,7 @@ test('payment due reminder fires when a billed period is due', function () {
         'due_date' => today()->toDateString(),
     ]);
 
-    $this->artisan('water:daily-process')->assertSuccessful();
+    $this->artisan('water:send-reminders')->assertSuccessful();
 
     expect(NotificationLog::where('period_id', $period->id)->where('trigger', 'WATER_PAYMENT_DUE')->where('channel', 'EMAIL')->where('status', 'SENT')->count())->toBe(1);
     expect(NotificationLog::where('period_id', $period->id)->where('trigger', 'WATER_PAYMENT_DUE')->where('channel', 'WHATSAPP')->where('status', 'SKIPPED')->count())->toBe(1);

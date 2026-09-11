@@ -53,6 +53,7 @@ interface PropertyRow {
 
 interface WaterSettings {
     to_admin_whatsapp: string;
+    to_admin_email: string;
     rate_per_m3: number;
     reminder_days: number;
     email_enabled: boolean;
@@ -61,6 +62,9 @@ interface WaterSettings {
     mail_mailer: string;
     email_configured: boolean;
     whatsapp_configured: boolean;
+    email_reminder_active: boolean;
+    scheduler_active: boolean;
+    last_reminder: string | null;
 }
 
 interface LogEntry {
@@ -142,6 +146,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
     const settingsForm = useForm({
         to_admin_whatsapp: settings.to_admin_whatsapp,
+        to_admin_email: settings.to_admin_email,
         rate_per_m3: String(settings.rate_per_m3),
         reminder_days: String(settings.reminder_days),
         email_enabled: settings.email_enabled,
@@ -379,6 +384,33 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                         }`}>
                             {settings.whatsapp_configured ? 'Configured' : 'Not Configured'}
                         </span>
+                    </div>
+                </div>
+
+                <div className="mt-5 border-t border-[#F1F0EC] pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">Email Reminder</p>
+                        <p className={`mt-1 text-[14px] font-semibold ${settings.email_reminder_active ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            {settings.email_reminder_active ? '● Active' : '● Email delivery belum dikonfigurasi.'}
+                        </p>
+                        <p className="mt-0.5 text-[12px] text-[#6B6B67]">Kirim via mailer {settings.mail_mailer}</p>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">Recipient</p>
+                        <p className="mt-1 text-[14px] font-semibold text-[#1A1A18] break-all">{settings.to_admin_email || 'Semua email Admin terdaftar'}</p>
+                        <p className="mt-0.5 text-[12px] text-[#6B6B67]">Set WATER_ADMIN_EMAIL atau atur di Pengaturan</p>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">Scheduler</p>
+                        <p className={`mt-1 text-[14px] font-semibold ${settings.scheduler_active ? 'text-emerald-700' : 'text-gray-500'}`}>
+                            {settings.scheduler_active ? '● Active' : '○ Inactive'}
+                        </p>
+                        <p className="mt-0.5 text-[12px] text-[#6B6B67]">Jalan sekali sehari (00:06)</p>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">Last Reminder</p>
+                        <p className="mt-1 text-[14px] font-semibold text-[#1A1A18]">{settings.last_reminder ?? '-'}</p>
+                        <p className="mt-0.5 text-[12px] text-[#6B6B67]">Log pengingat otomatis terakhir</p>
                     </div>
                 </div>
             </div>
@@ -637,6 +669,18 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                             onChange={(e) => settingsForm.setData('to_admin_whatsapp', e.target.value)}
                         />
                         <FormError>{settingsForm.errors.to_admin_whatsapp}</FormError>
+
+                        <div className="mt-4">
+                            <FormLabel htmlFor="admin_email">Email Admin Penerima (opsional)</FormLabel>
+                            <TextInput
+                                id="admin_email"
+                                type="email"
+                                placeholder="cth: admin@mentengkos.id"
+                                value={settingsForm.data.to_admin_email}
+                                onChange={(e) => settingsForm.setData('to_admin_email', e.target.value)}
+                            />
+                            <FormHelper>Kosongkan agar memakai semua email user Admin terdaftar, atau set WATER_ADMIN_EMAIL.</FormHelper>
+                        </div>
 
                         <FormSection title="Tarif & Pengingat" />
                         <FormLabel htmlFor="rate">Tarif Air per m³ (Rp)</FormLabel>

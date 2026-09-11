@@ -182,11 +182,15 @@ test('TEST 7+8: existing tenants and units are untouched by test notifications',
 // TEST 9 — tidak ada scheduler reminder production yang aktif
 // ---------------------------------------------------------------------------
 
-test('TEST 9: no production water reminder scheduler is active', function () {
+test('TEST 9: scheduler is registered but only runs while explicitly enabled', function () {
     $content = file_get_contents(base_path('routes/console.php'));
 
+    expect($content)->toContain('water:send-reminders');
+    expect($content)->toContain('config(\'water.scheduler_enabled\')');
     expect($content)->not->toContain('water:daily-process');
-    expect($content)->toContain('intentionally NOT scheduled');
+
+    config()->set('water.scheduler_enabled', false);
+    expect(config('water.scheduler_enabled'))->toBeFalse();
 });
 
 test('non-admin cannot trigger test notifications', function () {

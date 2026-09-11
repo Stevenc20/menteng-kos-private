@@ -10,7 +10,9 @@ Artisan::command('inspire', function () {
 
 Schedule::command('tenancy:daily-process')->dailyAt('00:01');
 
-// NOTE: the automatic water reminders (H-4 meter akhir & tagihan jatuh tempo)
-// are intentionally NOT scheduled yet. Manual Test Notification on /admin/water
-// must be confirmed first (TEST EMAIL really reaches an inbox, TEST WHATSAPP
-// reaches the admin number) before the automatic reminders are enabled.
+// Automatic water meter email reminders (H-4, due today, next period).
+// Runs once a day, only when the schedule is enabled. Safe to keep OFF until
+// SMTP delivery has been proven via Admin → Air → Test Notifikasi → Test Email.
+if (config('water.scheduler_enabled')) {
+    Schedule::command('water:send-reminders')->dailyAt('00:06');
+}
