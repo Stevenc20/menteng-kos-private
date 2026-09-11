@@ -24,22 +24,24 @@ class AuthController extends Controller
     {
         try {
             $googleUser = Socialite::driver('google')->user();
-            
+
             // Peraturan Bisnis: Hanya tenant yang sudah diundang (email terdaftar) yang bisa login.
             $user = User::where('email', $googleUser->getEmail())->first();
 
-            if (!$user) {
+            if (! $user || $user->deleted_at !== null || $user->status !== User::STATUS_ACTIVE) {
                 // Return access denied / error page via Inertia
                 return redirect('/login')->with('error', 'Your account has not been registered by the administrator.');
             }
 
             // Update google_id and mark email as verified if not already
-            if (!$user->google_id) {
+            if (! $user->google_id) {
                 $user->update([
                     'google_id' => $googleUser->getId(),
                     'email_verified_at' => now(),
                 ]);
             }
+
+            $user->forceFill(['last_login_at' => now()])->save();
 
             // Login user
             Auth::login($user);

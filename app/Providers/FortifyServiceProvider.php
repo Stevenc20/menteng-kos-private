@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -39,6 +41,26 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureActions(): void
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
+
+        // Identity check for the email/password login. Keeps the existing
+        // mechanism intact while adding two guarantees:
+        //  - suspended (SUSPENDED) or soft-deleted accounts can never authenticate;
+        //  - every successful login records the last_login_at timestamp.
+        Fortify::authenticateUsing(function (Request $request) {
+            $user = User::where(Fortify::username(), $request->input(Fortify::username()))->first();
+
+            if ($user
+                && $user->deleted_at === null
+                && $user->status === User::STATUS_ACTIVE
+                && Hash::check((string) $request->input('password'), $user->password)
+            ) {
+                $user->forceFill(['last_login_at' => now()])->save();
+
+                return $user;
+            }
+
+            return null;
+        });
     }
 
     /**

@@ -109,6 +109,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/move-out/{tenancyId}', [\App\Http\Controllers\MoveOutController::class, 'show'])->name('admin.moveOut.show');
     Route::post('/move-out/{tenancyId}/doc', [\App\Http\Controllers\MoveOutController::class, 'storeDocumentation'])->name('admin.moveOut.storeDoc');
     Route::post('/move-out/{tenancyId}/finalize', [\App\Http\Controllers\MoveOutController::class, 'finalize'])->name('admin.moveOut.finalize');
+    
+    // Admin Users Management
+    Route::get('/users', [\App\Http\Controllers\AdminUserController::class, 'index'])->name('admin.users');
+    Route::post('/users', [\App\Http\Controllers\AdminUserController::class, 'store'])->name('admin.users.store');
+    Route::put('/users/{user}', [\App\Http\Controllers\AdminUserController::class, 'update'])->name('admin.users.update');
+    Route::delete('/users/{user}', [\App\Http\Controllers\AdminUserController::class, 'destroy'])->name('admin.users.destroy');
 });
 
 // Tenant Routes
