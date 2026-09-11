@@ -6,11 +6,14 @@ use App\Models\NotificationLog;
 use App\Models\Property;
 use App\Models\Setting;
 use App\Models\Tenancy;
+use App\Models\TenantProfile;
 use App\Models\WaterPeriod;
 use App\Services\WaterNotificationService;
 use App\Services\WaterPeriodService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -19,8 +22,7 @@ class WaterPeriodController extends Controller
     public function __construct(
         protected WaterPeriodService $periodService,
         protected WaterNotificationService $notificationService,
-    ) {
-    }
+    ) {}
 
     /**
      * [ADMIN] Water (Air) monitoring page: every unit + its current period.
@@ -157,7 +159,7 @@ class WaterPeriodController extends Controller
                 ? [
                     'id' => $tenancy->user_id,
                     'name' => $tenancy->user->name,
-                    'whatsapp' => \App\Models\TenantProfile::where('user_id', $tenancy->user_id)->value('whatsapp'),
+                    'whatsapp' => TenantProfile::where('user_id', $tenancy->user_id)->value('whatsapp'),
                 ]
                 : null,
             'periods' => $periods->map(fn (WaterPeriod $period) => $this->periodPayload($period)),
@@ -182,7 +184,7 @@ class WaterPeriodController extends Controller
             'note' => 'nullable|string|max:255',
         ]);
 
-        $photoPath = $request->file('photo')->store("water_periods/{$property->id}", 'local');
+        $photoPath = $this->storeMeterPhoto($request->file('photo'), $property->id);
 
         try {
             $period = $this->periodService->startPeriod($property, (int) $validated['meter_start'], $photoPath, $validated['note'] ?? null);
@@ -213,7 +215,7 @@ class WaterPeriodController extends Controller
             'photo' => 'required|image|max:5120',
         ]);
 
-        $photoPath = $request->file('photo')->store("water_periods/{$period->property_id}", 'local');
+        $photoPath = $this->storeMeterPhoto($request->file('photo'), $period->property_id);
 
         try {
             $this->periodService->recordEnd($period, (int) $validated['meter_end'], $photoPath);
@@ -258,6 +260,26 @@ class WaterPeriodController extends Controller
         ]);
 
         return redirect()->back();
+    }
+
+    /**
+     * Store a meter photo, surfacing silent storage failures as validation errors.
+     */
+    private function storeMeterPhoto(UploadedFile $photo, int $propertyId): string
+    {
+        Storage::disk('local')->makeDirectory("water_periods/{$propertyId}");
+
+        $path = $photo->storeAs(
+            "water_periods/{$propertyId}",
+            Str::uuid().'.'.$photo->getClientOriginalExtension(),
+            'local'
+        );
+
+        if (! $path) {
+            throw ValidationException::withMessages(['photo' => 'Gagal menyimpan foto meter. Periksa izin folder storage dan kapasitas disk.']);
+        }
+
+        return $path;
     }
 
     /**
