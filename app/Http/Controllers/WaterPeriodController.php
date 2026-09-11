@@ -184,12 +184,22 @@ class WaterPeriodController extends Controller
             'note' => 'nullable|string|max:255',
         ]);
 
-        $photoPath = $this->storeMeterPhoto($request->file('photo'), $property->id);
+        $photoPath = null;
 
         try {
+            $photoPath = $this->storeMeterPhoto($request->file('photo'), $property->id);
+
             $period = $this->periodService->startPeriod($property, (int) $validated['meter_start'], $photoPath, $validated['note'] ?? null);
+        } catch (ValidationException $e) {
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
+
+            throw $e;
         } catch (\Throwable $e) {
-            Storage::disk('local')->delete($photoPath);
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
 
             return redirect()->back()->withErrors(['meter_start' => $e->getMessage()]);
         }
@@ -215,16 +225,22 @@ class WaterPeriodController extends Controller
             'photo' => 'required|image|max:5120',
         ]);
 
-        $photoPath = $this->storeMeterPhoto($request->file('photo'), $period->property_id);
+        $photoPath = null;
 
         try {
+            $photoPath = $this->storeMeterPhoto($request->file('photo'), $period->property_id);
+
             $this->periodService->recordEnd($period, (int) $validated['meter_end'], $photoPath);
         } catch (ValidationException $e) {
-            Storage::disk('local')->delete($photoPath);
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
 
             return redirect()->back()->withErrors($e->errors());
         } catch (\Throwable $e) {
-            Storage::disk('local')->delete($photoPath);
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
 
             return redirect()->back()->withErrors(['meter_end' => $e->getMessage()]);
         }
@@ -265,15 +281,23 @@ class WaterPeriodController extends Controller
     /**
      * Store a meter photo, surfacing silent storage failures as validation errors.
      */
-    private function storeMeterPhoto(UploadedFile $photo, int $propertyId): string
+    private function storeMeterPhoto(?UploadedFile $photo, int $propertyId): string
     {
-        Storage::disk('local')->makeDirectory("water_periods/{$propertyId}");
+        if (! $photo) {
+            throw ValidationException::withMessages(['photo' => 'Foto meter tidak terkirim. Coba pilih ulang foto.']);
+        }
 
-        $path = $photo->storeAs(
-            "water_periods/{$propertyId}",
-            Str::uuid().'.'.$photo->getClientOriginalExtension(),
-            'local'
-        );
+        try {
+            Storage::disk('local')->makeDirectory("water_periods/{$propertyId}");
+
+            $path = $photo->storeAs(
+                "water_periods/{$propertyId}",
+                Str::uuid().'.'.$photo->getClientOriginalExtension(),
+                'local'
+            );
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages(['photo' => 'Gagal menyimpan foto meter: '.$e->getMessage()]);
+        }
 
         if (! $path) {
             throw ValidationException::withMessages(['photo' => 'Gagal menyimpan foto meter. Periksa izin folder storage dan kapasitas disk.']);
