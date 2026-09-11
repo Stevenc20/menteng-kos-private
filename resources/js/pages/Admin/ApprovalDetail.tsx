@@ -13,6 +13,7 @@ interface ApprovalDetailProps {
     signatures: any[];
     approvedBy: any;
     moveInDoc: any;
+    moveOutDoc: any;
     waterMeter: any;
     effectiveMoveInDate?: string | null;
     moveInDateIsStale?: boolean;
@@ -43,7 +44,7 @@ const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { 
 
 const formatDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
-export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayNumber, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
+export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, moveOutDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayNumber, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
     const isPending = tenancy.status === 'PENDING_ADMIN_APPROVAL' && tenancy.approval_status !== 'REJECTED';
     const isRejected = tenancy.approval_status === 'REJECTED';
     const isApproved = tenancy.status === 'ACTIVE';
