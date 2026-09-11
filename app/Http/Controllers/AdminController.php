@@ -12,6 +12,7 @@ use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\User;
 use App\Models\WaterMeter;
+use App\Services\AgreementStatementService;
 use App\Services\DueDateService;
 use App\Services\ImageWatermarkService;
 use Carbon\Carbon;
@@ -398,6 +399,16 @@ class AdminController extends Controller
         $waterMeter = WaterMeter::where('tenancy_id', $tenancy->id)->first();
         $approvedBy = $tenancy->approved_by ? User::find($tenancy->approved_by) : null;
 
+        // Serve the signed statement with the CURRENT BEFORE photos injected
+        // into the "Dokumentasi kios saat diserahkan" section (the stored
+        // snapshot in `document_html` itself stays untouched).
+        if ($agreement && filled($agreement->document_html)) {
+            $agreement->document_html = AgreementStatementService::injectDocumentationPhotos(
+                $agreement->document_html,
+                $moveInDoc
+            );
+        }
+
         // Single source of truth for tenancy dates (see DueDateService).
         $effectiveMoveIn = DueDateService::effectiveMoveInDate($tenancy);
         $displayMoveIn = $effectiveMoveIn?->toDateString() ?? $tenancy->move_in_date;
@@ -437,22 +448,22 @@ class AdminController extends Controller
             ?? new TenantProfile(['user_id' => $tenancy->user_id]);
 
         $validated = $request->validate([
-            'whatsapp'          => 'nullable|string',
-            'move_in_date'      => 'nullable|date',
-            'due_day'           => 'nullable|integer|min:0|max:31',
-            'ktp_1_name'        => 'nullable|string',
-            'ktp_1_nik'         => 'nullable|string',
+            'whatsapp' => 'nullable|string',
+            'move_in_date' => 'nullable|date',
+            'due_day' => 'nullable|integer|min:0|max:31',
+            'ktp_1_name' => 'nullable|string',
+            'ktp_1_nik' => 'nullable|string',
             'ktp_1_birth_place' => 'nullable|string',
-            'ktp_1_birth_date'  => 'nullable|date',
-            'ktp_1_job'         => 'nullable|string',
-            'ktp_1_address'     => 'nullable|string',
+            'ktp_1_birth_date' => 'nullable|date',
+            'ktp_1_job' => 'nullable|string',
+            'ktp_1_address' => 'nullable|string',
             'has_second_occupant' => 'nullable|boolean',
-            'ktp_2_name'        => 'nullable|string',
-            'ktp_2_nik'         => 'nullable|string',
+            'ktp_2_name' => 'nullable|string',
+            'ktp_2_nik' => 'nullable|string',
             'ktp_2_birth_place' => 'nullable|string',
-            'ktp_2_birth_date'  => 'nullable|date',
-            'ktp_2_job'         => 'nullable|string',
-            'ktp_2_address'     => 'nullable|string',
+            'ktp_2_birth_date' => 'nullable|date',
+            'ktp_2_job' => 'nullable|string',
+            'ktp_2_address' => 'nullable|string',
         ]);
 
         if (array_key_exists('move_in_date', $validated)) {
@@ -468,9 +479,9 @@ class AdminController extends Controller
         $profileData = $validated;
         unset($profileData['has_second_occupant'], $profileData['move_in_date'], $profileData['due_day']);
 
-        if (isset($validated['has_second_occupant']) && !$validated['has_second_occupant']) {
+        if (isset($validated['has_second_occupant']) && ! $validated['has_second_occupant']) {
             foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address', 'photo'] as $field) {
-                $profileData['ktp_2_' . $field] = null;
+                $profileData['ktp_2_'.$field] = null;
             }
         }
 
@@ -490,7 +501,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'agreed_price' => 'nullable|numeric|min:0',
             'move_in_date' => 'nullable|date',
-            'due_day'      => 'nullable|integer|min:0|max:31',
+            'due_day' => 'nullable|integer|min:0|max:31',
         ]);
 
         $data = array_filter($validated, fn ($v) => $v !== null && $v !== '');
@@ -551,7 +562,7 @@ class AdminController extends Controller
         ]);
 
         $tenancy = Tenancy::findOrFail($id);
-        
+
         $agreement = Agreement::firstOrCreate(
             ['tenancy_id' => $tenancy->id],
             ['status' => 'DRAFT']
@@ -561,7 +572,7 @@ class AdminController extends Controller
             if ($agreement->uploaded_document_path && Storage::disk('local')->exists($agreement->uploaded_document_path)) {
                 Storage::disk('local')->delete($agreement->uploaded_document_path);
             }
-            
+
             $path = $request->file('document')->store('agreements_scans', 'local');
             $agreement->uploaded_document_path = $path;
             $agreement->uploaded_document_type = $request->file('document')->getClientMimeType();
@@ -576,7 +587,7 @@ class AdminController extends Controller
         $tenancy = Tenancy::findOrFail($id);
         $agreement = Agreement::where('tenancy_id', $tenancy->id)->firstOrFail();
 
-        if (!$agreement->uploaded_document_path || !Storage::disk('local')->exists($agreement->uploaded_document_path)) {
+        if (! $agreement->uploaded_document_path || ! Storage::disk('local')->exists($agreement->uploaded_document_path)) {
             abort(404);
         }
 
@@ -588,67 +599,123 @@ class AdminController extends Controller
         $request->validate([
             'type' => 'required|in:MOVE_IN,MOVE_OUT',
             'photos.*' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:10240',
-            'property_media_id' => 'nullable|integer|exists:property_media,id'
+            'source' => 'nullable|in:UPLOAD,CAMERA',
+            'property_media_ids' => 'nullable|array',
+            'property_media_ids.*' => 'integer|exists:property_media,id',
+            // Backward compatibility: the previously deployed frontend sends a
+            // single property_media_id instead of an array.
+            'property_media_id' => 'nullable|integer|exists:property_media,id',
         ]);
 
         $tenancy = Tenancy::findOrFail($id);
-        
-        $doc = RoomDocumentation::firstOrCreate(
-            [
-                'tenancy_id' => $tenancy->id,
-                'documentation_type' => $request->type
-            ],
-            [
-                'property_id' => $tenancy->property_id,
-                'documentation_date' => now(),
-                'created_by' => \Illuminate\Support\Facades\Auth::id()
-            ]
-        );
 
-        // Upload photos from device
+        $doc = RoomDocumentation::where('tenancy_id', $tenancy->id)
+            ->where('documentation_type', $request->type)
+            ->first();
+
+        // Upload/camera photos from device -> snapshot stored on the public
+        // disk; source recorded as UPLOAD or CAMERA for the UI.
         if ($request->hasFile('photos')) {
+            $doc ??= $this->createRoomDocumentation($tenancy, $request->type);
+            $source = $request->input('source', 'UPLOAD');
             foreach ($request->file('photos') as $file) {
                 $path = $file->store('room_documentations', 'public');
                 RoomDocumentationMedia::create([
                     'documentation_id' => $doc->id,
                     'file_type' => 'IMAGE',
+                    'source' => $source,
                     'file_path' => $path,
                     'original_name' => $file->getClientOriginalName(),
                     'file_size' => $file->getSize(),
-                    'mime_type' => $file->getClientMimeType()
+                    'mime_type' => $file->getClientMimeType(),
                 ]);
             }
         }
 
-        // Copy from property media for historical snapshot
-        if ($request->filled('property_media_id')) {
-            $propMedia = PropertyMedia::findOrFail($request->property_media_id);
-            if (Storage::disk('public')->exists($propMedia->original_path)) {
-                $newPath = 'room_documentations/' . \Illuminate\Support\Str::random(40) . '.' . pathinfo($propMedia->original_path, PATHINFO_EXTENSION);
-                Storage::disk('public')->copy($propMedia->original_path, $newPath);
-                
-                RoomDocumentationMedia::create([
-                    'documentation_id' => $doc->id,
-                    'file_type' => 'IMAGE',
-                    'file_path' => $newPath,
-                    'original_name' => 'Copied from Property: ' . basename($propMedia->original_path),
-                    'file_size' => Storage::disk('public')->size($propMedia->original_path),
-                    'mime_type' => Storage::disk('public')->mimeType($propMedia->original_path)
-                ]);
+        // Multi-select from property media -> copy each photo as an isolated
+        // snapshot (property originals stay untouched) and link it back via
+        // property_media_id so the UI can mark already-selected photos.
+        $propertyMediaIds = array_merge(
+            $request->input('property_media_ids', []),
+            $request->filled('property_media_id') ? [$request->input('property_media_id')] : []
+        );
+        $propertyMediaIds = array_values(array_unique(array_filter($propertyMediaIds)));
+
+        if (! empty($propertyMediaIds)) {
+            // Only allow photos that truly belong to this property/unit.
+            $owned = PropertyMedia::where('property_id', $tenancy->property_id)
+                ->whereIn('id', $propertyMediaIds)
+                ->get();
+
+            // Skip photos already added to this tenant's BEFORE documentation,
+            // so re-opening the modal never creates duplicates.
+            $existingIds = RoomDocumentationMedia::whereHas('documentation', function ($q) use ($tenancy) {
+                $q->where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN');
+            })
+                ->whereNotNull('property_media_id')
+                ->pluck('property_media_id')
+                ->all();
+
+            $toAdd = $owned->reject(fn ($propMedia) => in_array($propMedia->id, $existingIds, true));
+
+            if ($toAdd->isNotEmpty()) {
+                $doc ??= $this->createRoomDocumentation($tenancy, $request->type);
+
+                foreach ($toAdd as $propMedia) {
+                    // The public (watermarked/optimized) version is the one users
+                    // actually see; original private files are never touched.
+                    $publicFile = ltrim(
+                        str_replace([config('app.url').'/storage', '/storage/'], '', (string) $propMedia->public_path),
+                        '/'
+                    );
+                    $sourceFile = $publicFile !== '' && Storage::disk('public')->exists($publicFile)
+                        ? $publicFile
+                        : null;
+
+                    if ($sourceFile === null) {
+                        continue;
+                    }
+
+                    $ext = pathinfo($sourceFile, PATHINFO_EXTENSION) ?: 'jpg';
+                    $newPath = 'room_documentations/'.Str::random(40).'.'.$ext;
+                    Storage::disk('public')->copy($sourceFile, $newPath);
+
+                    RoomDocumentationMedia::create([
+                        'documentation_id' => $doc->id,
+                        'file_type' => 'IMAGE',
+                        'source' => 'PROPERTY',
+                        'property_media_id' => $propMedia->id,
+                        'file_path' => $newPath,
+                        'original_name' => 'Dari Properti: '.basename($sourceFile),
+                        'file_size' => Storage::disk('public')->size($newPath),
+                        'mime_type' => Storage::disk('public')->mimeType($newPath) ?: 'image/jpeg',
+                    ]);
+                }
             }
         }
 
         return back()->with('success', 'Dokumentasi kondisi unit berhasil ditambahkan.');
     }
 
+    private function createRoomDocumentation(Tenancy $tenancy, string $type): RoomDocumentation
+    {
+        return RoomDocumentation::create([
+            'property_id' => $tenancy->property_id,
+            'tenancy_id' => $tenancy->id,
+            'documentation_type' => $type,
+            'documentation_date' => now(),
+            'created_by' => \Illuminate\Support\Facades\Auth::id(),
+        ]);
+    }
+
     public function deleteDocumentationMedia($mediaId)
     {
         $media = RoomDocumentationMedia::findOrFail($mediaId);
-        
+
         if (Storage::disk('public')->exists($media->file_path)) {
             Storage::disk('public')->delete($media->file_path);
         }
-        
+
         $media->delete();
 
         return back()->with('success', 'Foto dokumentasi berhasil dihapus.');
