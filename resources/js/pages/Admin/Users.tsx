@@ -384,7 +384,7 @@ export default function AdminUsers({ users, counts }: UsersProps) {
                             <div>
                                 <FormLabel htmlFor="add-password">Password</FormLabel>
                                 <TextInput id="add-password" type="password" value={addForm.data.password} onChange={(e) => addForm.setData('password', e.target.value)} placeholder="Password baru" />
-                                <FormHelper>Minimal sesuai standar keamanan aplikasi.</FormHelper>
+                                <FormHelper>Kosongkan jika akun hanya login via Google.</FormHelper>
                                 <FormError>{addForm.errors.password}</FormError>
                             </div>
                             <div>
@@ -452,7 +452,7 @@ export default function AdminUsers({ users, counts }: UsersProps) {
                             <div>
                                 <FormLabel htmlFor="edit-password">Password Baru</FormLabel>
                                 <TextInput id="edit-password" type="password" value={editForm.data.password} onChange={(e) => editForm.setData('password', e.target.value)} placeholder="Kosongkan jika tidak diganti" />
-                                <FormHelper>Biarkan kosong jika password tidak diubah.</FormHelper>
+                                <FormHelper>Kosongkan jika login via Google / tidak diubah.</FormHelper>
                                 <FormError>{editForm.errors.password}</FormError>
                             </div>
                             <div>

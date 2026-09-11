@@ -46,7 +46,7 @@ class AdminUserController extends Controller
         $data = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
-            'password' => ['required', 'string', Password::default(), 'confirmed'],
+            'password' => ['nullable', 'string', Password::default(), 'confirmed'],
             'is_super_admin' => ['required', 'boolean'],
             'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_SUSPENDED])],
         ])->validate();
@@ -54,9 +54,9 @@ class AdminUserController extends Controller
         User::create([
             'name' => $data['name'],
             'email' => $data['email'],
-            'password' => $data['password'],
+            'password' => $data['password'] ?: null,
             'role' => User::ROLE_ADMIN,
-            'is_super_admin' => $data['is_super_admin'],
+            'is_super_admin' => filter_var($data['is_super_admin'], FILTER_VALIDATE_BOOLEAN),
             'status' => $data['status'],
             'email_verified_at' => now(),
         ]);
@@ -80,13 +80,15 @@ class AdminUserController extends Controller
             'password' => ['nullable', 'string', Password::default(), 'confirmed'],
         ])->validate();
 
-        $isSuperAfter = (bool) $data['is_super_admin'];
+        $isSuperAfter = filter_var($data['is_super_admin'], FILTER_VALIDATE_BOOLEAN);
 
-        // Proteksi 1: tidak boleh menurunkan hak Super Admin / menonaktifkan akun diri sendiri.
+        // Proteksi 1: akun diri sendiri tidak boleh kehilangan hak Super Admin
+        // atau diubah statusnya (menaikkan diri menjadi Super Admin diperbolehkan).
         $isSelf = $user->id === $request->user()->id;
-        if ($isSelf && ($user->is_super_admin !== $isSuperAfter || $data['status'] !== $user->status)) {
+        $losingSuper = $user->is_super_admin && ! $isSuperAfter;
+        if ($isSelf && ($losingSuper || $data['status'] !== $user->status)) {
             return back()->withErrors([
-                '_form' => 'Anda tidak dapat mengubah hak akses atau status akun diri sendiri.',
+                '_form' => 'Anda tidak dapat menurunkan hak Super Admin atau mengubah status akun diri sendiri.',
             ])->withInput();
         }
 

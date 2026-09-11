@@ -61,6 +61,63 @@ it('admin baru dapat dibuat, email terdaftar, dan password tersimpan sebagai has
         ->and(Hash::check('rahasia123', $user->password))->toBeTrue();
 });
 
+it('admin tanpa password (hanya login Google) dapat dibuat', function () {
+    $this->actingAs(auSuper())->post('/admin/users', [
+        'name' => 'Rina Google',
+        'email' => 'rina@mentengkos.id',
+        'password' => '',
+        'password_confirmation' => '',
+        'is_super_admin' => false,
+        'status' => 'ACTIVE',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('users', [
+        'email' => 'rina@mentengkos.id',
+        'role' => 'ADMIN',
+        'password' => null,
+    ]);
+});
+
+it('nilai is_super_admin string "false" tidak menjadikan akun super admin', function () {
+    $super = auSuper();
+    $target = auAdmin();
+
+    $this->actingAs($super)->put("/admin/users/{$target->id}", [
+        'name' => $target->name,
+        'email' => $target->email,
+        'is_super_admin' => 'false',
+        'status' => 'ACTIVE',
+    ])->assertRedirect();
+
+    expect($target->fresh()->is_super_admin)->toBeFalse();
+});
+
+it('admin dapat menaikkan dirinya sendiri menjadi Super Admin', function () {
+    $admin = auAdmin();
+
+    $this->actingAs($admin)->put("/admin/users/{$admin->id}", [
+        'name' => $admin->name,
+        'email' => $admin->email,
+        'is_super_admin' => true,
+        'status' => 'ACTIVE',
+    ])->assertRedirect();
+
+    expect($admin->fresh()->is_super_admin)->toBeTrue();
+});
+
+it('Super Admin tidak dapat menurunkan hak Super Admin dirinya sendiri', function () {
+    $super = auSuper();
+
+    $this->actingAs($super)->put("/admin/users/{$super->id}", [
+        'name' => $super->name,
+        'email' => $super->email,
+        'is_super_admin' => false,
+        'status' => 'ACTIVE',
+    ])->assertSessionHasErrors('_form');
+
+    expect($super->fresh()->is_super_admin)->toBeTrue();
+});
+
 it('email admin harus unik di tabel users', function () {
     $admin = auAdmin();
 
