@@ -118,6 +118,44 @@ it('Super Admin tidak dapat menurunkan hak Super Admin dirinya sendiri', functio
     expect($super->fresh()->is_super_admin)->toBeTrue();
 });
 
+it('email admin yang sudah dihapus (soft delete) dapat dipakai lagi untuk akun baru', function () {
+    $keeper = auSuper();
+    $target = auAdmin();
+    $email = $target->email;
+
+    $this->actingAs($keeper)->delete("/admin/users/{$target->id}")->assertRedirect();
+    expect($target->fresh()->deleted_at)->not->toBeNull();
+
+    $this->actingAs($keeper)->post('/admin/users', [
+        'name' => 'Tedy Baru',
+        'email' => $email,
+        'password' => '',
+        'password_confirmation' => '',
+        'is_super_admin' => false,
+        'status' => 'ACTIVE',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('users', [
+        'email' => $email,
+        'name' => 'Tedy Baru',
+        'deleted_at' => null,
+    ]);
+});
+
+it('email admin yang masih aktif tetap harus unik', function () {
+    $keeper = auSuper();
+    $existing = auAdmin();
+
+    $this->actingAs($keeper)->post('/admin/users', [
+        'name' => 'Duplikat Aktif',
+        'email' => $existing->email,
+        'password' => '',
+        'password_confirmation' => '',
+        'is_super_admin' => false,
+        'status' => 'ACTIVE',
+    ])->assertSessionHasErrors('email');
+});
+
 it('email admin harus unik di tabel users', function () {
     $admin = auAdmin();
 

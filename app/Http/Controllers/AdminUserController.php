@@ -45,7 +45,7 @@ class AdminUserController extends Controller
     {
         $data = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => ['nullable', 'string', Password::default(), 'confirmed'],
             'is_super_admin' => ['required', 'boolean'],
             'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_SUSPENDED])],
@@ -74,7 +74,7 @@ class AdminUserController extends Controller
 
         $data = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)->whereNull('deleted_at')],
             'is_super_admin' => ['required', 'boolean'],
             'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_SUSPENDED])],
             'password' => ['nullable', 'string', Password::default(), 'confirmed'],
