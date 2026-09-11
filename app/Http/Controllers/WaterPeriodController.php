@@ -180,7 +180,7 @@ class WaterPeriodController extends Controller
 
         $validated = $request->validate([
             'meter_start' => 'required|integer|min:0',
-            'photo' => 'required|image|max:5120',
+            'photo' => 'required|image|max:20480',
             'note' => 'nullable|string|max:255',
         ]);
 
@@ -222,7 +222,7 @@ class WaterPeriodController extends Controller
 
         $validated = $request->validate([
             'meter_end' => 'required|integer|min:0',
-            'photo' => 'required|image|max:5120',
+            'photo' => 'required|image|max:20480',
         ]);
 
         $photoPath = null;
