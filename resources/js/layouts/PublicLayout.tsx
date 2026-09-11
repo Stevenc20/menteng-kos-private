@@ -55,8 +55,17 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
             {/* Desktop Navbar */}
             <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isTransparent ? 'bg-transparent border-transparent' : 'bg-white/95 backdrop-blur-md shadow-sm border-b border-[#E8E7E3]'}`}>
                 <div className="max-w-[1440px] mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-                    <Link href="/" className={`text-xl font-bold tracking-tight uppercase transition-colors ${textColor}`}>
-                        Menteng Kos Private
+                    <Link href="/" className="flex items-center gap-3 shrink-0">
+                        <img
+                            src="/images/logo/logo.png"
+                            alt="Logo Menteng Kos Private"
+                            className="h-10 w-10 object-contain drop-shadow-sm"
+                            width="40"
+                            height="40"
+                        />
+                        <span className={`text-xl font-bold tracking-tight uppercase transition-colors ${textColor}`}>
+                            Menteng Kos Private
+                        </span>
                     </Link>
                     
                     {/* Desktop Navigation */}
@@ -110,7 +119,16 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                             onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside drawer
                         >
                             <div className="h-20 flex items-center justify-between px-6 border-b border-[#E8E7E3]">
-                                <span className="font-bold tracking-tight uppercase text-sm text-[#1A1A18]">Menteng Kos</span>
+                                <div className="flex items-center gap-2">
+                                    <img
+                                        src="/images/logo/logo.png"
+                                        alt="Logo Menteng Kos"
+                                        className="h-7 w-7 object-contain"
+                                        width="28"
+                                        height="28"
+                                    />
+                                    <span className="font-bold tracking-tight uppercase text-sm text-[#1A1A18]">Menteng Kos</span>
+                                </div>
                                 <button 
                                     onClick={() => setIsMobileMenuOpen(false)}
                                     className="p-2 -mr-2 text-[#6B6B67] hover:bg-neutral-100 rounded-full transition-colors"

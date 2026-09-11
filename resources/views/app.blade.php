@@ -32,7 +32,7 @@
         </style>
 
         <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         @fonts
@@ -40,7 +40,23 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         <x-inertia::head>
-            <title>{{ config('app.name', 'Laravel') }}</title>
+            <title>Menteng Kos Private</title>
+            <meta name="description" content="Hunian modern di pusat kota dengan fasilitas premium, desain minimalis, dan manajemen profesional. Tersedia 10 Kamar Eksklusif dan 1 Kios." />
+            <link rel="canonical" href="{{ url('/') }}" />
+
+            <meta property="og:type" content="website" />
+            <meta property="og:site_name" content="Menteng Kos Private" />
+            <meta property="og:title" content="Menteng Kos Private" />
+            <meta property="og:description" content="Hunian modern di pusat kota dengan fasilitas premium, desain minimalis, dan manajemen profesional. Tersedia 10 Kamar Eksklusif dan 1 Kios." />
+            <meta property="og:url" content="{{ url('/') }}" />
+            <meta property="og:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.png' }}" />
+            <meta property="og:image:width" content="1200" />
+            <meta property="og:image:height" content="1200" />
+
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content="Menteng Kos Private" />
+            <meta name="twitter:description" content="Hunian modern di pusat kota dengan fasilitas premium, desain minimalis, dan manajemen profesional. Tersedia 10 Kamar Eksklusif dan 1 Kios." />
+            <meta name="twitter:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.png' }}" />
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
