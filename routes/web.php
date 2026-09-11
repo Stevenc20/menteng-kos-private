@@ -69,6 +69,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::delete('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
     Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
     Route::get('/tenants/{id}/ktp/{kind}/download', [\App\Http\Controllers\AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');
+    
+    // Tenant Documentations & Agreements
+    Route::post('/tenants/{id}/agreements/upload', [\App\Http\Controllers\AdminController::class, 'uploadAgreementDocument'])->name('admin.tenants.agreements.upload');
+    Route::get('/tenants/{id}/agreements/download', [\App\Http\Controllers\AdminController::class, 'downloadAgreementDocument'])->name('admin.tenants.agreements.download');
+    Route::post('/tenants/{id}/documentations', [\App\Http\Controllers\AdminController::class, 'storeRoomDocumentation'])->name('admin.tenants.documentations.store');
+    Route::delete('/tenants/documentations/media/{mediaId}', [\App\Http\Controllers\AdminController::class, 'deleteDocumentationMedia'])->name('admin.tenants.documentations.media.destroy');
 
     // Admin-driven Onboarding Wizard (admin fills tenant onboarding using the same Wizard)
     Route::get('/tenants/{tenancy}/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('admin.tenants.onboarding');

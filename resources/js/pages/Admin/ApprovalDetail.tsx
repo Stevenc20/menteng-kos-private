@@ -4,6 +4,7 @@ import { router, useForm } from '@inertiajs/react';
 import { AdminModal, AdminModalHeader, AdminModalContent, AdminModalFooter } from '@/components/admin/AdminModal';
 import { AdminButton } from '@/components/admin/AdminButton';
 import { calcDueDay } from '@/services/statement';
+import { TenantDocumentation } from '@/components/admin/TenantDocumentation';
 
 interface ApprovalDetailProps {
     tenancy: any;
@@ -348,32 +349,7 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                 </Card>
 
                 {/* Surat Pernyataan */}
-                <Card title={`Surat Pernyataan ${tenancy.property?.type === 'KIOSK' ? 'Kios' : 'Kamar'}`}>
-                    {agreement?.document_html ? (
-                        <>
-                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                                <p className="text-sm text-neutral-500">
-                                    Tampilan identik dengan dokumen yang ditandatangani tenant ({tenancy.property?.type === 'KIOSK' ? 'template Kios' : 'template Kamar'}).
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={() => window.print()}
-                                    className="no-print inline-flex items-center gap-2 bg-[#1A1A18] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#333333] transition-colors"
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h12z" /></svg>
-                                    Cetak Surat
-                                </button>
-                            </div>
-                            <div className="printable-statement bg-neutral-50 rounded-xl border border-neutral-200 p-4 sm:p-6 text-sm overflow-x-hidden"
-                                 dangerouslySetInnerHTML={{ __html: agreement.document_html }}
-                            />
-                        </>
-                    ) : (
-                        <div className="no-print p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
-                            (Belum ada Surat Pernyataan dari tenant)
-                        </div>
-                    )}
-                </Card>
+                <TenantDocumentation tenancy={tenancy} agreement={agreement} moveInDoc={moveInDoc} moveOutDoc={moveOutDoc} />
 
                 {/* Paraf & Tanda Tangan */}
                 <Card title="Paraf & Tanda Tangan">

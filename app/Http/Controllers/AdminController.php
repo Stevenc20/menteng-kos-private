@@ -388,12 +388,13 @@ class AdminController extends Controller
      */
     public function showApproval($id)
     {
-        $tenancy = Tenancy::with(['user', 'property'])->findOrFail($id);
+        $tenancy = Tenancy::with(['user', 'property.media'])->findOrFail($id);
         $profile = TenantProfile::where('user_id', $tenancy->user_id)->first();
         $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
         $signatures = AgreementSignature::where('agreement_id', $agreement?->id)->get();
 
-        $moveInDoc = RoomDocumentation::where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
+        $moveInDoc = RoomDocumentation::with('media')->where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_IN')->first();
+        $moveOutDoc = RoomDocumentation::with('media')->where('tenancy_id', $tenancy->id)->where('documentation_type', 'MOVE_OUT')->first();
         $waterMeter = WaterMeter::where('tenancy_id', $tenancy->id)->first();
         $approvedBy = $tenancy->approved_by ? User::find($tenancy->approved_by) : null;
 
@@ -416,6 +417,7 @@ class AdminController extends Controller
             'signatures' => $signatures,
             'approvedBy' => $approvedBy,
             'moveInDoc' => $moveInDoc,
+            'moveOutDoc' => $moveOutDoc,
             'waterMeter' => $waterMeter,
             'effectiveMoveInDate' => $displayMoveIn,
             'moveInDateIsStale' => $isStale,
@@ -540,6 +542,116 @@ class AdminController extends Controller
         $tenancyName = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenancy->user?->name ?? 'tenant');
 
         return Storage::disk('local')->download($path, $label.'_'.$tenancyName.'.'.$ext);
+    }
+
+    public function uploadAgreementDocument(Request $request, $id)
+    {
+        $request->validate([
+            'document' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
+        ]);
+
+        $tenancy = Tenancy::findOrFail($id);
+        
+        $agreement = Agreement::firstOrCreate(
+            ['tenancy_id' => $tenancy->id],
+            ['status' => 'DRAFT']
+        );
+
+        if ($request->hasFile('document')) {
+            if ($agreement->uploaded_document_path && Storage::disk('local')->exists($agreement->uploaded_document_path)) {
+                Storage::disk('local')->delete($agreement->uploaded_document_path);
+            }
+            
+            $path = $request->file('document')->store('agreements_scans', 'local');
+            $agreement->uploaded_document_path = $path;
+            $agreement->uploaded_document_type = $request->file('document')->getClientMimeType();
+            $agreement->save();
+        }
+
+        return back()->with('success', 'Dokumen Surat Pernyataan berhasil diunggah.');
+    }
+
+    public function downloadAgreementDocument($id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->firstOrFail();
+
+        if (!$agreement->uploaded_document_path || !Storage::disk('local')->exists($agreement->uploaded_document_path)) {
+            abort(404);
+        }
+
+        return Storage::disk('local')->download($agreement->uploaded_document_path, 'Surat_Pernyataan_'.($tenancy->user->name ?? 'Tenant').'.'.pathinfo($agreement->uploaded_document_path, PATHINFO_EXTENSION));
+    }
+
+    public function storeRoomDocumentation(Request $request, $id)
+    {
+        $request->validate([
+            'type' => 'required|in:MOVE_IN,MOVE_OUT',
+            'photos.*' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:10240',
+            'property_media_id' => 'nullable|integer|exists:property_media,id'
+        ]);
+
+        $tenancy = Tenancy::findOrFail($id);
+        
+        $doc = RoomDocumentation::firstOrCreate(
+            [
+                'tenancy_id' => $tenancy->id,
+                'documentation_type' => $request->type
+            ],
+            [
+                'property_id' => $tenancy->property_id,
+                'documentation_date' => now(),
+                'created_by' => \Illuminate\Support\Facades\Auth::id()
+            ]
+        );
+
+        // Upload photos from device
+        if ($request->hasFile('photos')) {
+            foreach ($request->file('photos') as $file) {
+                $path = $file->store('room_documentations', 'public');
+                RoomDocumentationMedia::create([
+                    'documentation_id' => $doc->id,
+                    'file_type' => 'IMAGE',
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'mime_type' => $file->getClientMimeType()
+                ]);
+            }
+        }
+
+        // Copy from property media for historical snapshot
+        if ($request->filled('property_media_id')) {
+            $propMedia = PropertyMedia::findOrFail($request->property_media_id);
+            if (Storage::disk('public')->exists($propMedia->original_path)) {
+                $newPath = 'room_documentations/' . \Illuminate\Support\Str::random(40) . '.' . pathinfo($propMedia->original_path, PATHINFO_EXTENSION);
+                Storage::disk('public')->copy($propMedia->original_path, $newPath);
+                
+                RoomDocumentationMedia::create([
+                    'documentation_id' => $doc->id,
+                    'file_type' => 'IMAGE',
+                    'file_path' => $newPath,
+                    'original_name' => 'Copied from Property: ' . basename($propMedia->original_path),
+                    'file_size' => Storage::disk('public')->size($propMedia->original_path),
+                    'mime_type' => Storage::disk('public')->mimeType($propMedia->original_path)
+                ]);
+            }
+        }
+
+        return back()->with('success', 'Dokumentasi kondisi unit berhasil ditambahkan.');
+    }
+
+    public function deleteDocumentationMedia($mediaId)
+    {
+        $media = RoomDocumentationMedia::findOrFail($mediaId);
+        
+        if (Storage::disk('public')->exists($media->file_path)) {
+            Storage::disk('public')->delete($media->file_path);
+        }
+        
+        $media->delete();
+
+        return back()->with('success', 'Foto dokumentasi berhasil dihapus.');
     }
 
     /**
