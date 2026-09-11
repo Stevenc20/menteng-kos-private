@@ -21,7 +21,7 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
     const handleSuratUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setSuratData("document", e.target.files[0]);
-            router.post(route("admin.tenants.agreements.upload", tenancy.id), {
+            router.post(`/admin/tenants/${tenancy.id}/agreements/upload`, {
                 document: e.target.files[0]
             }, {
                 forceFormData: true,
@@ -42,7 +42,7 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
         files.forEach(f => formData.append("photos[]", f));
         if (propMediaId) formData.append("property_media_id", propMediaId);
 
-        router.post(route("admin.tenants.documentations.store", tenancy.id), formData, {
+        router.post(`/admin/tenants/${tenancy.id}/documentations`, formData, {
             onSuccess: () => {
                 toast.success("Dokumentasi berhasil ditambahkan");
                 setShowPropModal(false);
@@ -59,7 +59,7 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
 
     const deleteMedia = (mediaId: number) => {
         if (confirm("Yakin ingin menghapus foto dokumentasi ini? Foto properti asli tidak akan terhapus.")) {
-            router.delete(route("admin.tenants.documentations.media.destroy", mediaId), {
+            router.delete(`/admin/tenants/documentations/media/${mediaId}`, {
                 onSuccess: () => toast.success("Foto dihapus")
             });
         }
@@ -100,7 +100,7 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
                                 <p className="font-semibold text-sm">Dokumen Scan / Surat Fisik Lama Tersedia</p>
                                 <p className="text-xs text-neutral-500">Telah diunggah oleh Admin</p>
                             </div>
-                            <a href={route("admin.tenants.agreements.download", tenancy.id)} className="bg-[#1A1A18] text-white px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+                            <a href={`/admin/tenants/${tenancy.id}/agreements/download`} className="bg-[#1A1A18] text-white px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
                                 Unduh File
                             </a>
                         </div>
