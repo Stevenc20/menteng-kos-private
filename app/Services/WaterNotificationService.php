@@ -28,8 +28,11 @@ use Illuminate\Support\Facades\Mail;
 class WaterNotificationService
 {
     public const TRIGGER_H4_METER = 'WATER_H4_METER';
+
     public const TRIGGER_PAYMENT_DUE = 'WATER_PAYMENT_DUE';
+
     public const TRIGGER_NEW_PERIOD = 'WATER_NEW_PERIOD';
+
     public const TRIGGER_TEST = 'WATER_TEST';
 
     /** Mailers that accept a message but do NOT deliver to an inbox. */
@@ -225,7 +228,7 @@ class WaterNotificationService
     {
         $subject = TestNotificationMail::SUBJECT;
         $body = 'Ini adalah email percobaan dari sistem Menteng Kos Private. '
-            . 'Konfigurasi notifikasi email berhasil diproses oleh mailer.';
+            .'Konfigurasi notifikasi email berhasil diproses oleh mailer.';
 
         $status = 'SENT';
         $error = null;
@@ -242,7 +245,7 @@ class WaterNotificationService
         if ($status === 'SENT' && in_array($mailer, self::FAKE_MAILERS, true)) {
             $status = 'FAILED';
             $error = "Pesan diteruskan ke mailer \"{$mailer}\" (log lokal, bukan inbox). "
-                . 'Konfigurasi MAIL_MAILER=smtp + kredensial SMTP untuk pengiriman yang riil.';
+                .'Konfigurasi MAIL_MAILER=smtp + kredensial SMTP untuk pengiriman yang riil.';
         }
 
         $this->logTest('EMAIL', $email, $subject, $body, $status, $error);
@@ -260,7 +263,7 @@ class WaterNotificationService
     {
         $subject = '[WATER-TEST] Test WhatsApp Notifikasi - Menteng Kos Private';
         $body = 'Test notifikasi Menteng Kos Private. '
-            . 'Reminder meter air otomatis akan menggunakan channel ini.';
+            .'Reminder meter air otomatis akan menggunakan channel ini.';
 
         $status = 'FAILED';
         $error = null;
@@ -311,6 +314,35 @@ class WaterNotificationService
         return mb_substr($message, 0, 300);
     }
 
+    /**
+     * Render + mengirim email reminder ASLI (subjek & template scheduler yang
+     * dipakai water:send-reminders) TANPA menulis NotificationLog apapun.
+     * Dipakai command water:mail-sample agar bisa melihat hasil email resmi
+     * di inbox tanpa menunggu H-4 / jatuh tempo yang sesungguhnya.
+     *
+     * @return array{status: string, subject: string, recipients: array<int, string>, message: string}
+     */
+    public function preview(string $trigger, WaterPeriod $period, ?string $to = null): array
+    {
+        $subject = $this->subject($trigger, $period);
+        $data = $this->viewData($trigger, $period);
+        $recipients = $to !== null ? [$to] : $this->adminRecipients();
+
+        $info = ['subject' => $subject, 'recipients' => $recipients];
+
+        if (empty($recipients)) {
+            return $info + ['status' => 'FAILED', 'message' => 'Tidak ada email admin yang terdaftar (set WATER_ADMIN_EMAIL atau water.to_admin_email).'];
+        }
+
+        try {
+            Mail::to($recipients)->send(new WaterReminderMail($subject, $data));
+
+            return $info + ['status' => 'SENT', 'message' => 'Email contoh terkirim ke: '.implode(', ', $recipients)];
+        } catch (\Throwable $e) {
+            return $info + ['status' => 'FAILED', 'message' => $this->sanitizeError($e->getMessage())];
+        }
+    }
+
     // ---------------------------------------------------------------------
     // Content builders
     // ---------------------------------------------------------------------
@@ -320,10 +352,10 @@ class WaterNotificationService
         $unit = $period->property?->name ?? "Unit #{$period->property_id}";
 
         return match ($trigger) {
-            self::TRIGGER_H4_METER => "Reminder Meter Air — H-4 — {$unit}",
-            self::TRIGGER_PAYMENT_DUE => "Meter Air Jatuh Tempo Hari Ini — {$unit}",
-            self::TRIGGER_NEW_PERIOD => "Update Meter Air Berikutnya — {$unit}",
-            default => "Reminder Meter Air — {$unit}",
+            self::TRIGGER_H4_METER => "🔔 Pengingat Meter Air — {$unit} — Update sebelum {$this->dueDateLabel($period)}",
+            self::TRIGGER_PAYMENT_DUE => "⏰ Meter Air — {$unit} — Jatuh Tempo Hari Ini",
+            self::TRIGGER_NEW_PERIOD => "💧 Meter Air — {$unit} — Pembayaran Selesai, Update Meter Berikutnya",
+            default => "🔔 Notifikasi Meter Air — {$unit}",
         };
     }
 
@@ -344,13 +376,13 @@ class WaterNotificationService
         };
 
         return "{$header}\n"
-            . "Periode: {$this->periodLabel($period)}\n"
-            . "Jatuh tempo: {$period->due_date?->toDateString()}\n"
-            . "Meter awal: {$this->fmt($period->meter_start)}\n"
-            . "Meter akhir: {$this->fmt($period->meter_end)}\n"
-            . "Pemakaian: ".(($period->usage !== null) ? number_format((int) $period->usage).' m³' : '-')."\n"
-            . "Wajib bayar: {$amount}\n"
-            . 'Silakan cek /admin/water.';
+            ."Periode: {$this->periodLabel($period)}\n"
+            ."Jatuh tempo: {$period->due_date?->toDateString()}\n"
+            ."Meter awal: {$this->fmt($period->meter_start)}\n"
+            ."Meter akhir: {$this->fmt($period->meter_end)}\n"
+            .'Pemakaian: '.(($period->usage !== null) ? number_format((int) $period->usage).' m³' : '-')."\n"
+            ."Wajib bayar: {$amount}\n"
+            .'Silakan cek /admin/water.';
     }
 
     /**
@@ -362,9 +394,7 @@ class WaterNotificationService
     {
         $unit = $period->property?->name ?? "Unit #{$period->property_id}";
         $tenant = $period->tenant?->name ?? '-';
-        $dueDateParts = $period->due_date
-            ? $period->due_date->format('d').' '.self::MONTHS_ID[(int) $period->due_date->format('n')].' '.$period->due_date->format('Y')
-            : '-';
+        $dueDateParts = $this->dueDateLabel($period);
 
         $data = [
             'unit' => $unit,
@@ -376,7 +406,7 @@ class WaterNotificationService
             'usage' => $period->usage !== null ? number_format((int) $period->usage).' m³' : '-',
             'amount' => $period->total_amount !== null ? 'Rp '.number_format((float) $period->total_amount, 0, ',', '.') : '-',
             'header_tagline' => 'Sistem Meter Air',
-            'action_label' => 'Update Meter Air',
+            'action_label' => 'Buka Meter Air',
             'action_url' => route('admin.water.show', ['property' => $period->property_id]),
         ];
 
@@ -388,7 +418,7 @@ class WaterNotificationService
                 'intro' => "Halo Admin, ini adalah pengingat bahwa pencatatan meter air untuk unit berikut akan memasuki jatuh tempo dalam {$days} hari.",
                 'rows' => [
                     ['Unit', e($unit)],
-                    ['Tenant', e($tenant)],
+                    ['Penghuni', e($tenant)],
                     ['Periode', e($data['period'])],
                     ['Jatuh Tempo', e($data['due_date'])],
                     ['Meter Awal', e($data['meter_start'])],
@@ -407,7 +437,7 @@ class WaterNotificationService
                 'intro' => 'Halo Admin, periode meter air berikut telah memasuki tanggal jatuh tempo.',
                 'rows' => [
                     ['Unit', e($unit)],
-                    ['Tenant', e($tenant)],
+                    ['Penghuni', e($tenant)],
                     ['Periode', e($data['period'])],
                     ['Jatuh Tempo', e($data['due_date'])],
                     ['Meter Awal', e($data['meter_start'])],
@@ -427,13 +457,13 @@ class WaterNotificationService
             'intro' => 'Halo Admin, pembayaran meter air telah dikonfirmasi. Silakan lakukan pencatatan meter akhir untuk melanjutkan periode berikutnya.',
             'rows' => [
                 ['Unit', e($unit)],
-                ['Tenant', e($tenant)],
+                ['Penghuni', e($tenant)],
                 ['Periode', e($data['period'])],
                 ['Jatuh Tempo', e($data['due_date'])],
                 ['Meter Awal', e($data['meter_start'])],
                 ['Meter Akhir', e($data['meter_end'])],
-                ['Status Pembayaran', 'PAID'],
-                ['Status Meter', 'Menunggu Update Meter'],
+                ['Pemakaian', e($data['usage'])],
+                ['Status', 'Pembayaran Selesai'],
             ],
             'status_badge' => 'Menunggu Update Meter',
             'status_color' => '#1E6F50',
@@ -453,6 +483,17 @@ class WaterNotificationService
     protected function fmt(int|float|null $value): string
     {
         return $value === null ? '-' : number_format((int) $value);
+    }
+
+    protected function dueDateLabel(WaterPeriod $period): string
+    {
+        if ($period->due_date === null) {
+            return '-';
+        }
+
+        $month = self::MONTHS_ID[(int) $period->due_date->format('n')] ?? $period->due_date->format('n');
+
+        return $period->due_date->format('d').' '.$month.' '.$period->due_date->format('Y');
     }
 
     protected function boolSetting(string $key, bool $default): bool

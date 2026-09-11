@@ -274,7 +274,8 @@ test('TEST 12: notification log records all required delivery fields', function 
     expect($log->status)->toBe('SENT');
     expect($log->sent_at)->not->toBeNull();
     expect($log->error)->toBeNull();
-    expect($log->subject)->toContain('Reminder Meter Air');
+    expect($log->subject)->toContain('Pengingat Meter Air');
+    expect($log->subject)->toContain('Update sebelum');
 });
 
 test('TEST 13: SMTP credentials never appear in logs or responses', function () {
@@ -302,7 +303,7 @@ test('the reminder email renders professional HTML with the brand', function () 
     [$admin, $property] = wkUnit();
     $period = wkMakePeriod($property);
 
-    $html = (new \App\Mail\WaterReminderMail('Reminder Meter Air — H-4 — KAMAR A-01', [
+    $html = (new WaterReminderMail('Pengingat Meter Air — KAMAR A-01 — Update sebelum 15 September 2026', [
         'unit' => 'KAMAR A-01',
         'tenant' => 'Nama Tenant',
         'period' => 'September 2026',
@@ -312,7 +313,7 @@ test('the reminder email renders professional HTML with the brand', function () 
         'usage' => '-',
         'amount' => '-',
         'header_tagline' => 'Sistem Meter Air',
-        'action_label' => 'Update Meter Air',
+        'action_label' => 'Buka Meter Air',
         'action_url' => route('admin.water.show', ['property' => $property->id]),
         'title' => 'Reminder Meter Air',
         'intro' => 'Halo Admin.',
@@ -325,6 +326,6 @@ test('the reminder email renders professional HTML with the brand', function () 
     ]))->render();
 
     expect($html)->toContain('MENTENG KOS PRIVATE');
-    expect($html)->toContain('Update Meter Air');
+    expect($html)->toContain('Buka Meter Air');
     expect($html)->toContain('/admin/water/'.$property->id);
 });
