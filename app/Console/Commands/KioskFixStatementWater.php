@@ -9,8 +9,8 @@ use Illuminate\Console\Command;
 
 /**
  * Backfill existing KIOSK agreement statements so the water PAM clause
- * reflects the "separate water" rule when the agreed (deal) price is below
- * the property's standard price.
+ * reflects the "separate water" rule (kios pays PAM usage in full, no
+ * included 5m³ allowance).
  *
  * `document_html` is a point-in-time HTML snapshot generated at sign-time, so
  * already-issued statements do NOT change automatically when the template is
@@ -28,7 +28,7 @@ class KioskFixStatementWater extends Command
                             {--dry : Only show what would change (default is dry-run)}
                             {--force : Actually persist the changes}';
 
-    protected $description = 'Rewrite the water PAM clause in existing KIOSK statements whose deal price is below the standard price.';
+    protected $description = 'Rewrite the water PAM clause in existing KIOSK statements (separate-water rule, no 5m³ allowance).';
 
     /** Regex capturing the old "5m3 included" water bullet rendered by the KIOSK template. */
     private const OLD_KIOSK_WATER_BULLET = '/<li style="margin:4px 0;">Uang air sebanyak\s*<strong>5m³<\/strong>.*?sesuai pemakaiaan\.<\/li>/s';
@@ -48,7 +48,7 @@ class KioskFixStatementWater extends Command
             ->get()
             ->filter(fn (Tenancy $t) => WaterBillingService::chargesWaterSeparately($t));
 
-        $this->info('Menemukan ' . $tenancies->count() . ' tenancy KIOSK dengan harga deal di bawah standar.');
+        $this->info('Menemukan ' . $tenancies->count() . ' tenancy KIOSK dengan air ditagih terpisah.');
         if ($dryRun) {
             $this->warn('MODE DRY-RUN: tidak ada perubahan. Pakai --force untuk menerapkan.');
         }

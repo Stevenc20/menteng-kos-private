@@ -64,11 +64,11 @@ class WaterPeriodService
 
         $usage = $meterEnd - (int) $period->meter_start;
 
-        // Empty unit (no tenancy snapshot): fall back to the room rule,
-        // first WATER_ALLOWANCE_M3 are included in the rent.
+        // Allowance is type-based: 5m³ for KAMAR, 0 for KIOS. When the period
+        // has no tenancy snapshot, fall back to the unit type rule.
         $billable = $period->tenancy
             ? WaterBillingService::billableUsage($period->tenancy, $usage)
-            : max(0, $usage - WaterBillingService::WATER_ALLOWANCE_M3);
+            : max(0, $usage - WaterBillingService::allowanceForType($period->property?->type));
 
         $rate = (float) ($period->water_rate ?? WaterBillingService::ratePerM3($period->property));
         $total = (int) round($billable * $rate);

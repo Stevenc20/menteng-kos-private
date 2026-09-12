@@ -128,7 +128,16 @@ const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep
 
 function meterLabel(p: WaterPeriod): string {
     if (p.meter_start === null) return '-';
-    return `${angka(p.meter_start)} m³ → ${p.meter_end !== null ? angka(p.meter_end) + ' m³' : '…'}`;
+    if (p.meter_end !== null) {
+        return `${angka(p.meter_start)} m³ → ${angka(p.meter_end)} m³`;
+    }
+    // No end recorded yet: show the included-allowance limit for KAMAR
+    // (start + 5m³), but a pending "…" for KIOS (no allowance).
+    const allowance = p.allowance ?? 0;
+    if (allowance > 0) {
+        return `${angka(p.meter_start)} m³ → ${angka((p.meter_start ?? 0) + allowance)} m³`;
+    }
+    return `${angka(p.meter_start)} m³ → …`;
 }
 
 function billBreakdown(p: WaterPeriod): { included: number; excess: number } | null {
@@ -450,139 +459,157 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
 
             {/* List */}
             <div className="mt-6 bg-white rounded-2xl border border-[#E8E7E3] shadow-sm overflow-hidden">
-                {/* Desktop header */}
-                <div className="hidden lg:grid grid-cols-[1.3fr_1fr_1.2fr_1fr_1.3fr_1fr_1fr_auto] gap-4 px-6 py-4 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
-                    <div>Unit</div>
-                    <div>Penghuni</div>
-                    <div>Meter</div>
-                    <div>Pemakaian</div>
-                    <div>Tagihan</div>
-                    <div>Periode</div>
-                    <div>Status</div>
-                    <div className="text-right">Aksi</div>
+                {/* Desktop table with horizontal scroll when columns are too wide */}
+                <div className="hidden lg:block overflow-x-auto">
+                    <div className="min-w-[1060px]">
+                        <div className="grid grid-cols-[minmax(170px,1.3fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(80px,0.8fr)_minmax(190px,1.3fr)_minmax(110px,0.9fr)_minmax(120px,1fr)_minmax(160px,auto)] gap-4 px-6 py-4 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
+                            <div>Unit</div>
+                            <div>Penghuni</div>
+                            <div>Meter</div>
+                            <div>Pemakaian</div>
+                            <div>Tagihan</div>
+                            <div>Periode</div>
+                            <div className="text-center">Status</div>
+                            <div className="text-right">Aksi</div>
+                        </div>
+                        {properties.length === 0 && (
+                            <div className="px-6 py-16 text-center text-[#8A8A84]">Tidak ada unit pada filter ini.</div>
+                        )}
+                        {properties.map((row) => {
+                            const status = row.water ? statusInfo(row.water.status) : { label: row.has_paid ? 'Lunas' : 'Belum Ada', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                            const breakdown = row.water ? billBreakdown(row.water) : null;
+                            return (
+                                <div key={row.id} className="grid grid-cols-[minmax(170px,1.3fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(80px,0.8fr)_minmax(190px,1.3fr)_minmax(110px,0.9fr)_minmax(120px,1fr)_minmax(160px,auto)] gap-4 px-6 py-4 items-center border-b border-[#F1F0EC] hover:bg-[#FBFBF9] transition-colors">
+                                    <div className="min-w-0">
+                                        <Link href={`/admin/water/${row.id}`} className="flex items-center gap-2 font-semibold text-[#1A1A18] hover:text-black group">
+                                            <span className="line-clamp-2 break-words leading-snug">{row.name}</span>
+                                            <ExternalLink className="w-3.5 h-3.5 text-[#A1A19A] group-hover:text-[#1A1A18] shrink-0" />
+                                        </Link>
+                                        <p className="text-[12px] text-[#8A8A84] mt-0.5">{row.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {row.status.replace(/_/g, ' ')}</p>
+                                    </div>
+                                    <div className="text-sm text-[#2A2A27] truncate">{row.tenant?.name ?? '-'}</div>
+                                    <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water ? meterLabel(row.water) : '-'}</div>
+                                    <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water?.usage !== null && row.water?.usage !== undefined ? `${angka(row.water.usage)} m³` : '-'}</div>
+                                    <div className="min-w-0">
+                                        {breakdown ? (
+                                            <div className="text-[13px] leading-5">
+                                                {breakdown.included > 0 && breakdown.excess > 0 ? (
+                                                    <>
+                                                        <p className="text-[#2A2A27] tabular-nums whitespace-nowrap">{angka(breakdown.excess)} m³ lebih</p>
+                                                        <p className="font-semibold tabular-nums whitespace-nowrap text-[#1A1A18]">{rupiah(row.water?.total_amount ?? 0)}</p>
+                                                    </>
+                                                ) : breakdown.included > 0 ? (
+                                                    <>
+                                                        <p className="text-[#6B6B67]">Termasuk sewa</p>
+                                                        <p className="text-[12px] text-[#8A8A84] tabular-nums">{angka(row.water?.allowance ?? 5)} m³ pertama</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-[12px] text-[#6B6B67]">Air ditagih terpisah</p>
+                                                        <p className="text-[#2A2A27] tabular-nums whitespace-nowrap">{angka(breakdown.excess)} m³</p>
+                                                        <p className="font-semibold tabular-nums whitespace-nowrap text-[#1A1A18]">{rupiah(row.water?.total_amount ?? 0)}</p>
+                                                    </>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[12px] text-[#8A8A84] leading-5">{row.billing_note}</p>
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-[#2A2A27] whitespace-nowrap">
+                                        {row.water
+                                            ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}`
+                                            : '-'}
+                                        {row.water?.due_date && <span className="block text-[12px] text-[#8A8A84]">JT {row.water.due_date}</span>}
+                                    </div>
+                                    <div className="text-center">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border leading-tight whitespace-normal ${status.cls}`}>{status.label}</span>
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                                        {row.water?.status === 'METER_DUE' && (
+                                            <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
+                                                <Camera className="w-4 h-4" /> Update Meter
+                                            </AdminButton>
+                                        )}
+                                        {row.water?.status === 'WAITING_PAYMENT' && (
+                                            <>
+                                                <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
+                                                <AdminButton className="h-9 px-3 text-[13px]" onClick={() => confirmPayment(row.water!)}>
+                                                    Konfirmasi Bayar
+                                                </AdminButton>
+                                            </>
+                                        )}
+                                        {!row.water && (
+                                            <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950" onClick={() => openStart(row)}>
+                                                Mulai
+                                            </AdminButton>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
+                {/* Mobile cards */}
                 {properties.length === 0 && (
-                    <div className="px-6 py-16 text-center text-[#8A8A84]">Tidak ada unit pada filter ini.</div>
+                    <div className="lg:hidden px-6 py-16 text-center text-[#8A8A84]">Tidak ada unit pada filter ini.</div>
                 )}
-
                 {properties.map((row) => {
                     const status = row.water ? statusInfo(row.water.status) : { label: row.has_paid ? 'Lunas' : 'Belum Ada', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
                     const breakdown = row.water ? billBreakdown(row.water) : null;
                     return (
-                        <div key={row.id}>
-                            {/* Desktop row */}
-                            <div className="hidden lg:grid grid-cols-[1.3fr_1fr_1.2fr_1fr_1.3fr_1fr_1fr_auto] gap-4 px-6 py-4 items-center border-b border-[#F1F0EC] hover:bg-[#FBFBF9] transition-colors">
-                                <div className="min-w-0">
-                                    <Link href={`/admin/water/${row.id}`} className="flex items-center gap-2 font-semibold text-[#1A1A18] hover:text-black group">
-                                        <span className="truncate">{row.name}</span>
-                                        <ExternalLink className="w-3.5 h-3.5 text-[#A1A19A] group-hover:text-[#1A1A18] shrink-0" />
-                                    </Link>
-                                    <p className="text-[12px] text-[#8A8A84] mt-0.5 truncate">{row.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {row.status.replace(/_/g, ' ')}</p>
-                                </div>
-                                <div className="text-sm text-[#2A2A27] truncate">{row.tenant?.name ?? '-'}</div>
-                                <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water ? meterLabel(row.water) : '-'}</div>
-                                <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water?.usage !== null && row.water?.usage !== undefined ? `${angka(row.water.usage)} m³` : '-'}</div>
-                                <div className="min-w-0">
-                                    {breakdown ? (
-                                        <div className="text-[13px] leading-5">
-                                            <p className="text-[#2A2A27] tabular-nums whitespace-nowrap">
-                                                {breakdown.included > 0
-                                                    ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
-                                                    : `Tanpa jatah · ${angka(breakdown.excess)} m³ ditagih`}
-                                            </p>
-                                            <p className={`font-semibold tabular-nums whitespace-nowrap ${(row.water?.total_amount ?? 0) > 0 ? 'text-[#1A1A18]' : 'text-[#6B6B67]'}`}>
-                                                {row.water !== null && row.water.total_amount !== null && row.water.total_amount !== undefined ? `${rupiah(row.water.total_amount)}` : '-'}
-                                                {(row.water?.total_amount ?? 0) === 0 && <span className="text-[12px] font-normal text-[#6B6B67]"> · dalam sewa</span>}
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <p className="text-[12px] text-[#8A8A84] leading-5">{row.billing_note}</p>
-                                    )}
-                                </div>
-                                <div className="text-sm text-[#2A2A27] whitespace-nowrap">
-                                    {row.water
-                                        ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}`
-                                        : '-'}
-                                    {row.water?.due_date && <span className="block text-[12px] text-[#8A8A84]">JT {row.water.due_date}</span>}
-                                </div>
-                                <div>
-                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
-                                </div>
-                                <div className="flex items-center justify-end gap-2">
-                                    {row.water?.status === 'METER_DUE' && (
-                                        <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
-                                            <Camera className="w-4 h-4" /> Update Meter
-                                        </AdminButton>
-                                    )}
-                                    {row.water?.status === 'WAITING_PAYMENT' && (
-                                        <>
+                        <div key={row.id} className="lg:hidden px-5 py-4 border-b border-[#F1F0EC]">
+                            <div className="flex items-center justify-between">
+                                <Link href={`/admin/water/${row.id}`} className="font-semibold text-[#1A1A18]">{row.name}</Link>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[13px] text-[#6B6B67]">
+                                <span>Penghuni: <b className="text-[#1A1A18]">{row.tenant?.name ?? '-'}</b></span>
+                                <span>Meter: <b className="text-[#1A1A18]">{row.water ? meterLabel(row.water) : '-'}</b></span>
+                                <span>Periode: <b className="text-[#1A1A18]">{row.water ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}` : '-'}</b></span>
+                            </div>
+                            {breakdown && breakdown.included > 0 && breakdown.excess > 0 && (
+                                <p className="mt-2 text-[13px] text-[#6B6B67]">{angka(breakdown.excess)} m³ lebih</p>
+                            )}
+                            {breakdown && breakdown.included > 0 && breakdown.excess === 0 && (
+                                <p className="mt-2 text-[13px] text-[#6B6B67]">Termasuk sewa · {angka(row.water?.allowance ?? 5)} m³ pertama</p>
+                            )}
+                            {breakdown && breakdown.included === 0 && (
+                                <p className="mt-2 text-[13px] text-[#6B6B67]">Air ditagih terpisah · {angka(breakdown.excess)} m³</p>
+                            )}
+                            {row.water && (
+                                <div className="flex items-center justify-between mt-3">
+                                    <span className="text-[13px] tabular-nums">{row.water.usage !== null && row.water.usage !== undefined ? `Pemakaian ${angka(row.water.usage)} m³` : row.billing_note}</span>
+                                    <div className="flex items-center gap-2">
+                                        {row.water.status === 'WAITING_PAYMENT' && (
                                             <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
+                                        )}
+                                        {row.water.status === 'METER_DUE' && (
+                                            <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
+                                                Update Meter
+                                            </AdminButton>
+                                        )}
+                                        {row.water.status === 'WAITING_PAYMENT' && (
                                             <AdminButton className="h-9 px-3 text-[13px]" onClick={() => confirmPayment(row.water!)}>
                                                 Konfirmasi Bayar
                                             </AdminButton>
-                                        </>
-                                    )}
-                                    {!row.water && (
-                                        <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950" onClick={() => openStart(row)}>
-                                            Mulai
-                                        </AdminButton>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Mobile card */}
-                            <div className="lg:hidden px-5 py-4 border-b border-[#F1F0EC]">
-                                <div className="flex items-center justify-between">
-                                    <Link href={`/admin/water/${row.id}`} className="font-semibold text-[#1A1A18]">{row.name}</Link>
-                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[13px] text-[#6B6B67]">
-                                    <span>Penghuni: <b className="text-[#1A1A18]">{row.tenant?.name ?? '-'}</b></span>
-                                    <span>Meter: <b className="text-[#1A1A18]">{row.water ? meterLabel(row.water) : '-'}</b></span>
-                                    <span>Periode: <b className="text-[#1A1A18]">{row.water ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}` : '-'}</b></span>
-                                </div>
-                                {breakdown && (
-                                    <p className="mt-2 text-[13px] text-[#6B6B67]">
-                                        {breakdown.included > 0
-                                            ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
-                                            : `${angka(breakdown.excess)} m³ ditagih`}
-                                    </p>
-                                )}
-                                {row.water && (
-                                    <div className="flex items-center justify-between mt-3">
-                                        <span className="text-[13px] tabular-nums">{row.water.usage !== null && row.water.usage !== undefined ? `Pemakaian ${angka(row.water.usage)} m³` : row.billing_note}</span>
-                                        <div className="flex items-center gap-2">
-                                            {row.water.status === 'WAITING_PAYMENT' && (
-                                                <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
-                                            )}
-                                            {row.water.status === 'METER_DUE' && (
-                                                <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
-                                                    Update Meter
-                                                </AdminButton>
-                                            )}
-                                            {row.water.status === 'WAITING_PAYMENT' && (
-                                                <AdminButton className="h-9 px-3 text-[13px]" onClick={() => confirmPayment(row.water!)}>
-                                                    Konfirmasi Bayar
-                                                </AdminButton>
-                                            )}
-                                            {!row.water && (
-                                                <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950" onClick={() => openStart(row)}>
-                                                    Mulai
-                                                </AdminButton>
-                                            )}
-                                        </div>
+                                        )}
+                                        {!row.water && (
+                                            <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950" onClick={() => openStart(row)}>
+                                                Mulai
+                                            </AdminButton>
+                                        )}
                                     </div>
-                                )}
-                                {!row.water && (
-                                    <div className="mt-3">
-                                        <p className="text-[13px] text-[#6B6B67]">{row.billing_note}</p>
-                                        <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950 mt-2" onClick={() => openStart(row)}>
-                                            Mulai
-                                        </AdminButton>
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
+                            {!row.water && (
+                                <div className="mt-3">
+                                    <p className="text-[13px] text-[#6B6B67]">{row.billing_note}</p>
+                                    <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950 mt-2" onClick={() => openStart(row)}>
+                                        Mulai
+                                    </AdminButton>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -682,7 +709,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                                 <span className="font-semibold text-[#1A1A18] tabular-nums">{angka(usage)} m³</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-[#6B6B67]">{allowance > 0 ? 'Termasuk sewa' : 'Jatah gratis'}</span>
+                                                <span className="text-[#6B6B67]">{allowance > 0 ? 'Termasuk sewa' : 'Tanpa jatah'}</span>
                                                 <span className="font-semibold text-[#1A1A18] tabular-nums">{angka(allowance)} m³</span>
                                             </div>
                                             <div className="flex justify-between">

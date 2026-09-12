@@ -72,8 +72,8 @@ test('force rewrites the water clause for a KIOSK with deal below standard', fun
     expect($html)->not->toContain('100m³ - 105m³');
 });
 
-test('leaves KIOSK statements untouched when deal price is not below standard', function () {
-    $tenancy = kioskTenancy(2000000); // deal == standard => no separate water
+test('rewrites KIOSK statements even when the deal price is at standard', function () {
+    $tenancy = kioskTenancy(2000000); // deal == standard => still separate water (KIOSK always bills separately)
     $agreement = Agreement::create([
         'tenancy_id' => $tenancy->id,
         'document_html' => oldKioskPaymentBlock(),
@@ -82,5 +82,8 @@ test('leaves KIOSK statements untouched when deal price is not below standard', 
 
     Artisan::call(KioskFixStatementWater::class, ['--force' => true]);
 
-    expect($agreement->fresh()->document_html)->toBe(oldKioskPaymentBlock());
+    $html = $agreement->fresh()->document_html;
+    expect($html)->not->toBe(oldKioskPaymentBlock());
+    expect($html)->toContain('TIDAK termasuk');
+    expect($html)->not->toContain('Uang air sebanyak');
 });

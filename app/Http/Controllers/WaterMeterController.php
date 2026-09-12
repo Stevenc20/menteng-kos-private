@@ -78,7 +78,7 @@ class WaterMeterController extends Controller
 
         $allowedText = $allowance > 0
             ? " (digratiskan {$allowance}m³ pertama)"
-            : " (tanpa jatah gratis, KIOS dengan harga deal di bawah standar)";
+            : " (tanpa jatah gratis, KIOS ditagih terpisah)";
 
         return redirect()->back()->with('success', "Meteran air tercatat. Pemakaian: {$usage}m³. Ditagih: {$chargedUsage}m³ × Rp " . number_format(WaterBillingService::WATER_RATE_PER_M3, 0, ',', '.') . " = Rp " . number_format($charge, 0, ',', '.') . "$allowedText.");
     }

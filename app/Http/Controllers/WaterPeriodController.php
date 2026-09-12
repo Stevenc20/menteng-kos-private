@@ -44,7 +44,7 @@ class WaterPeriodController extends Controller
         $openPeriods = WaterPeriod::query()
             ->whereIn('property_id', $propertyIds)
             ->whereIn('status', [WaterPeriod::STATUS_METER_DUE, WaterPeriod::STATUS_WAITING_PAYMENT])
-            ->with('tenancy')
+            ->with(['tenancy', 'property'])
             ->get()
             ->keyBy('property_id');
 
@@ -93,7 +93,7 @@ class WaterPeriodController extends Controller
                 'billing_note' => $tenant
                     ? $this->billingNote(WaterBillingService::allowanceM3($tenant))
                     : ($property->type === 'KIOSK'
-                        ? 'Air kios ditagih per pemakaian'
+                        ? 'Air ditagih terpisah'
                         : WaterBillingService::WATER_ALLOWANCE_M3.' m³ pertama termasuk sewa'),
                 'water' => $open ? $this->periodPayload($open) : null,
             ];
@@ -148,7 +148,7 @@ class WaterPeriodController extends Controller
 
         $periods = WaterPeriod::query()
             ->where('property_id', $property->id)
-            ->with(['tenant', 'tenancy'])
+            ->with(['tenant', 'tenancy', 'property'])
             ->orderByDesc('period_year')
             ->orderByDesc('period_month')
             ->orderByDesc('id')
@@ -156,7 +156,7 @@ class WaterPeriodController extends Controller
 
         $allowance = $tenancy
             ? WaterBillingService::allowanceM3($tenancy)
-            : WaterBillingService::WATER_ALLOWANCE_M3;
+            : WaterBillingService::allowanceForType($property->type);
 
         return Inertia::render('Admin/WaterDetail', [
             'property' => [
@@ -409,7 +409,7 @@ class WaterPeriodController extends Controller
         } elseif ($period->tenancy) {
             $allowance = WaterBillingService::allowanceM3($period->tenancy);
         } else {
-            $allowance = WaterBillingService::WATER_ALLOWANCE_M3;
+            $allowance = WaterBillingService::allowanceForType($period->property?->type);
         }
 
         return [
@@ -441,7 +441,7 @@ class WaterPeriodController extends Controller
     {
         return $allowance > 0
             ? "{$allowance} m³ pertama termasuk sewa"
-            : 'Air ditagih terpisah (tanpa jatah gratis)';
+            : 'Air ditagih terpisah';
     }
 
     protected function settingsPayload(): array

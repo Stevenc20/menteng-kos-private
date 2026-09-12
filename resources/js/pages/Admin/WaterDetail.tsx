@@ -60,7 +60,16 @@ function statusInfo(status: Period['status']) {
 
 function meterLabel(p: Period): string {
     if (p.meter_start === null) return '-';
-    return `${angka(p.meter_start)} m³ → ${p.meter_end !== null ? angka(p.meter_end) + ' m³' : '…'}`;
+    if (p.meter_end !== null) {
+        return `${angka(p.meter_start)} m³ → ${angka(p.meter_end)} m³`;
+    }
+    // No end recorded yet: show the included-allowance limit for KAMAR
+    // (start + 5m³), but a pending "…" for KIOS (no allowance).
+    const allowance = p.allowance ?? 0;
+    if (allowance > 0) {
+        return `${angka(p.meter_start)} m³ → ${angka((p.meter_start ?? 0) + allowance)} m³`;
+    }
+    return `${angka(p.meter_start)} m³ → …`;
 }
 
 function billBreakdown(p: Period): { included: number; excess: number } | null {
@@ -173,17 +182,19 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Pemakaian</p>
                             <p className="text-xl font-bold text-[#1A1A18] mt-1">{openPeriod.usage !== null ? `${angka(openPeriod.usage)} m³` : '-'}</p>
-                            {openPeriod.usage !== null && openPeriod.billable_usage !== null && (
-                                <p className="text-[12px] text-[#6B6B67] mt-1">
-                                    Incl {angka(Math.max(0, openPeriod.usage - openPeriod.billable_usage))} m³ · Lebih {angka(openPeriod.billable_usage)} m³
-                                </p>
-                            )}
                         </div>
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Tagihan</p>
                             <p className="text-xl font-bold text-[#1A1A18] mt-1 tabular-nums">{rupiah(openPeriod.total_amount)}</p>
+                            {openPeriod.usage !== null && openPeriod.billable_usage !== null && openPeriod.billable_usage > 0 && (
+                                <p className="text-[12px] text-[#6B6B67] mt-1">
+                                    {(openPeriod.usage ?? 0) - openPeriod.billable_usage > 0
+                                        ? `${angka(openPeriod.billable_usage)} m³ lebih`
+                                        : `Air ditagih terpisah · ${angka(openPeriod.billable_usage)} m³`}
+                                </p>
+                            )}
                             {openPeriod.usage !== null && openPeriod.billable_usage !== null && openPeriod.billable_usage === 0 && (
-                                <p className="text-[12px] text-[#6B6B67] mt-1">Tidak ada tagihan (dalam sewa)</p>
+                                <p className="text-[12px] text-[#6B6B67] mt-1">Termasuk sewa · {angka(openPeriod.allowance ?? openPeriod.usage ?? 5)} m³ pertama</p>
                             )}
                         </div>
                     </div>
@@ -275,7 +286,7 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                                         <p className="font-semibold text-[#1A1A18] tabular-nums">{angka(usage)} m³</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[12px] text-[#8A8A84]">Termasuk sewa</p>
+                                                        <p className="text-[12px] text-[#8A8A84]">{allowance > 0 ? 'Termasuk sewa' : 'Tanpa jatah'}</p>
                                                         <p className="font-semibold text-[#1A1A18] tabular-nums">{angka(allowance)} m³</p>
                                                     </div>
                                                     <div>
@@ -375,9 +386,11 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                 <div>
                                     {breakdown && (
                                         <p className="text-[12px] text-[#6B6B67] leading-5 tabular-nums">
-                                            {breakdown.included > 0
-                                                ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
-                                                : `Tanpa jatah · ${angka(breakdown.excess)} m³ ditagih`}
+                                            {breakdown.excess > 0
+                                                ? (breakdown.included > 0
+                                                    ? `${angka(breakdown.excess)} m³ lebih`
+                                                    : `Air ditagih terpisah · ${angka(breakdown.excess)} m³`)
+                                                : `Termasuk sewa · ${angka(p.allowance ?? breakdown.included)} m³ pertama`}
                                         </p>
                                     )}
                                     <p className="font-semibold tabular-nums leading-5">
@@ -399,9 +412,11 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                 <p className="text-[13px] text-[#6B6B67] tabular-nums">{meterLabel(p)} · {p.usage !== null ? `Pemakaian ${angka(p.usage)} m³` : ''}</p>
                                 {breakdown && (
                                     <p className="text-[13px] text-[#6B6B67] tabular-nums">
-                                        {breakdown.included > 0
-                                            ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
-                                            : `${angka(breakdown.excess)} m³ ditagih`}
+                                        {breakdown.excess > 0
+                                            ? (breakdown.included > 0
+                                                ? `${angka(breakdown.excess)} m³ lebih`
+                                                : `Air ditagih terpisah · ${angka(breakdown.excess)} m³`)
+                                            : `Termasuk sewa · ${angka(p.allowance ?? breakdown.included)} m³ pertama`}
                                     </p>
                                 )}
                                 <p className="text-[13px] text-[#6B6B67]">Tagihan <span className={`tabular-nums ${p.total_amount !== null && p.total_amount > 0 ? 'font-bold text-[#1A1A18]' : 'font-semibold'}`}>{rupiah(p.total_amount)}</span>{p.total_amount !== null && p.total_amount === 0 && p.usage !== null && <span> · dalam sewa</span>} · Jatuh tempo {p.due_date ?? '-'}</p>

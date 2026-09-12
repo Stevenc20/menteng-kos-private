@@ -217,7 +217,7 @@ test('kiosk with deal below standard bills the full usage (separate water)', fun
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('properties.0.water.allowance', 0)
-            ->where('properties.0.water.billing_note', 'Air ditagih terpisah (tanpa jatah gratis)')
+            ->where('properties.0.water.billing_note', 'Air ditagih terpisah')
         );
 });
 
