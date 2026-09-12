@@ -37,8 +37,8 @@ export default function Login() {
                     className="absolute inset-0 w-full h-full"
                 >
                     <img 
-                        src="https://images.unsplash.com/photo-1600607687959-ce8a6c25118c?q=80&w=2053&auto=format&fit=crop" 
-                        alt="Menteng Kos Architecture" 
+                        src="/img/kamar-menteng-kos.jpg" 
+                        alt="Kamar Menteng Kos Private" 
                         className="w-full h-full object-cover"
                     />
                 </motion.div>
@@ -60,8 +60,8 @@ export default function Login() {
                     className="absolute bottom-24 right-12 w-64 h-80 rounded-sm overflow-hidden shadow-2xl border border-white/10"
                 >
                     <img 
-                        src="https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?q=80&w=2127&auto=format&fit=crop"
-                        alt="Interior Detail"
+                        src="/img/properti-menteng-kos-1.jpg"
+                        alt="Interior Menteng Kos Private"
                         className="w-full h-full object-cover"
                     />
                 </motion.div>
@@ -94,8 +94,8 @@ export default function Login() {
                 {/* Mobile Header Image (Only visible on small screens) */}
                 <div className="lg:hidden h-64 w-full relative">
                     <img 
-                        src="https://images.unsplash.com/photo-1600607687959-ce8a6c25118c?q=80&w=2053&auto=format&fit=crop" 
-                        alt="Menteng Kos" 
+                        src="/img/properti-menteng-kos-2.jpg" 
+                        alt="Menteng Kos Private" 
                         className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-neutral-900/40" />

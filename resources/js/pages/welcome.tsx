@@ -1,7 +1,12 @@
 import PublicLayout from '@/layouts/PublicLayout';
 import { motion } from 'framer-motion';
 import { Link } from '@inertiajs/react';
-import { ChevronRight, Camera } from 'lucide-react';
+import { ChevronRight, Camera, MapPin, ExternalLink } from 'lucide-react';
+
+const GOOGLE_MAPS_SHORT_URL = 'https://maps.app.goo.gl/5m27exRThDiCj4VGA';
+const GOOGLE_MAPS_EMBED_URL =
+    "https://maps.google.com/maps?q=MENTENG%20KOS%20PRIVATE%2C%20Jl.%20Menteng%20Terusan%20No.20%2C%20Lagoa%2C%20Koja%2C%20Jakarta%2014270&t=m&z=17&ie=UTF8&iwloc=B&output=embed";
+const KOS_ADDRESS = 'Jl. Menteng Terusan No.20, Lagoa, Koja, Jakarta Utara 14270';
 
 // Types
 type PropertyStatus = 'AVAILABLE' | 'OCCUPIED' | 'UPCOMING_AVAILABLE' | 'MAINTENANCE';
@@ -48,9 +53,9 @@ export default function Welcome({ properties }: WelcomeProps) {
             <section className="relative h-[80vh] min-h-[600px] flex items-center justify-center bg-[#1A1A18] overflow-hidden">
                 {/* Background Image */}
                 <img 
-                    src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=2070&auto=format&fit=crop" 
-                    alt="Hero Architecture" 
-                    className="absolute inset-0 w-full h-full object-cover opacity-60"
+                    src="/img/hero-menteng-kos.png" 
+                    alt="Menteng Kos Private" 
+                    className="absolute inset-0 w-full h-full object-cover object-center opacity-60"
                 />
                 
                 {/* Gradient Overlay */}
@@ -177,6 +182,43 @@ export default function Welcome({ properties }: WelcomeProps) {
                             })}
                         </div>
                     )}
+                </div>
+            </section>
+
+            {/* LOCATION SECTION */}
+            <section id="lokasi" className="py-20 md:py-32 bg-white">
+                <div className="max-w-[1440px] mx-auto px-6 lg:px-12">
+                    <div className="text-center max-w-2xl mx-auto mb-12 md:mb-16">
+                        <div className="inline-flex items-center gap-2 text-[#6B6B67] text-xs uppercase tracking-widest font-semibold mb-4">
+                            <MapPin className="w-4 h-4 text-[#047857]" />
+                            Lokasi
+                        </div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-[#1A1A18] mb-4 tracking-tight">Lokasi Menteng Kos Private</h2>
+                        <p className="text-[#6B6B67] text-base md:text-lg">{KOS_ADDRESS}</p>
+                    </div>
+
+                    <div className="rounded-2xl overflow-hidden border border-[#E8E7E3] shadow-lg max-w-5xl mx-auto bg-[#F8F8F6]">
+                        <iframe
+                            src={GOOGLE_MAPS_EMBED_URL}
+                            title="Peta Lokasi Menteng Kos Private"
+                            className="w-full h-[360px] sm:h-[440px] lg:h-[520px] border-0 block"
+                            loading="lazy"
+                            allowFullScreen
+                            referrerPolicy="no-referrer-when-downgrade"
+                        />
+                    </div>
+
+                    <div className="mt-10 flex justify-center px-4">
+                        <a 
+                            href={GOOGLE_MAPS_SHORT_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 px-8 py-4 bg-[#1A1A18] text-white rounded-full font-medium hover:bg-neutral-800 transition-colors shadow-lg"
+                        >
+                            Buka di Google Maps
+                            <ExternalLink className="w-4 h-4" />
+                        </a>
+                    </div>
                 </div>
             </section>
         </PublicLayout>
