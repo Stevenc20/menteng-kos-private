@@ -1,6 +1,7 @@
 import PublicLayout from '@/layouts/PublicLayout';
 import { motion } from 'framer-motion';
 import { Link } from '@inertiajs/react';
+import { useState } from 'react';
 import { ChevronRight, Camera, MapPin, ExternalLink } from 'lucide-react';
 
 const GOOGLE_MAPS_SHORT_URL = 'https://maps.app.goo.gl/5m27exRThDiCj4VGA';
@@ -32,7 +33,33 @@ interface WelcomeProps {
     properties: Property[];
 }
 
+type UnitCategory = 'basic' | 'mezzanine' | 'kios' | 'other';
+type UnitFilter = 'all' | UnitCategory;
+
+const UNIT_FILTERS: { value: UnitFilter; label: string }[] = [
+    { value: 'all', label: 'Semua' },
+    { value: 'basic', label: 'Basic' },
+    { value: 'mezzanine', label: 'Mezzanine' },
+    { value: 'kios', label: 'Kios' },
+];
+
+const getUnitCategory = (name: string): UnitCategory => {
+    const title = name.toLowerCase();
+
+    if (title.includes('basic')) return 'basic';
+    if (title.includes('mezzanine')) return 'mezzanine';
+    if (title.includes('kios')) return 'kios';
+
+    return 'other';
+};
+
 export default function Welcome({ properties }: WelcomeProps) {
+    const [activeFilter, setActiveFilter] = useState<UnitFilter>('all');
+
+    const visibleProperties =
+        activeFilter === 'all'
+            ? properties
+            : properties.filter((property) => getUnitCategory(property.name) === activeFilter);
     const fadeUp = {
         hidden: { opacity: 0, y: 40 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } }
@@ -91,13 +118,41 @@ export default function Welcome({ properties }: WelcomeProps) {
                         <p className="text-[#6B6B67] text-base md:text-lg">Pilih ruang yang sesuai dengan kebutuhan Anda. Semua unit didesain dengan sirkulasi udara dan cahaya alami yang optimal.</p>
                     </div>
 
+                    {properties.length > 0 && (
+                        <div className="flex flex-wrap justify-center gap-3 mb-12 md:mb-16">
+                            {UNIT_FILTERS.map(({ value, label }) => {
+                                const isActive = activeFilter === value;
+
+                                return (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setActiveFilter(value)}
+                                        aria-pressed={isActive}
+                                        className={`px-6 py-2.5 text-sm font-medium rounded-full transition-colors cursor-pointer ${
+                                            isActive
+                                                ? 'bg-[#1A1A18] text-white shadow-md'
+                                                : 'bg-white text-[#6B6B67] border border-[#E8E7E3] hover:text-[#1A1A18] hover:border-[#1A1A18]/40'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {properties.length === 0 ? (
                         <div className="text-center py-24 text-[#6B6B67] bg-white rounded-2xl border border-[#E8E7E3] shadow-sm">
                             Belum ada unit yang terdaftar.
                         </div>
+                    ) : visibleProperties.length === 0 ? (
+                        <div className="text-center py-24 text-[#6B6B67] bg-white rounded-2xl border border-[#E8E7E3] shadow-sm">
+                            Belum ada unit pada kategori ini.
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-                            {properties.map((property) => {
+                            {visibleProperties.map((property) => {
                                 const cover = property.media?.find(m => m.is_cover) || property.media?.[0];
                                 const imageCount = property.media?.filter(m => m.type === 'IMAGE').length || 0;
                                 const isOccupied = property.status === 'OCCUPIED';
