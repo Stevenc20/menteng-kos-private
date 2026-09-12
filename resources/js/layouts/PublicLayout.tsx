@@ -45,6 +45,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
             <a href="/#rooms" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Kamar & Kios</a>
             <a href="/#facilities" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Fasilitas</a>
             <a href="/#gallery" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Galeri</a>
+            <a href="/#lokasi" onClick={() => setIsMobileMenuOpen(false)} className={`text-sm font-medium transition-colors py-2 ${linkHoverColor}`}>Lokasi</a>
         </>
     );
 
@@ -141,6 +142,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                                 <a href="/#rooms" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Kamar & Kios</a>
                                 <a href="/#facilities" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Fasilitas</a>
                                 <a href="/#gallery" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Galeri</a>
+                                <a href="/#lokasi" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-medium hover:text-[#6B6B67] transition-colors py-2">Lokasi</a>
                                 
                                 <div className="h-px bg-[#E8E7E3] my-4" />
                                 

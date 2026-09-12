@@ -2,7 +2,7 @@ import PublicLayout from '@/layouts/PublicLayout';
 import { motion } from 'framer-motion';
 import { Link } from '@inertiajs/react';
 import { useState } from 'react';
-import { ChevronRight, Camera, MapPin, ExternalLink } from 'lucide-react';
+import { ChevronRight, Camera, MapPin, ExternalLink, AirVent, Wifi, ShowerHead, Flame, BedDouble, Shirt, Cctv, Car } from 'lucide-react';
 
 const GOOGLE_MAPS_SHORT_URL = 'https://maps.app.goo.gl/5m27exRThDiCj4VGA';
 const GOOGLE_MAPS_EMBED_URL =
@@ -237,6 +237,71 @@ export default function Welcome({ properties }: WelcomeProps) {
                             })}
                         </div>
                     )}
+                </div>
+            </section>
+
+            {/* FACILITIES SECTION */}
+            <section id="facilities" className="py-20 md:py-32 bg-white">
+                <div className="max-w-[1440px] mx-auto px-6 lg:px-12">
+                    <div className="text-center max-w-2xl mx-auto mb-12 md:mb-16">
+                        <div className="text-[#6B6B67] text-xs uppercase tracking-widest font-semibold mb-4">Fasilitas</div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-[#1A1A18] mb-4 tracking-tight">Nikmati Fasilitas Premium</h2>
+                        <p className="text-[#6B6B67] text-base md:text-lg">Setiap unit dirancang untuk kenyamanan harian dengan fasilitas yang lengkap dan terawat.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                        {[
+                            { label: 'AC (Air Conditioner)', icon: AirVent },
+                            { label: 'WiFi Berkecepatan Tinggi', icon: Wifi },
+                            { label: 'Kamar Mandi Dalam', icon: ShowerHead },
+                            { label: 'Water Heater', icon: Flame },
+                            { label: 'Kasur & Bantal', icon: BedDouble },
+                            { label: 'Lemari Pakaian', icon: Shirt },
+                            { label: 'CCTV 24 Jam', icon: Cctv },
+                            { label: 'Area Parkir', icon: Car },
+                        ].map(({ label, icon: Icon }) => (
+                            <div key={label} className="flex flex-col items-center text-center gap-4 p-6 md:p-8 bg-[#F8F8F6] border border-[#E8E7E3] rounded-2xl transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                                <div className="w-12 h-12 rounded-full bg-[#1A1A18] text-white flex items-center justify-center">
+                                    <Icon className="w-5 h-5" />
+                                </div>
+                                <span className="text-sm md:text-[15px] text-[#1A1A18] font-medium leading-snug">{label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* GALLERY SECTION */}
+            <section id="gallery" className="py-20 md:py-32 bg-[#F8F8F6]">
+                <div className="max-w-[1440px] mx-auto px-6 lg:px-12">
+                    <div className="text-center max-w-2xl mx-auto mb-12 md:mb-16">
+                        <div className="text-[#6B6B67] text-xs uppercase tracking-widest font-semibold mb-4">Galeri</div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-[#1A1A18] mb-4 tracking-tight">Suasana Menteng Kos Private</h2>
+                        <p className="text-[#6B6B67] text-base md:text-lg">Gambar asli unit dan suasana hunian dari dalam.</p>
+                    </div>
+
+                    <div className="columns-2 lg:columns-3 gap-4 md:gap-6">
+                        {[
+                            { src: '/img/kamar-menteng-kos.jpg', alt: 'Kamar Menteng Kos Private', label: 'Kamar' },
+                            { src: '/img/properti-menteng-kos-1.jpg', alt: 'Interior Menteng Kos Private', label: 'Interior' },
+                            { src: '/img/properti-menteng-kos-2.jpg', alt: 'Suasana Menteng Kos Private', label: 'Suasana' },
+                            { src: '/img/hero-menteng-kos.png', alt: 'Tampak Menteng Kos Private', label: 'Tampak Hunian' },
+                        ].map(({ src, alt, label }) => (
+                            <div key={src} className="relative group rounded-2xl overflow-hidden border border-[#E8E7E3] mb-4 md:mb-6 break-inside-avoid bg-white select-none" onContextMenu={(e) => e.preventDefault()}>
+                                <img
+                                    src={src}
+                                    alt={alt}
+                                    loading="lazy"
+                                    draggable="false"
+                                    className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A18]/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                <span className="absolute bottom-3 left-4 text-white text-xs font-semibold tracking-wide uppercase opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    {label}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </section>
 
