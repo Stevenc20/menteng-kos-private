@@ -2,7 +2,7 @@ import PublicLayout from '@/layouts/PublicLayout';
 import { motion } from 'framer-motion';
 import { Link } from '@inertiajs/react';
 import { useState } from 'react';
-import { ChevronRight, Camera, MapPin, ExternalLink, AirVent, Wifi, ShowerHead, Flame, BedDouble, Shirt, Cctv, Car } from 'lucide-react';
+import { ChevronRight, Camera, MapPin, ExternalLink, AirVent, Wifi, ShowerHead, Route, BedDouble, Shirt, Cctv, Car } from 'lucide-react';
 
 const GOOGLE_MAPS_SHORT_URL = 'https://maps.app.goo.gl/5m27exRThDiCj4VGA';
 const GOOGLE_MAPS_EMBED_URL =
@@ -254,8 +254,8 @@ export default function Welcome({ properties }: WelcomeProps) {
                             { label: 'AC (Air Conditioner)', icon: AirVent },
                             { label: 'WiFi Berkecepatan Tinggi', icon: Wifi },
                             { label: 'Kamar Mandi Dalam', icon: ShowerHead },
-                            { label: 'Water Heater', icon: Flame },
-                            { label: 'Kasur & Bantal', icon: BedDouble },
+                            { label: 'Jalan Besar', icon: Route },
+                            { label: 'Spring Bed & Bantal', icon: BedDouble },
                             { label: 'Lemari Pakaian', icon: Shirt },
                             { label: 'CCTV 24 Jam', icon: Cctv },
                             { label: 'Area Parkir', icon: Car },
