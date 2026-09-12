@@ -582,6 +582,46 @@ class AdminController extends Controller
         return back()->with('success', 'Dokumen Surat Pernyataan berhasil diunggah.');
     }
 
+    /**
+     * [ADMIN] Activate the tenancy using an uploaded (old/physical) statement.
+     *
+     * Mirrors the admin-context branch of OnboardingController::submitAgreement:
+     * after the admin uploads the old statement, the tenant is activated immediately
+     * without requiring a digital signature.
+     */
+    public function finalizeUploadedAgreement(Request $request, $id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+
+        if (! $agreement || ! $agreement->uploaded_document_path) {
+            return redirect()->back()->withErrors(['document' => 'Unggah Surat Pernyataan (lama/fisik) terlebih dahulu.']);
+        }
+
+        DB::transaction(function () use ($tenancy, $request) {
+            $tenancy->update([
+                'status' => 'ACTIVE',
+                'approval_status' => 'APPROVED',
+                'approved_at' => now(),
+                'approved_by' => $request->user()?->id,
+                'rejection_reason' => null,
+                'move_in_date' => $tenancy->move_in_date ?? now()->toDateString(),
+            ]);
+
+            $property = Property::find($tenancy->property_id);
+            if ($property && $property->status !== 'OCCUPIED') {
+                $property->update(['status' => 'OCCUPIED']);
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => "Tenant {$tenancy->user?->name} diaktifkan menggunakan Surat Pernyataan unggahan.",
+        ]);
+
+        return redirect()->route('admin.tenants');
+    }
+
     public function downloadAgreementDocument($id)
     {
         $tenancy = Tenancy::findOrFail($id);

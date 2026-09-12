@@ -40,9 +40,14 @@ interface WizardProps {
     tenancy: Tenancy;
     profile: Profile;
     adminTenancyId?: number;
+    agreement?: {
+        has_uploaded_document: boolean;
+        uploaded_document_type?: string | null;
+        has_digital_document?: boolean;
+    } | null;
 }
 
-export default function Wizard({ tenancy, profile, adminTenancyId }: WizardProps) {
+export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: WizardProps) {
     const [step, setStep] = useState(1);
     const totalSteps = 8;
 
@@ -99,6 +104,49 @@ export default function Wizard({ tenancy, profile, adminTenancyId }: WizardProps
     const [uploading, setUploading] = useState<{ ktp_1: boolean; ktp_2: boolean }>({ ktp_1: false, ktp_2: false });
     const [uploadError, setUploadError] = useState<{ ktp_1: string; ktp_2: string }>({ ktp_1: '', ktp_2: '' });
     const [ocrStatus, setOcrStatus] = useState<{ ktp_1: string; ktp_2: string }>({ ktp_1: '', ktp_2: '' });
+
+    // Admin-context only: allow uploading an old/physical statement instead of the digital template.
+    const hasUploadedStatement = Boolean(adminTenancyId && agreement?.has_uploaded_document);
+    const [statementMode, setStatementMode] = useState<'digital' | 'upload'>(hasUploadedStatement ? 'upload' : 'digital');
+    const [suratFile, setSuratFile] = useState<File | null>(null);
+    const [suratSending, setSuratSending] = useState(false);
+    const [suratError, setSuratError] = useState('');
+    const suratForm = useForm({ document: null as File | null });
+
+    const finalizeUploadedStatement = () => {
+        setSuratSending(true);
+        router.post(`/admin/tenants/${adminTenancyId}/agreements/finalize-uploaded`, {}, {
+            preserveScroll: true,
+            onFinish: () => {
+                setSuratSending(false);
+                try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* abaikan */ }
+            },
+            onError: (err) => setSuratError((err as any)?.document || 'Gagal mengaktifkan tenant dengan surat unggahan.'),
+        });
+    };
+
+    const handleUploadModeSubmit = () => {
+        if (suratSending) return;
+        setSuratError('');
+        if (!suratFile && !hasUploadedStatement) {
+            setSuratError('Pilih file Surat Pernyataan (foto/PDF) terlebih dahulu.');
+            return;
+        }
+        if (suratFile) {
+            setSuratSending(true);
+            suratForm.post(`/admin/tenants/${adminTenancyId}/agreements/upload`, {
+                forceFormData: true,
+                preserveScroll: true,
+                onSuccess: () => finalizeUploadedStatement(),
+                onError: (e) => {
+                    setSuratSending(false);
+                    setSuratError(e.document || 'Gagal mengunggah surat. Periksa format/ukuran file.');
+                },
+            });
+        } else {
+            finalizeUploadedStatement();
+        }
+    };
 
     const { data, setData, post, processing, errors } = useForm({
         whatsapp: p.whatsapp ?? '',
@@ -691,17 +739,99 @@ export default function Wizard({ tenancy, profile, adminTenancyId }: WizardProps
             case 7:
                 return (
                     <div className="space-y-6">
-                        <h2 className="text-2xl font-bold tracking-tight">Review Surat Pernyataan</h2>
-                        <p className="text-sm text-neutral-500">Mohon baca dan pahami ketentuan sebelum menandatangani.</p>
-                        
-                        <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm overflow-x-hidden text-sm"
-                             dangerouslySetInnerHTML={{ __html: data.document_html || buildStatementHTML() }}
-                        />
-
-                        <div className="flex gap-3 pt-4">
-                            <button onClick={() => setStep(6)} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 w-1/3">Kembali</button>
-                            <button onClick={() => { if(!data.document_html) generateAgreementHTML(); nextStep(); }} className="px-6 py-3 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 w-2/3">Setuju & Lanjut</button>
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight">Review Surat Pernyataan</h2>
+                            <p className="text-sm text-neutral-500">Mohon baca dan pahami ketentuan sebelum menandatangani.</p>
                         </div>
+
+                        {adminTenancyId && (
+                            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 space-y-3">
+                                <p className="text-sm font-semibold text-neutral-700">Metode Surat Pernyataan</p>
+                                <div className="grid sm:grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setStatementMode('digital')}
+                                        className={`text-left px-4 py-3 rounded-xl border-2 bg-white transition ${
+                                            statementMode === 'digital' ? 'border-neutral-900' : 'border-neutral-200 hover:border-neutral-400'
+                                        }`}
+                                    >
+                                        <span className="block font-bold text-sm">✍️ Buat &amp; Tanda Tangan Digital</span>
+                                        <span className="block text-xs text-neutral-500 mt-0.5">Buat surat baru dari template, lalu paraf &amp; tanda tangan.</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setStatementMode('upload')}
+                                        className={`text-left px-4 py-3 rounded-xl border-2 bg-white transition ${
+                                            statementMode === 'upload' ? 'border-neutral-900' : 'border-neutral-200 hover:border-neutral-400'
+                                        }`}
+                                    >
+                                        <span className="block font-bold text-sm">📄 Unggah Surat Lama / Fisik</span>
+                                        <span className="block text-xs text-neutral-500 mt-0.5">Tenant sudah punya surat pernyataan lama → langsung unggah.</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {statementMode === 'digital' ? (
+                            <>
+                                <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm overflow-x-hidden text-sm"
+                                     dangerouslySetInnerHTML={{ __html: data.document_html || buildStatementHTML() }}
+                                />
+
+                                <div className="flex gap-3 pt-4">
+                                    <button onClick={() => setStep(6)} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 w-1/3">Kembali</button>
+                                    <button onClick={() => { if(!data.document_html) generateAgreementHTML(); nextStep(); }} className="px-6 py-3 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 w-2/3">Setuju &amp; Lanjut</button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <span className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center text-xl">📄</span>
+                                        <div>
+                                            <p className="font-bold text-sm text-neutral-800">Unggah Surat Pernyataan Lama</p>
+                                            <p className="text-xs text-neutral-500 max-w-md">Pilih foto/scan surat pernyataan lama tenant (JPG, PNG, WebP, atau PDF). Tanpa perlu tanda tangan digital.</p>
+                                        </div>
+                                    </div>
+
+                                    {hasUploadedStatement && (
+                                        <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-700 flex items-center gap-2">
+                                            ✓ Surat pernyataan lama sudah terunggah. Langsung selesaikan, atau ganti dengan file baru.
+                                        </div>
+                                    )}
+
+                                    <label className="flex flex-col items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-neutral-300 rounded-xl p-6 bg-neutral-50 hover:border-neutral-500 transition">
+                                        <span className="text-2xl">📎</span>
+                                        <span className="text-sm font-medium text-neutral-700">
+                                            {suratFile ? suratFile.name : (hasUploadedStatement ? 'Ganti Surat Lama' : 'Pilih File / Buka Kamera')}
+                                        </span>
+                                        <span className="text-xs text-neutral-400">JPG, PNG, WebP, atau PDF — maks 10MB</span>
+                                        <input
+                                            type="file"
+                                            accept="image/*,application/pdf"
+                                            capture="environment"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const f = e.target.files?.[0] ?? null;
+                                                setSuratFile(f);
+                                                suratForm.setData('document', f);
+                                            }}
+                                        />
+                                    </label>
+
+                                    {suratFile && <p className="text-xs font-medium text-green-600 mt-2">✔ {suratFile.name} siap diunggah</p>}
+                                    {suratError && <p className="text-sm text-red-500 font-medium mt-2">{suratError}</p>}
+                                    {suratForm.errors.document && <p className="text-sm text-red-500 font-medium mt-2">{suratForm.errors.document}</p>}
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button onClick={() => setStep(6)} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 w-1/3">Kembali</button>
+                                    <button onClick={handleUploadModeSubmit} disabled={suratSending || processing} className="px-6 py-3 rounded-lg font-bold bg-neutral-900 text-white hover:bg-neutral-800 w-2/3 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        {suratSending || processing ? 'Menyimpan...' : 'Unggah & Aktifkan Tenant'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             case 8:

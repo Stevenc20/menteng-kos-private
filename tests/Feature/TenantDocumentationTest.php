@@ -88,6 +88,64 @@ class TenantDocumentationTest extends TestCase
         Storage::disk('local')->assertExists('agreements_scans/'.$file->hashName());
     }
 
+    public function test_can_activate_tenancy_with_uploaded_statement()
+    {
+        $admin = User::create(['name' => 'Admin Finalize', 'email' => 'adminf@test.com', 'password' => '123', 'role' => 'ADMIN']);
+        $tenant = User::create(['name' => 'Tenant Finalize', 'email' => 'tenantf@test.com', 'password' => '123', 'role' => 'TENANT']);
+        $property = Property::create(['name' => 'Kios F', 'type' => 'KIOSK', 'normal_price' => 1000000]);
+
+        $tenancy = Tenancy::create([
+            'user_id' => $tenant->id,
+            'property_id' => $property->id,
+            'agreed_price' => 1500000,
+            'move_in_date' => '2026-09-01',
+            'status' => 'ONBOARDING_IN_PROGRESS',
+        ]);
+
+        $file = UploadedFile::fake()->create('surat-lama.pdf', 100, 'application/pdf');
+
+        $this->actingAs($admin)->post(route('admin.tenants.agreements.upload', $tenancy->id), [
+            'document' => $file,
+        ])->assertStatus(302);
+
+        $this->actingAs($admin)->post(route('admin.tenants.agreements.finalizeUploaded', $tenancy->id))
+            ->assertRedirect(route('admin.tenants'));
+
+        $this->assertDatabaseHas('tenancies', [
+            'id' => $tenancy->id,
+            'status' => 'ACTIVE',
+            'approval_status' => 'APPROVED',
+        ]);
+
+        $this->assertDatabaseHas('properties', [
+            'id' => $property->id,
+            'status' => 'OCCUPIED',
+        ]);
+    }
+
+    public function test_finalize_requires_uploaded_statement()
+    {
+        $admin = User::create(['name' => 'Admin NoSurat', 'email' => 'admins@test.com', 'password' => '123', 'role' => 'ADMIN']);
+        $tenant = User::create(['name' => 'Tenant NoSurat', 'email' => 'ts@test.com', 'password' => '123', 'role' => 'TENANT']);
+        $property = Property::create(['name' => 'Kamar N', 'type' => 'ROOM', 'normal_price' => 1000000]);
+
+        $tenancy = Tenancy::create([
+            'user_id' => $tenant->id,
+            'property_id' => $property->id,
+            'agreed_price' => 1000000,
+            'move_in_date' => '2026-09-01',
+            'status' => 'ONBOARDING_IN_PROGRESS',
+        ]);
+
+        $this->actingAs($admin)->post(route('admin.tenants.agreements.finalizeUploaded', $tenancy->id))
+            ->assertSessionHasErrors('document');
+
+        $this->assertDatabaseHas('tenancies', [
+            'id' => $tenancy->id,
+            'status' => 'ONBOARDING_IN_PROGRESS',
+        ]);
+    }
+
     public function test_can_copy_property_media_to_before_documentation()
     {
         $admin = User::create(['name' => 'Admin3', 'email' => 'admin3@test.com', 'password' => '123', 'role' => 'ADMIN']);

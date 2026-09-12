@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Tenancy;
-use App\Models\TenantProfile;
 use App\Models\Agreement;
 use App\Models\AgreementSignature;
 use App\Models\Property;
+use App\Models\Tenancy;
+use App\Models\TenantProfile;
 use App\Services\KtpOcrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,6 +32,7 @@ class OnboardingController extends Controller
         if ($request->route() && $request->route()->hasParameter('tenancy')) {
             $tenancy = Tenancy::with(['user', 'property'])->findOrFail((int) $request->route('tenancy'));
             abort_unless($tenancy->user && $tenancy->user->role === 'TENANT', 403, 'Target bukan tenant.');
+
             return $tenancy;
         }
 
@@ -40,7 +41,7 @@ class OnboardingController extends Controller
 
         $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
 
-        if ($require && !$tenancy) {
+        if ($require && ! $tenancy) {
             abort(404, 'Belum ada tenancy.');
         }
 
@@ -57,7 +58,7 @@ class OnboardingController extends Controller
         $user = Auth::user();
 
         // Ensure user is a TENANT (tenant-facing route only)
-        if (!$isAdminContext && $user->role !== 'TENANT') {
+        if (! $isAdminContext && $user->role !== 'TENANT') {
             return redirect('/dashboard');
         }
 
@@ -65,7 +66,7 @@ class OnboardingController extends Controller
             ? Tenancy::with('property')->findOrFail((int) $request->route('tenancy'))
             : Tenancy::with('property')->where('user_id', $user->id)->first();
 
-        if (!$tenancy) {
+        if (! $tenancy) {
             // If completely no tenancy exists (not invited properly)
             abort(403, 'Belum ada undangan sewa untuk akun Anda. Silakan hubungi Admin.');
         }
@@ -74,9 +75,16 @@ class OnboardingController extends Controller
 
         // Admin-driven onboarding: always render the wizard so the admin can fill/continue.
         if ($isAdminContext) {
+            $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+
             return Inertia::render('Admin/TenantOnboarding', [
                 'tenancy' => $tenancy,
-                'profile' => $profile ?? (object)[],
+                'profile' => $profile ?? (object) [],
+                'agreement' => $agreement ? [
+                    'has_uploaded_document' => (bool) $agreement->uploaded_document_path,
+                    'uploaded_document_type' => $agreement->uploaded_document_type,
+                    'has_digital_document' => (bool) $agreement->document_html,
+                ] : null,
             ]);
         }
 
@@ -85,20 +93,23 @@ class OnboardingController extends Controller
         if (in_array($tenancy->status, ['ACTIVE', 'NOT_CONTINUE', 'SUSPENDED'])) {
             if ($tenancy->status === 'ACTIVE' && $tenancy->approval_status === 'APPROVED') {
                 $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+
                 return Inertia::render('Tenant/Onboarding/ApprovedApproval', [
                     'tenancy' => $tenancy,
-                    'agreement' => $agreement
+                    'agreement' => $agreement,
                 ]);
             }
+
             return redirect('/tenant/dashboard');
         }
 
         // Rejected / waiting for approval → show status page (pending or needs-revision)
         if (in_array($tenancy->status, ['AGREEMENT_SUBMITTED', 'PENDING_ADMIN_APPROVAL'])) {
             $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+
             return Inertia::render('Tenant/Onboarding/WaitingApproval', [
                 'tenancy' => $tenancy,
-                'agreement' => $agreement
+                'agreement' => $agreement,
             ]);
         }
 
@@ -117,13 +128,13 @@ class OnboardingController extends Controller
         $userId = $tenancy?->user_id ?? $request->user()->id;
 
         $profile = TenantProfile::where('user_id', $userId)->first();
-        
+
         return response()->json([
             'ok' => true,
             'profile' => $profile ? $profile->only([
                 'ktp_1_photo', 'ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address',
                 'ktp_2_photo', 'ktp_2_name', 'ktp_2_nik', 'ktp_2_birth_place', 'ktp_2_birth_date', 'ktp_2_job', 'ktp_2_address',
-            ]) : (object)[],
+            ]) : (object) [],
         ]);
     }
 
@@ -203,7 +214,7 @@ class OnboardingController extends Controller
         }
 
         // If no second occupant, clear out occupant 2 data (including its photo path).
-        if (!$request->boolean('has_second_occupant')) {
+        if (! $request->boolean('has_second_occupant')) {
             $profileData['ktp_2_name'] = null;
             $profileData['ktp_2_nik'] = null;
             $profileData['ktp_2_birth_place'] = null;
@@ -250,7 +261,7 @@ class OnboardingController extends Controller
             'ktp_2_photo' => 'nullable|image',
         ]);
 
-        if (!$request->hasFile('ktp_1_photo') && !$request->hasFile('ktp_2_photo')) {
+        if (! $request->hasFile('ktp_1_photo') && ! $request->hasFile('ktp_2_photo')) {
             return response()->json(['ok' => false, 'message' => 'No KTP photo file was received. Silakan coba lagi.'], 422);
         }
 
@@ -278,7 +289,7 @@ class OnboardingController extends Controller
             $saved = $profile->save();
         } catch (\Throwable $e) {
             $saved = false;
-            Log::error('KTP upload: database persist threw. ' . $e->getMessage());
+            Log::error('KTP upload: database persist threw. '.$e->getMessage());
         }
 
         if (! $saved) {
@@ -310,21 +321,21 @@ class OnboardingController extends Controller
                     Log::info('KTP OCR parsed result for occupant 1', ['data' => $ocr]);
                     $ocrResults['ktp_1'] = $ocr;
                 } catch (\Exception $e) {
-                    Log::error('KTP OCR failed for occupant 1: ' . $e->getMessage());
+                    Log::error('KTP OCR failed for occupant 1: '.$e->getMessage());
                     $ocrResults['ktp_1'] = ['error' => 'OCR processing failed'];
                 }
 
                 // GANTI KTP: Jangan me-merge data KTP lama dengan KTP baru.
                 // Kosongkan semua field identitas lama (untuk penghuni ini) terlebih dahulu.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    $profile->{'ktp_1_' . $field} = null;
+                    $profile->{'ktp_1_'.$field} = null;
                 }
 
                 // Masukkan HANYA data dari OCR KTP terbaru
-                if (isset($ocr) && !isset($ocr['error'])) {
+                if (isset($ocr) && ! isset($ocr['error'])) {
                     foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
                         if (isset($ocr[$field]) && $ocr[$field] !== '') {
-                            $profile->{'ktp_1_' . $field} = $ocr[$field];
+                            $profile->{'ktp_1_'.$field} = $ocr[$field];
                         }
                     }
                 }
@@ -343,19 +354,19 @@ class OnboardingController extends Controller
                     Log::info('KTP OCR parsed result for occupant 2', ['data' => $ocr]);
                     $ocrResults['ktp_2'] = $ocr;
                 } catch (\Exception $e) {
-                    Log::error('KTP OCR failed for occupant 2: ' . $e->getMessage());
+                    Log::error('KTP OCR failed for occupant 2: '.$e->getMessage());
                     $ocrResults['ktp_2'] = ['error' => 'OCR processing failed'];
                 }
 
                 // GANTI KTP: Jangan me-merge data KTP lama dengan KTP baru.
                 foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
-                    $profile->{'ktp_2_' . $field} = null;
+                    $profile->{'ktp_2_'.$field} = null;
                 }
 
-                if (isset($ocr) && !isset($ocr['error'])) {
+                if (isset($ocr) && ! isset($ocr['error'])) {
                     foreach (['name', 'nik', 'birth_place', 'birth_date', 'job', 'address'] as $field) {
                         if (isset($ocr[$field]) && $ocr[$field] !== '') {
-                            $profile->{'ktp_2_' . $field} = $ocr[$field];
+                            $profile->{'ktp_2_'.$field} = $ocr[$field];
                         }
                     }
                 }
@@ -369,6 +380,7 @@ class OnboardingController extends Controller
         $profile->refresh();
 
         Log::info('KTP OCR response returned to frontend', ['ocr' => $ocrResults]);
+
         return response()->json(array_merge(['ok' => true], $newPaths, [
             'profile' => $profile->only([
                 'ktp_1_photo', 'ktp_1_name', 'ktp_1_nik', 'ktp_1_birth_place', 'ktp_1_birth_date', 'ktp_1_job', 'ktp_1_address',
@@ -401,7 +413,7 @@ class OnboardingController extends Controller
 
         $path = $kind === 'ktp_2' ? ($profile->ktp_2_photo ?? null) : ($profile->ktp_1_photo ?? null);
 
-        if (!$path || !Storage::disk('local')->exists($path)) {
+        if (! $path || ! Storage::disk('local')->exists($path)) {
             abort(404);
         }
 
@@ -439,17 +451,17 @@ class OnboardingController extends Controller
             ['agreement_id' => $agreement->id, 'occupant_type' => 'OCCUPANT_1'],
             [
                 'signature_image' => $validated['signature_1'], // Store base64 or decode and save as file
-                'paraf_image' => $validated['paraf_1']
+                'paraf_image' => $validated['paraf_1'],
             ]
         );
 
         // Save Occupant 2 Signature if provided
-        if (!empty($validated['signature_2']) && !empty($validated['paraf_2'])) {
+        if (! empty($validated['signature_2']) && ! empty($validated['paraf_2'])) {
             AgreementSignature::updateOrCreate(
                 ['agreement_id' => $agreement->id, 'occupant_type' => 'OCCUPANT_2'],
                 [
                     'signature_image' => $validated['signature_2'],
-                    'paraf_image' => $validated['paraf_2']
+                    'paraf_image' => $validated['paraf_2'],
                 ]
             );
         }

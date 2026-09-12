@@ -1,160 +1,174 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ContinuationController;
+use App\Http\Controllers\MoveOutController;
+use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\WaterMeterController;
+use App\Http\Controllers\WaterPeriodController;
+use App\Models\Billing;
 use App\Models\Property;
+use App\Models\Tenancy;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    $properties = Property::with(['media' => function($q) {
-            $q->orderBy('sort_order');
-        }])
+    $properties = Property::with(['media' => function ($q) {
+        $q->orderBy('sort_order');
+    }])
         ->whereIn('status', ['AVAILABLE', 'UPCOMING_AVAILABLE', 'OCCUPIED'])
         ->get();
 
     return Inertia::render('welcome', [
-        'properties' => $properties
+        'properties' => $properties,
     ]);
 })->name('home');
 
 Route::get('/kamar/{id}', function ($id) {
-    $property = Property::with(['media' => function($q) {
+    $property = Property::with(['media' => function ($q) {
         $q->orderBy('sort_order');
     }])->findOrFail($id);
 
     return Inertia::render('Public/PropertyDetail', [
-        'property' => $property
+        'property' => $property,
     ]);
 })->name('property.show');
 
 // Auth Routes (Google OAuth)
-Route::get('/auth/google', [\App\Http\Controllers\AuthController::class, 'redirectToGoogle'])->name('auth.google');
-Route::get('/auth/google/callback', [\App\Http\Controllers\AuthController::class, 'handleGoogleCallback']);
-Route::post('/logout', [\App\Http\Controllers\AuthController::class, 'logout'])->name('logout');
+Route::get('/auth/google', [AuthController::class, 'redirectToGoogle'])->name('auth.google');
+Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::get('/dashboard', function () {
-    $user = \Illuminate\Support\Facades\Auth::user();
+    $user = Auth::user();
     if ($user && $user->role === 'ADMIN') {
         return redirect()->route('admin.dashboard');
     }
+
     return redirect()->route('tenant.dashboard');
 })->middleware('auth')->name('dashboard');
 
 // Admin Routes
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
-    Route::get('/dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('admin.dashboard');
-    
+    Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
+
     // Properties
-    Route::get('/properties', [\App\Http\Controllers\AdminController::class, 'properties'])->name('admin.properties');
-    Route::post('/properties', [\App\Http\Controllers\AdminController::class, 'storeProperty'])->name('admin.properties.store');
-    Route::put('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'updateProperty'])->name('admin.properties.update');
-    Route::delete('/properties/{id}', [\App\Http\Controllers\AdminController::class, 'destroyProperty'])->name('admin.properties.destroy');
-    
+    Route::get('/properties', [AdminController::class, 'properties'])->name('admin.properties');
+    Route::post('/properties', [AdminController::class, 'storeProperty'])->name('admin.properties.store');
+    Route::put('/properties/{id}', [AdminController::class, 'updateProperty'])->name('admin.properties.update');
+    Route::delete('/properties/{id}', [AdminController::class, 'destroyProperty'])->name('admin.properties.destroy');
+
     // Property Media
-    Route::post('/properties/{id}/media', [\App\Http\Controllers\AdminController::class, 'storeMedia'])->name('admin.properties.media.store');
-    Route::post('/properties/{id}/media/{mediaId}/cover', [\App\Http\Controllers\AdminController::class, 'setCoverMedia'])->name('admin.properties.media.cover');
-    Route::delete('/properties/{id}/media/{mediaId}', [\App\Http\Controllers\AdminController::class, 'deleteMedia'])->name('admin.properties.media.destroy');
-    Route::post('/properties/{id}/media/reorder', [\App\Http\Controllers\AdminController::class, 'reorderMedia'])->name('admin.properties.media.reorder');
-    
+    Route::post('/properties/{id}/media', [AdminController::class, 'storeMedia'])->name('admin.properties.media.store');
+    Route::post('/properties/{id}/media/{mediaId}/cover', [AdminController::class, 'setCoverMedia'])->name('admin.properties.media.cover');
+    Route::delete('/properties/{id}/media/{mediaId}', [AdminController::class, 'deleteMedia'])->name('admin.properties.media.destroy');
+    Route::post('/properties/{id}/media/reorder', [AdminController::class, 'reorderMedia'])->name('admin.properties.media.reorder');
+
     // Tenants & Invitations
-    Route::get('/tenants', [\App\Http\Controllers\AdminController::class, 'tenants'])->name('admin.tenants');
-    Route::post('/tenants/invite', [\App\Http\Controllers\AdminController::class, 'inviteTenant'])->name('admin.tenants.invite');
+    Route::get('/tenants', [AdminController::class, 'tenants'])->name('admin.tenants');
+    Route::post('/tenants/invite', [AdminController::class, 'inviteTenant'])->name('admin.tenants.invite');
 
     // Admin Approval Workflow
-    Route::get('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.tenants.show');
-    Route::post('/tenants/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveTenant'])->name('admin.tenants.approve');
-    Route::post('/tenants/{id}/reject', [\App\Http\Controllers\AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
-    Route::post('/tenants/{id}/reopen', [\App\Http\Controllers\AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
-    Route::put('/tenants/{id}/profile', [\App\Http\Controllers\AdminController::class, 'updateTenantProfile'])->name('admin.tenants.profile.update');
-    Route::put('/tenants/{id}/details', [\App\Http\Controllers\AdminController::class, 'updateTenancyDetails'])->name('admin.tenants.details.update');
-    Route::delete('/tenants/{id}', [\App\Http\Controllers\AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
-    Route::get('/tenants/{id}/ktp/{kind}', [\App\Http\Controllers\AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
-    Route::get('/tenants/{id}/ktp/{kind}/download', [\App\Http\Controllers\AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');
-    
+    Route::get('/tenants/{id}', [AdminController::class, 'showApproval'])->name('admin.tenants.show');
+    Route::post('/tenants/{id}/approve', [AdminController::class, 'approveTenant'])->name('admin.tenants.approve');
+    Route::post('/tenants/{id}/reject', [AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
+    Route::post('/tenants/{id}/reopen', [AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
+    Route::put('/tenants/{id}/profile', [AdminController::class, 'updateTenantProfile'])->name('admin.tenants.profile.update');
+    Route::put('/tenants/{id}/details', [AdminController::class, 'updateTenancyDetails'])->name('admin.tenants.details.update');
+    Route::delete('/tenants/{id}', [AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
+    Route::get('/tenants/{id}/ktp/{kind}', [AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');
+    Route::get('/tenants/{id}/ktp/{kind}/download', [AdminController::class, 'downloadTenantKtpPhoto'])->name('admin.tenants.ktp.download');
+
     // Tenant Documentations & Agreements
-    Route::post('/tenants/{id}/agreements/upload', [\App\Http\Controllers\AdminController::class, 'uploadAgreementDocument'])->name('admin.tenants.agreements.upload');
-    Route::get('/tenants/{id}/agreements/download', [\App\Http\Controllers\AdminController::class, 'downloadAgreementDocument'])->name('admin.tenants.agreements.download');
-    Route::post('/tenants/{id}/documentations', [\App\Http\Controllers\AdminController::class, 'storeRoomDocumentation'])->name('admin.tenants.documentations.store');
-    Route::delete('/tenants/documentations/media/{mediaId}', [\App\Http\Controllers\AdminController::class, 'deleteDocumentationMedia'])->name('admin.tenants.documentations.media.destroy');
+    Route::post('/tenants/{id}/agreements/upload', [AdminController::class, 'uploadAgreementDocument'])->name('admin.tenants.agreements.upload');
+    Route::get('/tenants/{id}/agreements/download', [AdminController::class, 'downloadAgreementDocument'])->name('admin.tenants.agreements.download');
+    Route::post('/tenants/{id}/agreements/finalize-uploaded', [AdminController::class, 'finalizeUploadedAgreement'])->name('admin.tenants.agreements.finalizeUploaded');
+    Route::post('/tenants/{id}/documentations', [AdminController::class, 'storeRoomDocumentation'])->name('admin.tenants.documentations.store');
+    Route::delete('/tenants/documentations/media/{mediaId}', [AdminController::class, 'deleteDocumentationMedia'])->name('admin.tenants.documentations.media.destroy');
 
     // Admin-driven Onboarding Wizard (admin fills tenant onboarding using the same Wizard)
-    Route::get('/tenants/{tenancy}/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('admin.tenants.onboarding');
-    Route::get('/tenants/{tenancy}/onboarding/profile', [\App\Http\Controllers\OnboardingController::class, 'getProfile'])->name('admin.tenants.onboarding.profile');
-    Route::post('/tenants/{tenancy}/onboarding/info', [\App\Http\Controllers\OnboardingController::class, 'storeInfo'])->name('admin.tenants.onboarding.info');
-    Route::post('/tenants/{tenancy}/onboarding/ktp', [\App\Http\Controllers\OnboardingController::class, 'uploadKtp'])->name('admin.tenants.onboarding.ktp');
-    Route::get('/tenants/{tenancy}/onboarding/ktp/{kind}', [\App\Http\Controllers\OnboardingController::class, 'getKtpPhoto'])->name('admin.tenants.onboarding.ktp.photo');
-    Route::post('/tenants/{tenancy}/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('admin.tenants.onboarding.agreement');
+    Route::get('/tenants/{tenancy}/onboarding', [OnboardingController::class, 'show'])->name('admin.tenants.onboarding');
+    Route::get('/tenants/{tenancy}/onboarding/profile', [OnboardingController::class, 'getProfile'])->name('admin.tenants.onboarding.profile');
+    Route::post('/tenants/{tenancy}/onboarding/info', [OnboardingController::class, 'storeInfo'])->name('admin.tenants.onboarding.info');
+    Route::post('/tenants/{tenancy}/onboarding/ktp', [OnboardingController::class, 'uploadKtp'])->name('admin.tenants.onboarding.ktp');
+    Route::get('/tenants/{tenancy}/onboarding/ktp/{kind}', [OnboardingController::class, 'getKtpPhoto'])->name('admin.tenants.onboarding.ktp.photo');
+    Route::post('/tenants/{tenancy}/onboarding/agreement', [OnboardingController::class, 'submitAgreement'])->name('admin.tenants.onboarding.agreement');
 
     // Tenant Approvals & Onboarding (Phase 5 - legacy multi-step)
-    Route::get('/approvals/{id}', [\App\Http\Controllers\AdminController::class, 'showApproval'])->name('admin.approvals.show');
-    Route::post('/approvals/{id}/approve', [\App\Http\Controllers\AdminController::class, 'approveData'])->name('admin.approvals.approve');
-    Route::post('/approvals/{id}/move-in-doc', [\App\Http\Controllers\AdminController::class, 'storeMoveInDoc'])->name('admin.approvals.moveInDoc');
-    Route::post('/approvals/{id}/water-meter', [\App\Http\Controllers\AdminController::class, 'storeStartWaterMeter'])->name('admin.approvals.waterMeter');
+    Route::get('/approvals/{id}', [AdminController::class, 'showApproval'])->name('admin.approvals.show');
+    Route::post('/approvals/{id}/approve', [AdminController::class, 'approveData'])->name('admin.approvals.approve');
+    Route::post('/approvals/{id}/move-in-doc', [AdminController::class, 'storeMoveInDoc'])->name('admin.approvals.moveInDoc');
+    Route::post('/approvals/{id}/water-meter', [AdminController::class, 'storeStartWaterMeter'])->name('admin.approvals.waterMeter');
 
     // Admin Operations (Phase 6)
-    Route::post('/payments/{billingId}/verify', [\App\Http\Controllers\PaymentController::class, 'verifyPayment'])->name('admin.payments.verify');
-    Route::post('/tenants/{tenancyId}/water-meter', [\App\Http\Controllers\WaterMeterController::class, 'store'])->name('admin.waterMeter.store');
+    Route::post('/payments/{billingId}/verify', [PaymentController::class, 'verifyPayment'])->name('admin.payments.verify');
+    Route::post('/tenants/{tenancyId}/water-meter', [WaterMeterController::class, 'store'])->name('admin.waterMeter.store');
 
     // Water Meter Monitoring & Billing (Meter Air)
-    Route::get('/water', [\App\Http\Controllers\WaterPeriodController::class, 'index'])->name('admin.water');
-    Route::get('/water/{property}', [\App\Http\Controllers\WaterPeriodController::class, 'show'])->name('admin.water.show');
-    Route::post('/water/{property}/start', [\App\Http\Controllers\WaterPeriodController::class, 'startPeriod'])->name('admin.water.start');
-    Route::post('/water/periods/{period}/record', [\App\Http\Controllers\WaterPeriodController::class, 'recordEnd'])->name('admin.water.record');
-    Route::post('/water/periods/{period}/confirm', [\App\Http\Controllers\WaterPeriodController::class, 'confirmPayment'])->name('admin.water.confirm');
-    Route::get('/water/periods/{period}/photo/{kind}', [\App\Http\Controllers\WaterPeriodController::class, 'getPhoto'])->name('admin.water.photo');
-    Route::post('/water/settings', [\App\Http\Controllers\WaterPeriodController::class, 'updateSettings'])->name('admin.water.settings');
-    Route::post('/water/notification/test-email', [\App\Http\Controllers\WaterPeriodController::class, 'testEmail'])->name('admin.water.testEmail');
-    Route::post('/water/notification/test-whatsapp', [\App\Http\Controllers\WaterPeriodController::class, 'testWhatsApp'])->name('admin.water.testWhatsApp');
+    Route::get('/water', [WaterPeriodController::class, 'index'])->name('admin.water');
+    Route::get('/water/{property}', [WaterPeriodController::class, 'show'])->name('admin.water.show');
+    Route::post('/water/{property}/start', [WaterPeriodController::class, 'startPeriod'])->name('admin.water.start');
+    Route::post('/water/periods/{period}/record', [WaterPeriodController::class, 'recordEnd'])->name('admin.water.record');
+    Route::post('/water/periods/{period}/confirm', [WaterPeriodController::class, 'confirmPayment'])->name('admin.water.confirm');
+    Route::get('/water/periods/{period}/photo/{kind}', [WaterPeriodController::class, 'getPhoto'])->name('admin.water.photo');
+    Route::post('/water/settings', [WaterPeriodController::class, 'updateSettings'])->name('admin.water.settings');
+    Route::post('/water/notification/test-email', [WaterPeriodController::class, 'testEmail'])->name('admin.water.testEmail');
+    Route::post('/water/notification/test-whatsapp', [WaterPeriodController::class, 'testWhatsApp'])->name('admin.water.testWhatsApp');
 
     // Move Out & Archiving
-    Route::get('/move-out/{tenancyId}', [\App\Http\Controllers\MoveOutController::class, 'show'])->name('admin.moveOut.show');
-    Route::post('/move-out/{tenancyId}/doc', [\App\Http\Controllers\MoveOutController::class, 'storeDocumentation'])->name('admin.moveOut.storeDoc');
-    Route::post('/move-out/{tenancyId}/finalize', [\App\Http\Controllers\MoveOutController::class, 'finalize'])->name('admin.moveOut.finalize');
-    
+    Route::get('/move-out/{tenancyId}', [MoveOutController::class, 'show'])->name('admin.moveOut.show');
+    Route::post('/move-out/{tenancyId}/doc', [MoveOutController::class, 'storeDocumentation'])->name('admin.moveOut.storeDoc');
+    Route::post('/move-out/{tenancyId}/finalize', [MoveOutController::class, 'finalize'])->name('admin.moveOut.finalize');
+
     // Admin Users Management
-    Route::get('/users', [\App\Http\Controllers\AdminUserController::class, 'index'])->name('admin.users');
-    Route::post('/users', [\App\Http\Controllers\AdminUserController::class, 'store'])->name('admin.users.store');
-    Route::put('/users/{user}', [\App\Http\Controllers\AdminUserController::class, 'update'])->name('admin.users.update');
-    Route::delete('/users/{user}', [\App\Http\Controllers\AdminUserController::class, 'destroy'])->name('admin.users.destroy');
+    Route::get('/users', [AdminUserController::class, 'index'])->name('admin.users');
+    Route::post('/users', [AdminUserController::class, 'store'])->name('admin.users.store');
+    Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('admin.users.update');
+    Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('admin.users.destroy');
 });
 
 // Tenant Routes
 Route::middleware(['auth'])->prefix('tenant')->group(function () {
     // Onboarding Wizard
-    Route::get('/onboarding', [\App\Http\Controllers\OnboardingController::class, 'show'])->name('tenant.onboarding');
-    Route::get('/onboarding/profile', [\App\Http\Controllers\OnboardingController::class, 'getProfile'])->name('tenant.onboarding.profile');
-    Route::post('/onboarding/info', [\App\Http\Controllers\OnboardingController::class, 'storeInfo'])->name('tenant.onboarding.info');
-    Route::post('/onboarding/ktp', [\App\Http\Controllers\OnboardingController::class, 'uploadKtp'])->name('tenant.onboarding.ktp');
-    Route::get('/onboarding/ktp/{kind}', [\App\Http\Controllers\OnboardingController::class, 'getKtpPhoto'])->name('tenant.onboarding.ktp.photo');
-    Route::post('/onboarding/agreement', [\App\Http\Controllers\OnboardingController::class, 'submitAgreement'])->name('tenant.onboarding.agreement');
-    Route::post('/onboarding/revise', [\App\Http\Controllers\OnboardingController::class, 'revise'])->name('tenant.onboarding.revise');
-    
+    Route::get('/onboarding', [OnboardingController::class, 'show'])->name('tenant.onboarding');
+    Route::get('/onboarding/profile', [OnboardingController::class, 'getProfile'])->name('tenant.onboarding.profile');
+    Route::post('/onboarding/info', [OnboardingController::class, 'storeInfo'])->name('tenant.onboarding.info');
+    Route::post('/onboarding/ktp', [OnboardingController::class, 'uploadKtp'])->name('tenant.onboarding.ktp');
+    Route::get('/onboarding/ktp/{kind}', [OnboardingController::class, 'getKtpPhoto'])->name('tenant.onboarding.ktp.photo');
+    Route::post('/onboarding/agreement', [OnboardingController::class, 'submitAgreement'])->name('tenant.onboarding.agreement');
+    Route::post('/onboarding/revise', [OnboardingController::class, 'revise'])->name('tenant.onboarding.revise');
+
     // Tenant Dashboard
     Route::get('/dashboard', function () {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        $tenancy = \App\Models\Tenancy::with('property')->where('user_id', $user->id)->first();
+        $user = Auth::user();
+        $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
 
-        if (!$tenancy) {
+        if (! $tenancy) {
             return redirect('/tenant/onboarding'); // No tenancy at all
         }
 
         // Onboarding data is now filled by the admin; the tenant lands straight on
         // the dashboard for every status (INVITED → ACTIVE).
-        $nextBilling = \App\Models\Billing::where('tenancy_id', $tenancy->id)
-                            ->where('billing_type', 'RENT')
-                            ->orderBy('due_date', 'asc')
-                            ->first();
+        $nextBilling = Billing::where('tenancy_id', $tenancy->id)
+            ->where('billing_type', 'RENT')
+            ->orderBy('due_date', 'asc')
+            ->first();
 
         return Inertia::render('Tenant/Dashboard', [
             'tenancy' => $tenancy,
-            'nextBilling' => $nextBilling
+            'nextBilling' => $nextBilling,
         ]);
     })->name('tenant.dashboard');
 
     // Continuation Logic (H-3)
-    Route::post('/continuation', [\App\Http\Controllers\ContinuationController::class, 'submitDecision'])->name('tenant.continuation.submit');
+    Route::post('/continuation', [ContinuationController::class, 'submitDecision'])->name('tenant.continuation.submit');
 
     // Tenant Payment Proof Submission (Phase 6)
-    Route::post('/payments/{billingId}/proof', [\App\Http\Controllers\PaymentController::class, 'submitProof'])->name('tenant.payments.proof');
+    Route::post('/payments/{billingId}/proof', [PaymentController::class, 'submitProof'])->name('tenant.payments.proof');
 });
 
 require __DIR__.'/settings.php';
