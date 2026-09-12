@@ -1,6 +1,8 @@
 import { Head, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
+import PictureImage from '@/components/PictureImage';
+import { KAMAR_IMAGE, PROPERTI_1_IMAGE, PROPERTI_2_IMAGE } from '@/lib/images';
 
 export default function Login() {
     const { flash } = usePage<any>().props;
@@ -36,9 +38,12 @@ export default function Login() {
                     initial="hidden" animate="show" variants={imageReveal}
                     className="absolute inset-0 w-full h-full"
                 >
-                    <img 
-                        src="/img/kamar-menteng-kos.jpg" 
-                        alt="Kamar Menteng Kos Private" 
+                    <PictureImage
+                        set={KAMAR_IMAGE}
+                        sizes="60vw"
+                        alt="Kamar Menteng Kos Private"
+                        loading="eager"
+                        decoding="async"
                         className="w-full h-full object-cover"
                     />
                 </motion.div>
@@ -59,9 +64,12 @@ export default function Login() {
                     transition={{ delay: 0.8, duration: 1, ease: "easeOut" }}
                     className="absolute bottom-24 right-12 w-64 h-80 rounded-sm overflow-hidden shadow-2xl border border-white/10"
                 >
-                    <img 
-                        src="/img/properti-menteng-kos-1.jpg"
+                    <PictureImage
+                        set={PROPERTI_1_IMAGE}
+                        sizes="256px"
                         alt="Interior Menteng Kos Private"
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                     />
                 </motion.div>
@@ -93,9 +101,12 @@ export default function Login() {
                 
                 {/* Mobile Header Image (Only visible on small screens) */}
                 <div className="lg:hidden h-64 w-full relative">
-                    <img 
-                        src="/img/properti-menteng-kos-2.jpg" 
-                        alt="Menteng Kos Private" 
+                    <PictureImage
+                        set={PROPERTI_2_IMAGE}
+                        sizes="100vw"
+                        alt="Menteng Kos Private"
+                        loading="eager"
+                        decoding="async"
                         className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-neutral-900/40" />

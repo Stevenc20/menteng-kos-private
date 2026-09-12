@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { ChevronRight, Camera, MapPin, ExternalLink, AirVent, Wifi, ShowerHead, Route, BedDouble, Shirt, Cctv, Car } from 'lucide-react';
+import PictureImage from '@/components/PictureImage';
+import { HERO_IMAGE, KAMAR_IMAGE, PROPERTI_1_IMAGE, PROPERTI_2_IMAGE } from '@/lib/images';
 
 const GOOGLE_MAPS_SHORT_URL = 'https://maps.app.goo.gl/5m27exRThDiCj4VGA';
 const GOOGLE_MAPS_EMBED_URL =
@@ -79,9 +81,13 @@ export default function Welcome({ properties }: WelcomeProps) {
             {/* HERO SECTION */}
             <section className="relative h-[80vh] min-h-[600px] flex items-center justify-center bg-[#1A1A18] overflow-hidden">
                 {/* Background Image */}
-                <img 
-                    src="/img/hero-menteng-kos.png" 
-                    alt="Menteng Kos Private" 
+                <PictureImage 
+                    set={HERO_IMAGE}
+                    sizes="100vw"
+                    alt="Menteng Kos Private"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
                     className="absolute inset-0 w-full h-full object-cover object-center opacity-60"
                 />
                 
@@ -173,6 +179,11 @@ export default function Welcome({ properties }: WelcomeProps) {
                                                     src={cover.url} 
                                                     alt={property.name}
                                                     draggable="false"
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    width="800"
+                                                    height="600"
+                                                    fetchPriority="low"
                                                     onError={(e) => {
                                                         if (!e.currentTarget.src.includes('placehold.co')) {
                                                             e.currentTarget.src = 'https://placehold.co/800x600/1A1A18/8A8A84?text=Gambar+Tidak+Tersedia';
@@ -282,17 +293,19 @@ export default function Welcome({ properties }: WelcomeProps) {
 
                     <div className="grid grid-cols-2 lg:grid-cols-4 grid-flow-dense auto-rows-[220px] sm:auto-rows-[240px] md:auto-rows-[280px] lg:auto-rows-[300px] gap-4 md:gap-6">
                         {[
-                            { src: '/img/kamar-menteng-kos.jpg', alt: 'Kamar Menteng Kos Private', label: 'Kamar', span: 'col-span-2 row-span-2' },
-                            { src: '/img/properti-menteng-kos-1.jpg', alt: 'Interior Menteng Kos Private', label: 'Interior', span: 'col-span-1 row-span-1' },
-                            { src: '/img/properti-menteng-kos-2.jpg', alt: 'Suasana Menteng Kos Private', label: 'Suasana', span: 'col-span-1 row-span-1' },
-                            { src: '/img/hero-menteng-kos.png', alt: 'Tampak Menteng Kos Private', label: 'Tampak Hunian', span: 'col-span-2 row-span-1' },
-                        ].map(({ src, alt, label, span }) => (
-                            <div key={src} className={`relative group rounded-2xl overflow-hidden border border-[#E8E7E3] bg-white select-none ${span}`} onContextMenu={(e) => e.preventDefault()}>
-                                <img
-                                    src={src}
+                            { set: KAMAR_IMAGE, alt: 'Kamar Menteng Kos Private', label: 'Kamar', span: 'col-span-2 row-span-2', sizes: '(max-width: 1024px) 100vw, 700px' },
+                            { set: PROPERTI_1_IMAGE, alt: 'Interior Menteng Kos Private', label: 'Interior', span: 'col-span-1 row-span-1', sizes: '(max-width: 1024px) calc(50vw - 24px), 342px' },
+                            { set: PROPERTI_2_IMAGE, alt: 'Suasana Menteng Kos Private', label: 'Suasana', span: 'col-span-1 row-span-1', sizes: '(max-width: 1024px) calc(50vw - 24px), 342px' },
+                            { set: HERO_IMAGE, alt: 'Tampak Menteng Kos Private', label: 'Tampak Hunian', span: 'col-span-2 row-span-1', sizes: '(max-width: 1024px) 100vw, 700px' },
+                        ].map(({ set, alt, label, span, sizes }) => (
+                            <div key={alt} className={`relative group rounded-2xl overflow-hidden border border-[#E8E7E3] bg-white select-none ${span}`} onContextMenu={(e) => e.preventDefault()}>
+                                <PictureImage
+                                    set={set}
+                                    sizes={sizes}
                                     alt={alt}
                                     loading="lazy"
-                                    draggable="false"
+                                    decoding="async"
+                                    draggable={false}
                                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A18]/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

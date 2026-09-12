@@ -49,14 +49,14 @@
             <meta property="og:title" content="Menteng Kos Private" />
             <meta property="og:description" content="Hunian modern di pusat kota dengan fasilitas premium, desain minimalis, dan manajemen profesional. Tersedia 10 Kamar Eksklusif dan 1 Kios." />
             <meta property="og:url" content="{{ url('/') }}" />
-            <meta property="og:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.png' }}" />
+            <meta property="og:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.jpg' }}" />
             <meta property="og:image:width" content="1200" />
             <meta property="og:image:height" content="1200" />
 
             <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:title" content="Menteng Kos Private" />
             <meta name="twitter:description" content="Hunian modern di pusat kota dengan fasilitas premium, desain minimalis, dan manajemen profesional. Tersedia 10 Kamar Eksklusif dan 1 Kios." />
-            <meta name="twitter:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.png' }}" />
+            <meta name="twitter:image" content="{{ request()->getSchemeAndHttpHost() . '/images/logo/logo-og.jpg' }}" />
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">

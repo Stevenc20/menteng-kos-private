@@ -57,13 +57,16 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
             <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isTransparent ? 'bg-transparent border-transparent' : 'bg-white/95 backdrop-blur-md shadow-sm border-b border-[#E8E7E3]'}`}>
                 <div className="max-w-[1440px] mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-3 shrink-0">
-                        <img
-                            src="/images/logo/logo.png"
-                            alt="Logo Menteng Kos Private"
-                            className="h-10 w-10 object-contain drop-shadow-sm"
-                            width="40"
-                            height="40"
-                        />
+                        <picture>
+                            <source type="image/webp" srcSet="/images/logo/logo-256.webp" />
+                            <img
+                                src="/images/logo/logo-256.png"
+                                alt="Logo Menteng Kos Private"
+                                className="h-10 w-10 object-contain drop-shadow-sm"
+                                width="40"
+                                height="40"
+                            />
+                        </picture>
                         <span className={`text-xl font-bold tracking-tight uppercase transition-colors ${textColor}`}>
                             Menteng Kos Private
                         </span>
@@ -121,13 +124,16 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                         >
                             <div className="h-20 flex items-center justify-between px-6 border-b border-[#E8E7E3]">
                                 <div className="flex items-center gap-2">
-                                    <img
-                                        src="/images/logo/logo.png"
-                                        alt="Logo Menteng Kos"
-                                        className="h-7 w-7 object-contain"
-                                        width="28"
-                                        height="28"
-                                    />
+                                    <picture>
+                                        <source type="image/webp" srcSet="/images/logo/logo-256.webp" />
+                                        <img
+                                            src="/images/logo/logo-256.png"
+                                            alt="Logo Menteng Kos"
+                                            className="h-7 w-7 object-contain"
+                                            width="28"
+                                            height="28"
+                                        />
+                                    </picture>
                                     <span className="font-bold tracking-tight uppercase text-sm text-[#1A1A18]">Menteng Kos</span>
                                 </div>
                                 <button 
