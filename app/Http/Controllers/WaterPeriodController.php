@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\WaterPeriod;
+use App\Services\WaterBillingService;
 use App\Services\WaterNotificationService;
 use App\Services\WaterPeriodService;
 use Illuminate\Http\Request;
@@ -43,6 +44,7 @@ class WaterPeriodController extends Controller
         $openPeriods = WaterPeriod::query()
             ->whereIn('property_id', $propertyIds)
             ->whereIn('status', [WaterPeriod::STATUS_METER_DUE, WaterPeriod::STATUS_WAITING_PAYMENT])
+            ->with('tenancy')
             ->get()
             ->keyBy('property_id');
 
@@ -88,6 +90,11 @@ class WaterPeriodController extends Controller
                 'status' => $property->status,
                 'tenant' => $tenant ? ['id' => $tenant->user_id, 'name' => $tenant->user?->name] : null,
                 'has_paid' => $hasPaid,
+                'billing_note' => $tenant
+                    ? $this->billingNote(WaterBillingService::allowanceM3($tenant))
+                    : ($property->type === 'KIOSK'
+                        ? 'Air kios ditagih per pemakaian'
+                        : WaterBillingService::WATER_ALLOWANCE_M3.' m³ pertama termasuk sewa'),
                 'water' => $open ? $this->periodPayload($open) : null,
             ];
         }
@@ -141,11 +148,15 @@ class WaterPeriodController extends Controller
 
         $periods = WaterPeriod::query()
             ->where('property_id', $property->id)
-            ->with(['tenant'])
+            ->with(['tenant', 'tenancy'])
             ->orderByDesc('period_year')
             ->orderByDesc('period_month')
             ->orderByDesc('id')
             ->get();
+
+        $allowance = $tenancy
+            ? WaterBillingService::allowanceM3($tenancy)
+            : WaterBillingService::WATER_ALLOWANCE_M3;
 
         return Inertia::render('Admin/WaterDetail', [
             'property' => [
@@ -154,6 +165,8 @@ class WaterPeriodController extends Controller
                 'type' => $property->type,
                 'status' => $property->status,
                 'water_rate' => $property->water_rate !== null ? (float) $property->water_rate : null,
+                'allowance' => $allowance,
+                'billing_note' => $this->billingNote($allowance),
             ],
             'tenant' => $tenancy?->user
                 ? [
@@ -387,6 +400,18 @@ class WaterPeriodController extends Controller
 
     protected function periodPayload(WaterPeriod $period): array
     {
+        // Included m³ for THIS period: use stored data when the period ended
+        // (included = usage - billable_usage is the ground truth), otherwise the
+        // allowance rule that recordEnd would apply for this unit.
+        $allowance = null;
+        if ($period->usage !== null && $period->billable_usage !== null) {
+            $allowance = max(0, (int) $period->usage - (int) $period->billable_usage);
+        } elseif ($period->tenancy) {
+            $allowance = WaterBillingService::allowanceM3($period->tenancy);
+        } else {
+            $allowance = WaterBillingService::WATER_ALLOWANCE_M3;
+        }
+
         return [
             'id' => $period->id,
             'status' => $period->status,
@@ -401,6 +426,8 @@ class WaterPeriodController extends Controller
             'has_end_photo' => (bool) $period->meter_end_photo,
             'usage' => $period->usage,
             'billable_usage' => $period->billable_usage,
+            'allowance' => $allowance,
+            'billing_note' => $this->billingNote($allowance),
             'water_rate' => $period->water_rate !== null ? (float) $period->water_rate : null,
             'total_amount' => $period->total_amount !== null ? (float) $period->total_amount : null,
             'due_date' => $period->due_date?->toDateString(),
@@ -408,6 +435,13 @@ class WaterPeriodController extends Controller
             'note' => $period->note,
             'tenant_name' => $period->tenant?->name,
         ];
+    }
+
+    protected function billingNote(int $allowance): string
+    {
+        return $allowance > 0
+            ? "{$allowance} m³ pertama termasuk sewa"
+            : 'Air ditagih terpisah (tanpa jatah gratis)';
     }
 
     protected function settingsPayload(): array

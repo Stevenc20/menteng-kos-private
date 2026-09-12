@@ -30,9 +30,6 @@ class WaterBillingService
      * Whether the tenancy pays for PAM water separately (no allowance).
      * Applies only when the unit is a KIOSK whose deal price is below the
      * property's standard price — i.e. the negotiated price did not include water.
-     *
-     * @param Tenancy $tenancy
-     * @return bool
      */
     public static function chargesWaterSeparately(Tenancy $tenancy): bool
     {
@@ -52,19 +49,25 @@ class WaterBillingService
     }
 
     /**
+     * Included m³ for the tenancy (the free allowance inside the rent).
+     *
+     *  - ROOM & full-price KIOSK: first WATER_ALLOWANCE_M3 are included.
+     *  - KIOSK billed separately (deal below standard): no allowance at all.
+     */
+    public static function allowanceM3(Tenancy $tenancy): int
+    {
+        return self::chargesWaterSeparately($tenancy) ? 0 : self::WATER_ALLOWANCE_M3;
+    }
+
+    /**
      * Resolve usage m³ that will actually be charged.
      *
-     * @param Tenancy $tenancy
-     * @param int $usageM3  recorded usage for this period (current - previous)
-     * @return int  the billable m³
+     * @param  int  $usageM3  recorded usage for this period (current - previous)
+     * @return int the billable m³
      */
     public static function billableUsage(Tenancy $tenancy, int $usageM3): int
     {
-        if (self::chargesWaterSeparately($tenancy)) {
-            return max(0, (int) $usageM3);
-        }
-
-        return max(0, (int) $usageM3 - self::WATER_ALLOWANCE_M3);
+        return max(0, (int) $usageM3 - self::allowanceM3($tenancy));
     }
 
     /**
@@ -86,10 +89,6 @@ class WaterBillingService
 
     /**
      * Compute the water charge (Rupiah) for the given usage.
-     *
-     * @param Tenancy $tenancy
-     * @param int $usageM3
-     * @return int
      */
     public static function chargeFor(Tenancy $tenancy, int $usageM3): int
     {

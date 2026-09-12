@@ -81,3 +81,18 @@ test('negative usage cannot produce a negative charge', function () {
     expect(WaterBillingService::chargeFor($tenancy, -5))->toBe(0);
     expect(WaterBillingService::billableUsage($tenancy, -5))->toBe(0);
 });
+
+test('allowanceM3 exposes the included allowance: 5 m3 for room/standard, 0 for separate kiosk', function () {
+    $room = Property::create(['name' => 'Kamar', 'type' => 'ROOM', 'normal_price' => 1500000, 'status' => 'AVAILABLE']);
+    $roomTenancy = makeWaterTenancy($room, 1500000);
+    expect(WaterBillingService::allowanceM3($roomTenancy))->toBe(5);
+
+    $kioskStd = Property::create(['name' => 'Kios', 'type' => 'KIOSK', 'normal_price' => 2000000, 'status' => 'AVAILABLE']);
+    $stdTenancy = makeWaterTenancy($kioskStd, 2000000);
+    expect(WaterBillingService::allowanceM3($stdTenancy))->toBe(5);
+
+    $kioskDeal = Property::create(['name' => 'Kios', 'type' => 'KIOSK', 'normal_price' => 2000000, 'status' => 'AVAILABLE']);
+    $dealTenancy = makeWaterTenancy($kioskDeal, 1700000);
+    expect(WaterBillingService::allowanceM3($dealTenancy))->toBe(0);
+    expect(WaterBillingService::billableUsage($dealTenancy, 7))->toBe(7);
+});

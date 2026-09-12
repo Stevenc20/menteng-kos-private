@@ -76,6 +76,7 @@ test('admin water list shows every unit', function () {
             ->has('properties', 1)
             ->where('properties.0.name', $property->name)
             ->where('properties.0.water', null)
+            ->where('properties.0.billing_note', '5 m³ pertama termasuk sewa')
         );
 });
 
@@ -209,6 +210,44 @@ test('kiosk with deal below standard bills the full usage (separate water)', fun
     expect((int) $period->usage)->toBe(10);
     expect((int) $period->billable_usage)->toBe(10); // no allowance for separate KIOSK
     expect((float) $period->total_amount)->toBe(140000.0);
+
+    // The UI payload exposes a 0 allowance + a "separate" note for the KIOSK.
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.allowance', 0)
+            ->where('properties.0.water.billing_note', 'Air ditagih terpisah (tanpa jatah gratis)')
+        );
+});
+
+test('water detail page exposes the billing allowance for the unit', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 45,
+        'photo' => waterPng('start.jpg'),
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/record", [
+        'meter_end' => 53,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+
+    $this->actingAs($admin)
+        ->get("/admin/water/{$property->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/WaterDetail')
+            ->where('property.allowance', 5)
+            ->where('property.billing_note', '5 m³ pertama termasuk sewa')
+            ->where('periods.0.usage', 8)
+            ->where('periods.0.billable_usage', 3)
+            ->where('periods.0.allowance', 5)
+            ->where('periods.0.total_amount', 42000)
+        );
 });
 
 // ---------------------------------------------------------------------------

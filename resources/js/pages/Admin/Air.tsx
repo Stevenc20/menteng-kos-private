@@ -33,6 +33,8 @@ interface WaterPeriod {
     has_end_photo: boolean;
     usage: number | null;
     billable_usage: number | null;
+    allowance: number | null;
+    billing_note: string;
     water_rate: number | null;
     total_amount: number | null;
     due_date: string | null;
@@ -48,6 +50,7 @@ interface PropertyRow {
     status: string;
     tenant: { id: number; name: string } | null;
     has_paid: boolean;
+    billing_note: string;
     water: WaterPeriod | null;
 }
 
@@ -119,6 +122,19 @@ function statusInfo(status: WaterPeriod['status']) {
         case 'PAID':
             return { label: 'Lunas', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
+}
+
+const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+function meterLabel(p: WaterPeriod): string {
+    if (p.meter_start === null) return '-';
+    return `${angka(p.meter_start)} m³ → ${p.meter_end !== null ? angka(p.meter_end) + ' m³' : '…'}`;
+}
+
+function billBreakdown(p: WaterPeriod): { included: number; excess: number } | null {
+    if (p.usage === null || p.billable_usage === null) return null;
+    const included = Math.max(0, p.usage - p.billable_usage);
+    return { included, excess: p.billable_usage };
 }
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -435,12 +451,13 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
             {/* List */}
             <div className="mt-6 bg-white rounded-2xl border border-[#E8E7E3] shadow-sm overflow-hidden">
                 {/* Desktop header */}
-                <div className="hidden md:grid grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] gap-4 px-6 py-4 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
+                <div className="hidden lg:grid grid-cols-[1.3fr_1fr_1.2fr_1fr_1.3fr_1fr_1fr_auto] gap-4 px-6 py-4 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
                     <div>Unit</div>
                     <div>Penghuni</div>
                     <div>Meter</div>
                     <div>Pemakaian</div>
-                    <div>Jatuh Tempo</div>
+                    <div>Tagihan</div>
+                    <div>Periode</div>
                     <div>Status</div>
                     <div className="text-right">Aksi</div>
                 </div>
@@ -451,25 +468,44 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
 
                 {properties.map((row) => {
                     const status = row.water ? statusInfo(row.water.status) : { label: row.has_paid ? 'Lunas' : 'Belum Ada', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                    const breakdown = row.water ? billBreakdown(row.water) : null;
                     return (
                         <div key={row.id}>
                             {/* Desktop row */}
-                            <div className="hidden md:grid grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] gap-4 px-6 py-4 items-center border-b border-[#F1F0EC] hover:bg-[#FBFBF9] transition-colors">
+                            <div className="hidden lg:grid grid-cols-[1.3fr_1fr_1.2fr_1fr_1.3fr_1fr_1fr_auto] gap-4 px-6 py-4 items-center border-b border-[#F1F0EC] hover:bg-[#FBFBF9] transition-colors">
                                 <div className="min-w-0">
                                     <Link href={`/admin/water/${row.id}`} className="flex items-center gap-2 font-semibold text-[#1A1A18] hover:text-black group">
-                                        {row.name}
-                                        <ExternalLink className="w-3.5 h-3.5 text-[#A1A19A] group-hover:text-[#1A1A18]" />
+                                        <span className="truncate">{row.name}</span>
+                                        <ExternalLink className="w-3.5 h-3.5 text-[#A1A19A] group-hover:text-[#1A1A18] shrink-0" />
                                     </Link>
-                                    <p className="text-[12px] text-[#8A8A84] mt-0.5">{row.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {row.status.replace(/_/g, ' ')}</p>
+                                    <p className="text-[12px] text-[#8A8A84] mt-0.5 truncate">{row.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {row.status.replace(/_/g, ' ')}</p>
                                 </div>
                                 <div className="text-sm text-[#2A2A27] truncate">{row.tenant?.name ?? '-'}</div>
-                                <div className="text-sm text-[#2A2A27]">
-                                    {row.water
-                                        ? `${angka(row.water.meter_start)} → ${row.water.meter_end ?? '…'}`
-                                        : '-'}
+                                <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water ? meterLabel(row.water) : '-'}</div>
+                                <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water?.usage !== null && row.water?.usage !== undefined ? `${angka(row.water.usage)} m³` : '-'}</div>
+                                <div className="min-w-0">
+                                    {breakdown ? (
+                                        <div className="text-[13px] leading-5">
+                                            <p className="text-[#2A2A27] tabular-nums whitespace-nowrap">
+                                                {breakdown.included > 0
+                                                    ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
+                                                    : `Tanpa jatah · ${angka(breakdown.excess)} m³ ditagih`}
+                                            </p>
+                                            <p className={`font-semibold tabular-nums whitespace-nowrap ${(row.water?.total_amount ?? 0) > 0 ? 'text-[#1A1A18]' : 'text-[#6B6B67]'}`}>
+                                                {row.water !== null && row.water.total_amount !== null && row.water.total_amount !== undefined ? `${rupiah(row.water.total_amount)}` : '-'}
+                                                {(row.water?.total_amount ?? 0) === 0 && <span className="text-[12px] font-normal text-[#6B6B67]"> · dalam sewa</span>}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <p className="text-[12px] text-[#8A8A84] leading-5">{row.billing_note}</p>
+                                    )}
                                 </div>
-                                <div className="text-sm text-[#2A2A27]">{row.water?.usage !== null && row.water?.usage !== undefined ? `${angka(row.water.usage)} m³` : '-'}</div>
-                                <div className="text-sm text-[#2A2A27]">{row.water?.due_date ?? '-'}</div>
+                                <div className="text-sm text-[#2A2A27] whitespace-nowrap">
+                                    {row.water
+                                        ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}`
+                                        : '-'}
+                                    {row.water?.due_date && <span className="block text-[12px] text-[#8A8A84]">JT {row.water.due_date}</span>}
+                                </div>
                                 <div>
                                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
                                 </div>
@@ -481,7 +517,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                     )}
                                     {row.water?.status === 'WAITING_PAYMENT' && (
                                         <>
-                                            <span className="text-sm font-semibold text-[#1A1A18]">{rupiah(row.water.total_amount)}</span>
+                                            <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
                                             <AdminButton className="h-9 px-3 text-[13px]" onClick={() => confirmPayment(row.water!)}>
                                                 Konfirmasi Bayar
                                             </AdminButton>
@@ -496,22 +532,29 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                             </div>
 
                             {/* Mobile card */}
-                            <div className="md:hidden px-5 py-4 border-b border-[#F1F0EC]">
+                            <div className="lg:hidden px-5 py-4 border-b border-[#F1F0EC]">
                                 <div className="flex items-center justify-between">
                                     <Link href={`/admin/water/${row.id}`} className="font-semibold text-[#1A1A18]">{row.name}</Link>
                                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[13px] text-[#6B6B67]">
                                     <span>Penghuni: <b className="text-[#1A1A18]">{row.tenant?.name ?? '-'}</b></span>
-                                    <span>Meter: <b className="text-[#1A1A18]">{row.water ? `${angka(row.water.meter_start)} → ${row.water.meter_end ?? '…'}` : '-'}</b></span>
-                                    <span>Jatuh Tempo: <b className="text-[#1A1A18]">{row.water?.due_date ?? '-'}</b></span>
+                                    <span>Meter: <b className="text-[#1A1A18]">{row.water ? meterLabel(row.water) : '-'}</b></span>
+                                    <span>Periode: <b className="text-[#1A1A18]">{row.water ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}` : '-'}</b></span>
                                 </div>
+                                {breakdown && (
+                                    <p className="mt-2 text-[13px] text-[#6B6B67]">
+                                        {breakdown.included > 0
+                                            ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
+                                            : `${angka(breakdown.excess)} m³ ditagih`}
+                                    </p>
+                                )}
                                 {row.water && (
                                     <div className="flex items-center justify-between mt-3">
-                                        <span className="text-sm">{row.water.usage !== null && row.water.usage !== undefined ? `Pemakaian ${angka(row.water.usage)} m³` : ''}</span>
+                                        <span className="text-[13px] tabular-nums">{row.water.usage !== null && row.water.usage !== undefined ? `Pemakaian ${angka(row.water.usage)} m³` : row.billing_note}</span>
                                         <div className="flex items-center gap-2">
                                             {row.water.status === 'WAITING_PAYMENT' && (
-                                                <span className="text-sm font-semibold text-[#1A1A18]">{rupiah(row.water.total_amount)}</span>
+                                                <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
                                             )}
                                             {row.water.status === 'METER_DUE' && (
                                                 <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
@@ -533,7 +576,8 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                 )}
                                 {!row.water && (
                                     <div className="mt-3">
-                                        <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950" onClick={() => openStart(row)}>
+                                        <p className="text-[13px] text-[#6B6B67]">{row.billing_note}</p>
+                                        <AdminButton className="h-9 px-3 text-[13px] bg-emerald-900 hover:bg-emerald-950 mt-2" onClick={() => openStart(row)}>
                                             Mulai
                                         </AdminButton>
                                     </div>
@@ -616,6 +660,49 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                 )}
                             </div>
                         )}
+
+                        {selectedPeriod && parseInt(recordForm.data.meter_end || '0', 10) > 0 && (() => {
+                            const end = parseInt(recordForm.data.meter_end || '0', 10);
+                            const start = selectedPeriod.meter_start ?? 0;
+                            const usage = end - start;
+                            const allowance = selectedPeriod.allowance ?? 5;
+                            const excess = Math.max(0, usage);
+                            const billable = Math.max(0, usage - allowance);
+                            const rate = selectedPeriod.water_rate ?? settings.rate_per_m3;
+                            const total = Math.round(billable * rate);
+                            const error = usage < 0;
+                            return (
+                                <div className={`rounded-[10px] border px-4 py-3 text-[13px] mb-4 ${error ? 'border-red-200 bg-red-50' : 'border-[#E8E7E3] bg-[#F7F7F5]'}`}>
+                                    {error ? (
+                                        <p className="text-red-700 font-semibold">Meter akhir tidak boleh kurang dari meter awal ({angka(start)} m³).</p>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between">
+                                                <span className="text-[#6B6B67]">Pemakaian</span>
+                                                <span className="font-semibold text-[#1A1A18] tabular-nums">{angka(usage)} m³</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#6B6B67]">{allowance > 0 ? 'Termasuk sewa' : 'Jatah gratis'}</span>
+                                                <span className="font-semibold text-[#1A1A18] tabular-nums">{angka(allowance)} m³</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#6B6B67]">Lebih</span>
+                                                <span className={`font-semibold tabular-nums ${billable > 0 ? 'text-[#1A1A18]' : 'text-[#6B6B67]'}`}>{angka(billable)} m³</span>
+                                            </div>
+                                            <div className="flex justify-between border-t border-[#E8E7E3] pt-1.5">
+                                                <span className="text-[#6B6B67]">Tarif</span>
+                                                <span className="font-medium text-[#2A2A27] tabular-nums">{rupiah(rate)} / m³</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#6B6B67]">Tagihan</span>
+                                                <span className={`font-bold tabular-nums ${total > 0 ? 'text-[#1A1A18]' : 'text-[#1A1A18]'}`}>{rupiah(total)}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
                         <FormSection title="Meter Akhir" />
                         <FormLabel htmlFor="meter_end">Angka Meter (m³)</FormLabel>
                         <TextInput

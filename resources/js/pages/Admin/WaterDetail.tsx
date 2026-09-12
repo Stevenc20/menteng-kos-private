@@ -20,6 +20,8 @@ interface Period {
     has_end_photo: boolean;
     usage: number | null;
     billable_usage: number | null;
+    allowance: number | null;
+    billing_note: string;
     water_rate: number | null;
     total_amount: number | null;
     due_date: string | null;
@@ -29,7 +31,7 @@ interface Period {
 }
 
 interface DetailProps {
-    property: { id: number; name: string; type: string; status: string; water_rate: number | null };
+    property: { id: number; name: string; type: string; status: string; water_rate: number | null; allowance: number; billing_note: string };
     tenant: { id: number; name: string; whatsapp: string | null } | null;
     periods: Period[];
     settings: { rate_per_m3: number };
@@ -54,6 +56,17 @@ function statusInfo(status: Period['status']) {
         case 'PAID':
             return { label: 'Lunas', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
+}
+
+function meterLabel(p: Period): string {
+    if (p.meter_start === null) return '-';
+    return `${angka(p.meter_start)} m³ → ${p.meter_end !== null ? angka(p.meter_end) + ' m³' : '…'}`;
+}
+
+function billBreakdown(p: Period): { included: number; excess: number } | null {
+    if (p.usage === null || p.billable_usage === null) return null;
+    const included = Math.max(0, p.usage - p.billable_usage);
+    return { included, excess: p.billable_usage };
 }
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -118,6 +131,15 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                     <p className="text-sm md:text-base text-[#6B6B67] mt-1.5">
                         {property.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {property.status.replace(/_/g, ' ')} · Tarif air: {property.water_rate ? rupiah(property.water_rate) + '/m³' : rupiah(settings.rate_per_m3) + '/m³'}
                     </p>
+                    <p className="mt-2">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${
+                            property.allowance > 0
+                                ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                : 'bg-violet-50 text-violet-800 border-violet-200'
+                        }`}>
+                            {property.billing_note}
+                        </span>
+                    </p>
                 </div>
                 {tenant && (
                     <div className="bg-white px-5 py-3 rounded-2xl border border-[#E8E7E3] shadow-sm">
@@ -142,19 +164,27 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#F1F0EC]">
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Meter Awal</p>
-                            <p className="text-xl font-bold text-[#1A1A18] mt-1">{angka(openPeriod.meter_start)} m³</p>
+                            <p className="text-xl font-bold text-[#1A1A18] mt-1 tabular-nums">{angka(openPeriod.meter_start)} m³</p>
                         </div>
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Meter Akhir</p>
-                            <p className="text-xl font-bold text-[#1A1A18] mt-1">{angka(openPeriod.meter_end)} m³</p>
+                            <p className="text-xl font-bold text-[#1A1A18] mt-1 tabular-nums">{angka(openPeriod.meter_end)} m³</p>
                         </div>
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Pemakaian</p>
                             <p className="text-xl font-bold text-[#1A1A18] mt-1">{openPeriod.usage !== null ? `${angka(openPeriod.usage)} m³` : '-'}</p>
+                            {openPeriod.usage !== null && openPeriod.billable_usage !== null && (
+                                <p className="text-[12px] text-[#6B6B67] mt-1">
+                                    Incl {angka(Math.max(0, openPeriod.usage - openPeriod.billable_usage))} m³ · Lebih {angka(openPeriod.billable_usage)} m³
+                                </p>
+                            )}
                         </div>
                         <div className="bg-white px-6 py-4">
                             <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Tagihan</p>
-                            <p className="text-xl font-bold text-[#1A1A18] mt-1">{rupiah(openPeriod.total_amount)}</p>
+                            <p className="text-xl font-bold text-[#1A1A18] mt-1 tabular-nums">{rupiah(openPeriod.total_amount)}</p>
+                            {openPeriod.usage !== null && openPeriod.billable_usage !== null && openPeriod.billable_usage === 0 && (
+                                <p className="text-[12px] text-[#6B6B67] mt-1">Tidak ada tagihan (dalam sewa)</p>
+                            )}
                         </div>
                     </div>
 
@@ -186,34 +216,88 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                 {openPeriod?.status === 'METER_DUE' ? (
                     <>
                         <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-amber-600" /> Update Meter Akhir</h3>
-                        <form onSubmit={submitRecord} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <FormLabel htmlFor="meter_end">Angka Meter (m³)</FormLabel>
-                                <TextInput
-                                    id="meter_end"
-                                    type="number"
-                                    min={0}
-                                    placeholder="cth: 1390"
-                                    value={recordForm.data.meter_end}
-                                    onChange={(e) => recordForm.setData('meter_end', e.target.value)}
-                                />
-                                <FormError>{recordForm.errors.meter_end}</FormError>
+                        <form onSubmit={submitRecord}>
+                            <div className="flex items-center gap-4 bg-[#F7F7F5] rounded-[10px] px-4 py-3 text-sm mb-4">
+                                <div>
+                                    <p className="text-[12px] text-[#8A8A84]">Meter sebelumnya</p>
+                                    <p className="font-bold text-[#1A1A18] tabular-nums">{angka(openPeriod.meter_start)} m³</p>
+                                </div>
+                                {openPeriod.has_start_photo && (
+                                    <a href={photoUrl(openPeriod.id, 'start')} target="_blank" className="text-[12px] text-sky-600 hover:underline">lihat foto awal</a>
+                                )}
                             </div>
-                            <div>
-                                <FormLabel htmlFor="photo-end">Foto Meter</FormLabel>
-                                <TextInput
-                                    id="photo-end"
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => recordForm.setData('photo', e.target.files?.[0] ?? null)}
-                                />
-                                <FormError>{recordForm.errors.photo}</FormError>
-                            </div>
-                            {recordForm.data.photo && (
-                                <img src={URL.createObjectURL(recordForm.data.photo)} alt="preview" className="sm:col-span-2 rounded-[10px] border border-[#E8E7E3] max-h-44 object-contain" />
-                            )}
-                            <div className="sm:col-span-2">
-                                <AdminButton isLoading={recordForm.processing}>Simpan Meter Akhir</AdminButton>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <FormLabel htmlFor="meter_end">Meter sekarang (m³)</FormLabel>
+                                    <TextInput
+                                        id="meter_end"
+                                        type="number"
+                                        min={0}
+                                        placeholder="cth: 1390"
+                                        value={recordForm.data.meter_end}
+                                        onChange={(e) => recordForm.setData('meter_end', e.target.value)}
+                                    />
+                                    <FormError>{recordForm.errors.meter_end}</FormError>
+                                </div>
+                                <div>
+                                    <FormLabel htmlFor="photo-end">Foto Meter</FormLabel>
+                                    <TextInput
+                                        id="photo-end"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => recordForm.setData('photo', e.target.files?.[0] ?? null)}
+                                    />
+                                    <FormError>{recordForm.errors.photo}</FormError>
+                                </div>
+                                {recordForm.data.photo && (
+                                    <img src={URL.createObjectURL(recordForm.data.photo)} alt="preview" className="sm:col-span-2 rounded-[10px] border border-[#E8E7E3] max-h-44 object-contain" />
+                                )}
+                                {(() => {
+                                    const end = parseInt(recordForm.data.meter_end || '0', 10);
+                                    if (!end && end !== 0) return null;
+                                    const start = openPeriod.meter_start ?? 0;
+                                    const usage = end - start;
+                                    const allowance = openPeriod.allowance ?? property.allowance ?? 5;
+                                    const excess = Math.max(0, usage);
+                                    const billable = Math.max(0, usage - allowance);
+                                    const rate = openPeriod.water_rate ?? settings.rate_per_m3;
+                                    const total = Math.round(billable * rate);
+                                    const error = usage < 0;
+                                    return (
+                                        <div className={`sm:col-span-2 rounded-[10px] border px-4 py-3 text-[13px] ${error ? 'border-red-200 bg-red-50' : 'border-[#E8E7E3] bg-[#F7F7F5]'}`}>
+                                            {error ? (
+                                                <p className="text-red-700 font-semibold">Meter akhir tidak boleh kurang dari meter sebelumnya ({angka(start)} m³).</p>
+                                            ) : (
+                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-1.5">
+                                                    <div>
+                                                        <p className="text-[12px] text-[#8A8A84]">Pemakaian</p>
+                                                        <p className="font-semibold text-[#1A1A18] tabular-nums">{angka(usage)} m³</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[12px] text-[#8A8A84]">Termasuk sewa</p>
+                                                        <p className="font-semibold text-[#1A1A18] tabular-nums">{angka(allowance)} m³</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[12px] text-[#8A8A84]">Lebih</p>
+                                                        <p className={`font-semibold tabular-nums ${billable > 0 ? 'text-[#1A1A18]' : 'text-[#6B6B67]'}`}>{angka(billable)} m³</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[12px] text-[#8A8A84]">Tarif</p>
+                                                        <p className="font-medium text-[#2A2A27] tabular-nums">{rupiah(rate)} / m³</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[12px] text-[#8A8A84]">Tagihan</p>
+                                                        <p className="font-bold text-[#1A1A18] tabular-nums">{rupiah(total)}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                <div className="sm:col-span-2 pt-1">
+                                    <AdminButton isLoading={recordForm.processing}>Simpan Meter Akhir</AdminButton>
+                                </div>
                             </div>
                         </form>
                     </>
@@ -270,7 +354,7 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                     <h2 className="font-bold text-[#1A1A18]">Riwayat Periode</h2>
                 </div>
                 {periods.length === 0 && <p className="px-6 py-10 text-center text-sm text-[#8A8A84]">Belum ada periode tercatat.</p>}
-                <div className="hidden md:grid grid-cols-[1fr_1.2fr_1fr_1fr_1fr_1fr_1.2fr] gap-4 px-6 py-3 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
+                <div className="hidden md:grid grid-cols-[1fr_1.3fr_1fr_1.6fr_1fr_1fr_1.2fr] gap-4 px-6 py-3 bg-[#FAFAF8] border-b border-[#E8E7E3] text-[12px] font-bold uppercase tracking-wider text-[#8A8A84]">
                     <div>Periode</div>
                     <div>Meter</div>
                     <div>Pemakaian</div>
@@ -281,15 +365,28 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                 </div>
                 {periods.map((p) => {
                     const status = statusInfo(p.status);
+                    const breakdown = billBreakdown(p);
                     return (
                         <div key={p.id}>
-                            <div className="hidden md:grid grid-cols-[1fr_1.2fr_1fr_1fr_1fr_1fr_1.2fr] gap-4 px-6 py-3 items-center border-b border-[#F1F0EC] text-sm text-[#2A2A27]">
-                                <div className="font-medium">{periodeLabel(p)}</div>
-                                <div>{angka(p.meter_start)} → {p.meter_end !== null ? angka(p.meter_end) : '…'}</div>
-                                <div>{p.usage !== null ? `${angka(p.usage)} m³` : '-'}</div>
-                                <div className="font-medium">{rupiah(p.total_amount)}</div>
-                                <div>{p.due_date ?? '-'}</div>
-                                <div>{p.paid_at ?? '-'}</div>
+                            <div className="hidden md:grid grid-cols-[1fr_1.3fr_1fr_1.6fr_1fr_1fr_1.2fr] gap-4 px-6 py-3 items-center border-b border-[#F1F0EC] text-sm text-[#2A2A27]">
+                                <div className="font-medium whitespace-nowrap">{periodeLabel(p)}</div>
+                                <div className="tabular-nums whitespace-nowrap">{meterLabel(p)}</div>
+                                <div className="tabular-nums whitespace-nowrap">{p.usage !== null ? `${angka(p.usage)} m³` : '-'}</div>
+                                <div>
+                                    {breakdown && (
+                                        <p className="text-[12px] text-[#6B6B67] leading-5 tabular-nums">
+                                            {breakdown.included > 0
+                                                ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
+                                                : `Tanpa jatah · ${angka(breakdown.excess)} m³ ditagih`}
+                                        </p>
+                                    )}
+                                    <p className="font-semibold tabular-nums leading-5">
+                                        {rupiah(p.total_amount)}
+                                        {p.total_amount !== null && p.total_amount === 0 && p.usage !== null && <span className="text-[12px] font-normal text-[#6B6B67]"> · dalam sewa</span>}
+                                    </p>
+                                </div>
+                                <div className="tabular-nums whitespace-nowrap">{p.due_date ?? '-'}</div>
+                                <div className="tabular-nums whitespace-nowrap">{p.paid_at ?? '-'}</div>
                                 <div>
                                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
                                 </div>
@@ -299,8 +396,15 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                     <span className="font-semibold text-[#1A1A18]">{periodeLabel(p)}</span>
                                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
                                 </div>
-                                <p className="text-[13px] text-[#6B6B67]">Meter {angka(p.meter_start)} → {p.meter_end !== null ? angka(p.meter_end) : '…'} · {p.usage !== null ? `Pemakaian ${angka(p.usage)} m³` : ''}</p>
-                                <p className="text-[13px] text-[#6B6B67]">Tagihan {rupiah(p.total_amount)} · Jatuh tempo {p.due_date ?? '-'}</p>
+                                <p className="text-[13px] text-[#6B6B67] tabular-nums">{meterLabel(p)} · {p.usage !== null ? `Pemakaian ${angka(p.usage)} m³` : ''}</p>
+                                {breakdown && (
+                                    <p className="text-[13px] text-[#6B6B67] tabular-nums">
+                                        {breakdown.included > 0
+                                            ? `Incl ${angka(breakdown.included)} m³ · Lebih ${angka(breakdown.excess)} m³`
+                                            : `${angka(breakdown.excess)} m³ ditagih`}
+                                    </p>
+                                )}
+                                <p className="text-[13px] text-[#6B6B67]">Tagihan <span className={`tabular-nums ${p.total_amount !== null && p.total_amount > 0 ? 'font-bold text-[#1A1A18]' : 'font-semibold'}`}>{rupiah(p.total_amount)}</span>{p.total_amount !== null && p.total_amount === 0 && p.usage !== null && <span> · dalam sewa</span>} · Jatuh tempo {p.due_date ?? '-'}</p>
                                 <div className="flex gap-4 pt-1">
                                     {p.has_start_photo && <a href={photoUrl(p.id, 'start')} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline text-[13px]">foto awal</a>}
                                     {p.has_end_photo && <a href={photoUrl(p.id, 'end')} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline text-[13px]">foto akhir</a>}
