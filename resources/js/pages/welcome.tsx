@@ -280,20 +280,20 @@ export default function Welcome({ properties }: WelcomeProps) {
                         <p className="text-[#6B6B67] text-base md:text-lg">Gambar asli unit dan suasana hunian dari dalam.</p>
                     </div>
 
-                    <div className="columns-2 lg:columns-3 gap-4 md:gap-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 grid-flow-dense auto-rows-[220px] sm:auto-rows-[240px] md:auto-rows-[280px] lg:auto-rows-[300px] gap-4 md:gap-6">
                         {[
-                            { src: '/img/kamar-menteng-kos.jpg', alt: 'Kamar Menteng Kos Private', label: 'Kamar' },
-                            { src: '/img/properti-menteng-kos-1.jpg', alt: 'Interior Menteng Kos Private', label: 'Interior' },
-                            { src: '/img/properti-menteng-kos-2.jpg', alt: 'Suasana Menteng Kos Private', label: 'Suasana' },
-                            { src: '/img/hero-menteng-kos.png', alt: 'Tampak Menteng Kos Private', label: 'Tampak Hunian' },
-                        ].map(({ src, alt, label }) => (
-                            <div key={src} className="relative group rounded-2xl overflow-hidden border border-[#E8E7E3] mb-4 md:mb-6 break-inside-avoid bg-white select-none" onContextMenu={(e) => e.preventDefault()}>
+                            { src: '/img/kamar-menteng-kos.jpg', alt: 'Kamar Menteng Kos Private', label: 'Kamar', span: 'col-span-2 row-span-2' },
+                            { src: '/img/properti-menteng-kos-1.jpg', alt: 'Interior Menteng Kos Private', label: 'Interior', span: 'col-span-1 row-span-1' },
+                            { src: '/img/properti-menteng-kos-2.jpg', alt: 'Suasana Menteng Kos Private', label: 'Suasana', span: 'col-span-1 row-span-1' },
+                            { src: '/img/hero-menteng-kos.png', alt: 'Tampak Menteng Kos Private', label: 'Tampak Hunian', span: 'col-span-2 row-span-1' },
+                        ].map(({ src, alt, label, span }) => (
+                            <div key={src} className={`relative group rounded-2xl overflow-hidden border border-[#E8E7E3] bg-white select-none ${span}`} onContextMenu={(e) => e.preventDefault()}>
                                 <img
                                     src={src}
                                     alt={alt}
                                     loading="lazy"
                                     draggable="false"
-                                    className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"
+                                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A18]/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                                 <span className="absolute bottom-3 left-4 text-white text-xs font-semibold tracking-wide uppercase opacity-0 group-hover:opacity-100 transition-opacity duration-300">
