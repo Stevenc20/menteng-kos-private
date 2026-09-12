@@ -78,6 +78,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/tenants/{id}/reject', [AdminController::class, 'rejectTenant'])->name('admin.tenants.reject');
     Route::post('/tenants/{id}/reopen', [AdminController::class, 'reopenApproval'])->name('admin.tenants.reopen');
     Route::put('/tenants/{id}/profile', [AdminController::class, 'updateTenantProfile'])->name('admin.tenants.profile.update');
+    Route::put('/tenants/{id}/email', [AdminController::class, 'updateTenantEmail'])->name('admin.tenants.email.update');
     Route::put('/tenants/{id}/details', [AdminController::class, 'updateTenancyDetails'])->name('admin.tenants.details.update');
     Route::delete('/tenants/{id}', [AdminController::class, 'destroyTenant'])->name('admin.tenants.destroy');
     Route::get('/tenants/{id}/ktp/{kind}', [AdminController::class, 'getTenantKtpPhoto'])->name('admin.tenants.ktp');

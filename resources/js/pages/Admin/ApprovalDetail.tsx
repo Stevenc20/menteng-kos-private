@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { router, useForm } from '@inertiajs/react';
 import { AdminModal, AdminModalHeader, AdminModalContent, AdminModalFooter } from '@/components/admin/AdminModal';
 import { AdminButton } from '@/components/admin/AdminButton';
+import { Loader2 } from 'lucide-react';
 import { calcDueDay } from '@/services/statement';
 import { TenantDocumentation } from '@/components/admin/TenantDocumentation';
 
@@ -111,6 +112,29 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
         });
     };
 
+    // Inline Email Edit
+    const [editingEmail, setEditingEmail] = useState(false);
+    const emailForm = useForm({ email: tenancy.user?.email ?? '' });
+    const submitEmail = (e: React.FormEvent) => {
+        e.preventDefault();
+        emailForm.put(`/admin/tenants/${tenancy.id}/email`, {
+            onSuccess: () => setEditingEmail(false),
+        });
+    };
+    const cancelEmail = () => {
+        emailForm.clearErrors();
+        setEditingEmail(false);
+    };
+    const startEditEmail = () => {
+        emailForm.clearErrors();
+        setEditingEmail(true);
+    };
+    useEffect(() => {
+        if (!editingEmail) {
+            emailForm.setData('email', tenancy.user?.email ?? '');
+        }
+    }, [tenancy.user?.email, editingEmail]);
+
     const ktpUrl = (kind: string) => `/admin/tenants/${tenancy.id}/ktp/${kind}`;
 
     const occupant1 = [
@@ -188,7 +212,55 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                 <Card className="lg:col-span-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                         <InfoRow label="Nama Tenant" value={tenancy.user?.name} />
-                        <InfoRow label="Email" value={tenancy.user?.email} />
+                        <div>
+                            <span className="text-neutral-500 block text-sm">Email</span>
+                            {editingEmail ? (
+                                <form onSubmit={submitEmail} className="mt-1 flex flex-col gap-2">
+                                    <input
+                                        type="email"
+                                        value={emailForm.data.email}
+                                        onChange={e => emailForm.setData('email', e.target.value)}
+                                        className="w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                        autoFocus
+                                        required
+                                    />
+                                    {emailForm.errors.email && (
+                                        <p className="text-red-500 text-xs">{emailForm.errors.email}</p>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="submit"
+                                            disabled={emailForm.processing}
+                                            className="inline-flex items-center justify-center gap-2 h-9 px-4 text-sm font-medium rounded-[10px] bg-[#1E1E1C] text-white hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {emailForm.processing && <Loader2 className="w-4 h-4 animate-spin" />}
+                                            Simpan
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={cancelEmail}
+                                            disabled={emailForm.processing}
+                                            className="inline-flex items-center justify-center h-9 px-4 text-sm font-medium rounded-[10px] text-neutral-600 hover:bg-neutral-100 transition-colors disabled:opacity-50"
+                                        >
+                                            Batal
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <span className="font-medium text-[#1A1A18] inline-flex items-center gap-2">
+                                    {tenancy.user?.email ?? '-'}
+                                    <button
+                                        type="button"
+                                        onClick={startEditEmail}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-400 hover:text-neutral-700"
+                                        title="Edit Email"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                        Edit
+                                    </button>
+                                </span>
+                            )}
+                        </div>
                         <InfoRow label="Unit" value={`${tenancy.property?.name} (${tenancy.property?.type === 'KIOSK' ? 'Kios' : 'Kamar'})`} />
                         <InfoRow label="Harga Deal" value={`${formatRupiah(tenancy.agreed_price)} / bulan`} />
                         <InfoRow label="Tanggal Masuk" value={

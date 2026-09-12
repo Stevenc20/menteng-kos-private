@@ -282,3 +282,79 @@ test('submitting agreement persists the actual move-in date used by the tenant',
     expect($tenancy->status)->toBe('PENDING_ADMIN_APPROVAL');
     expect($tenancy->move_in_date)->toBe('2026-09-09');
 });
+
+test('admin can update a tenant email', function () {
+    $admin = makeApprovalUser(['role' => 'ADMIN']);
+    $tenancy = makeApprovalTenancy();
+    $oldEmail = $tenancy->user->email;
+
+    $this->actingAs($admin)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => 'baru@mentengkos.id',
+    ])->assertRedirect();
+
+    expect($tenancy->user->fresh()->email)->toBe('baru@mentengkos.id');
+    expect($tenancy->user->fresh()->email)->not->toBe($oldEmail);
+});
+
+test('admin email update rejects invalid format and keeps the old email', function () {
+    $admin = makeApprovalUser(['role' => 'ADMIN']);
+    $tenancy = makeApprovalTenancy(['user' => makeApprovalUser(['email' => 'asli@mentengkos.id'])]);
+    $oldEmail = $tenancy->user->email;
+
+    $this->actingAs($admin)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => 'bukan-email',
+    ])->assertSessionHasErrors('email');
+
+    expect($tenancy->user->fresh()->email)->toBe($oldEmail);
+});
+
+test('admin email update rejects an empty email', function () {
+    $admin = makeApprovalUser(['role' => 'ADMIN']);
+    $tenancy = makeApprovalTenancy();
+
+    $this->actingAs($admin)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => '',
+    ])->assertSessionHasErrors('email');
+});
+
+test('admin email update rejects an email already used by another active user', function () {
+    $admin = makeApprovalUser(['role' => 'ADMIN']);
+    $other = makeApprovalUser(['email' => 'dipakai@mentengkos.id']);
+    $tenancy = makeApprovalTenancy();
+
+    $this->actingAs($admin)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => $other->email,
+    ])->assertSessionHasErrors('email');
+
+    expect($tenancy->user->fresh()->email)->not->toBe($other->email);
+});
+
+test('admin email update allows keeping the existing email unchanged', function () {
+    $admin = makeApprovalUser(['role' => 'ADMIN']);
+    $tenancy = makeApprovalTenancy();
+
+    $this->actingAs($admin)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => $tenancy->user->email,
+    ])->assertRedirect();
+
+    expect($tenancy->user->fresh()->email)->toBe($tenancy->user->email);
+});
+
+test('non-admin users cannot update a tenant email', function () {
+    $tenant = makeApprovalUser();
+    $tenancy = makeApprovalTenancy(['user' => $tenant]);
+
+    $this->actingAs($tenant)->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => 'baru@mentengkos.id',
+    ])->assertForbidden();
+
+    expect($tenancy->user->fresh()->email)->not->toBe('baru@mentengkos.id');
+});
+
+test('guests are redirected to login when updating a tenant email', function () {
+    $tenancy = makeApprovalTenancy();
+
+    $this->put("/admin/tenants/{$tenancy->id}/email", [
+        'email' => 'baru@mentengkos.id',
+    ])->assertRedirect(route('login'));
+});

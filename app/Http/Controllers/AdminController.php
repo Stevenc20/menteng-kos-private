@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class AdminController extends Controller
@@ -489,6 +490,25 @@ class AdminController extends Controller
         $profile->save();
 
         return redirect()->back()->with('success', 'Profil tenant berhasil diperbarui.');
+    }
+
+    /**
+     * Admin update tenant account email (users.email).
+     */
+    public function updateTenantEmail(Request $request, $id)
+    {
+        $tenancy = Tenancy::with('user')->findOrFail($id);
+
+        $validated = $request->validate([
+            'email' => [
+                'required', 'string', 'email', 'max:255',
+                Rule::unique('users', 'email')->ignore($tenancy->user_id)->whereNull('deleted_at'),
+            ],
+        ]);
+
+        $tenancy->user->forceFill(['email' => $validated['email']])->save();
+
+        return redirect()->back()->with('success', 'Email tenant berhasil diperbarui.');
     }
 
     /**
