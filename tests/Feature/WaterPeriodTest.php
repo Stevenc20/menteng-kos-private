@@ -290,6 +290,108 @@ test('confirming payment closes the period and opens the next one from the old e
     expect((int) $next->period_month)->toBe($expectedMonth);
 });
 
+test('a fresh open period shows Aktif until its due date approaches', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 45,
+        'photo' => waterPng('start.jpg'),
+    ])->assertRedirect();
+
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.status', 'ACTIVE')
+            ->where('properties.0.water.meter_start', 45)
+        );
+});
+
+test('a METER_DUE period far from its due date shows Aktif', function () {
+    [$admin, $property] = waterUnit();
+
+    WaterPeriod::create([
+        'property_id' => $property->id,
+        'period_year' => now()->year,
+        'period_month' => now()->month,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'meter_start' => 45,
+        'due_date' => today()->addDays((int) Setting::get('water.reminder_days', 4) + 10)->toDateString(),
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.status', 'ACTIVE')
+        );
+});
+
+test('a period inside the reminder window shows Perlu Update Meter', function () {
+    [$admin, $property] = waterUnit();
+
+    $period = WaterPeriod::create([
+        'property_id' => $property->id,
+        'period_year' => now()->year,
+        'period_month' => now()->month,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'meter_start' => 45,
+        'due_date' => today()->addDays((int) Setting::get('water.reminder_days', 4) - 1)->toDateString(),
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.status', 'METER_DUE')
+        );
+
+    // Still METER_DUE once the due date arrives.
+    $period->update(['due_date' => today()->toDateString()]);
+
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.status', 'METER_DUE')
+        );
+});
+
+test('the next period after payment confirmation is Aktif and continues from the old END', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 45,
+        'photo' => waterPng('start.jpg'),
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/record", [
+        'meter_end' => 53,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/confirm")->assertRedirect();
+
+    $next = WaterPeriod::where('property_id', $property->id)->where('id', '!=', $period->id)->first();
+    expect((int) $next->meter_start)->toBe(53);
+    expect($next->status)->toBe('METER_DUE'); // persisted lifecycle unchanged
+
+    // But the UI payload shows the fresh period as Aktif, NOT "Perlu Update Meter".
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.status', 'ACTIVE')
+            ->where('properties.0.water.meter_start', 53)
+        );
+});
+
 test('tenant snapshot survives the tenancy being removed', function () {
     Storage::fake('local');
     [$admin, $property, $user, $tenancy] = waterUnit();

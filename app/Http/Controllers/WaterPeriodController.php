@@ -70,7 +70,7 @@ class WaterPeriodController extends Controller
             $tenant = $activeTenancies->get($property->id);
 
             if ($open) {
-                if ($open->status === WaterPeriod::STATUS_METER_DUE) {
+                if (WaterPeriodService::effectiveStatus($open) === WaterPeriod::STATUS_METER_DUE) {
                     $stats['perlu_update_meter']++;
                 }
                 if ($open->status === WaterPeriod::STATUS_WAITING_PAYMENT) {
@@ -414,7 +414,7 @@ class WaterPeriodController extends Controller
 
         return [
             'id' => $period->id,
-            'status' => $period->status,
+            'status' => WaterPeriodService::effectiveStatus($period),
             'payment_status' => $period->payment_status,
             'period_month' => $period->period_month,
             'period_year' => $period->period_year,

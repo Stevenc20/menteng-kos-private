@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Property;
+use App\Models\Setting;
 use App\Models\Tenancy;
 use App\Models\WaterPeriod;
+use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 
@@ -15,11 +17,50 @@ use Illuminate\Support\Facades\DB;
  *   METER_DUE (start recorded) → WAITING_PAYMENT (end recorded + billed)
  *   → PAID (payment confirmed; a new METER_DUE period auto-continues with the
  *   old END becoming the new START, so the reading is never retyped).
+ *
+ * "Aktif" vs "Perlu Update Meter":
+ *   The DB persists METER_DUE for every open pre-payment period. Whether the
+ *   unit currently shows "Aktif" or "Perlu Update Meter" is DERIVED from the
+ *   period's real due date (see effectiveStatus()): a fresh period is "Aktif"
+ *   and only turns into "Perlu Update Meter" once it enters the reminder window
+ *   (water.reminder_days before the due date). No schema change, no stored
+ *   ACTIVE value — just the right status at the right time.
  */
 class WaterPeriodService
 {
+    /**
+     * Derived status shown while a period is running but NOT yet near its due
+     * date. Never persisted (the DB only knows METER_DUE/WAITING_PAYMENT/PAID).
+     */
+    public const STATUS_ACTIVE = 'ACTIVE';
+
     public function __construct(protected WaterNotificationService $notificationService)
     {
+    }
+
+    /**
+     * The status the UI should display for a period.
+     *
+     *  - METER_DUE: shown as "Perlu Update Meter" only once the real due date is
+     *    inside the reminder window (or already reached/overdue). Before that it
+     *    is "Aktif" so a brand-new period never starts as "Perlu Update Meter".
+     *  - WAITING_PAYMENT / PAID: returned as-is.
+     */
+    public static function effectiveStatus(WaterPeriod $period, ?int $reminderDays = null): string
+    {
+        if ($period->status !== WaterPeriod::STATUS_METER_DUE || $period->due_date === null) {
+            return $period->status;
+        }
+
+        $reminderDays = $reminderDays ?? (int) Setting::get('water.reminder_days', 4);
+
+        $daysUntilDue = (int) today()->startOfDay()->diffInDays(
+            Carbon::parse($period->due_date)->startOfDay(),
+            false
+        );
+
+        // 0 = due today, negative = overdue — still "Perlu Update Meter".
+        return $daysUntilDue <= $reminderDays ? WaterPeriod::STATUS_METER_DUE : self::STATUS_ACTIVE;
     }
 
     /**

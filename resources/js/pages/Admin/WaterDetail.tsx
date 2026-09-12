@@ -8,7 +8,7 @@ import { FormLabel, FormError, TextInput } from '@/components/admin/AdminForm';
 
 interface Period {
     id: number;
-    status: 'METER_DUE' | 'WAITING_PAYMENT' | 'PAID';
+    status: 'ACTIVE' | 'METER_DUE' | 'WAITING_PAYMENT' | 'PAID';
     payment_status: string;
     period_month: number;
     period_year: number;
@@ -34,7 +34,7 @@ interface DetailProps {
     property: { id: number; name: string; type: string; status: string; water_rate: number | null; allowance: number; billing_note: string };
     tenant: { id: number; name: string; whatsapp: string | null } | null;
     periods: Period[];
-    settings: { rate_per_m3: number };
+    settings: { rate_per_m3: number; reminder_days: number };
 }
 
 function rupiah(n: number | null): string {
@@ -49,6 +49,8 @@ function angka(n: number | null | undefined): string {
 
 function statusInfo(status: Period['status']) {
     switch (status) {
+        case 'ACTIVE':
+            return { label: 'Aktif', cls: 'bg-sky-50 text-sky-800 border-sky-200' };
         case 'METER_DUE':
             return { label: 'Perlu Update Meter', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
         case 'WAITING_PAYMENT':
@@ -222,9 +224,10 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                 <p className="text-sm text-[#6B6B67] mb-8">Belum ada periode air aktif untuk unit ini.</p>
             )}
 
-            {/* Inline form: update meter (when METER_DUE) or start (when none) */}
+            {/* Inline form: update meter (when Perlu Update), running info (when Aktif), or start (when none) */}
             <div className="bg-white rounded-2xl border border-[#E8E7E3] shadow-sm p-6 mb-8">
-                {openPeriod?.status === 'METER_DUE' ? (
+                {openPeriod ? (
+                    openPeriod.status === 'METER_DUE' ? (
                     <>
                         <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-amber-600" /> Update Meter Akhir</h3>
                         <form onSubmit={submitRecord}>
@@ -311,7 +314,31 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                 </div>
                             </div>
                         </form>
-                    </>
+                        </>
+                    ) : (
+                        <>
+                            <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center gap-2"><Droplets className="w-5 h-5 text-sky-600" /> Periode Berjalan</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[#F7F7F5] rounded-[10px] px-4 py-3 text-sm">
+                                <div>
+                                    <p className="text-[12px] text-[#8A8A84]">Meter awal</p>
+                                    <p className="font-bold text-[#1A1A18] tabular-nums">{angka(openPeriod.meter_start)} m³</p>
+                                </div>
+                                <div>
+                                    <p className="text-[12px] text-[#8A8A84]">Status</p>
+                                    <p className="font-bold text-[#1A1A18]">Aktif</p>
+                                </div>
+                                <div>
+                                    <p className="text-[12px] text-[#8A8A84]">Jatuh tempo</p>
+                                    <p className="font-bold text-[#1A1A18] tabular-nums">{openPeriod.due_date ?? '-'}</p>
+                                </div>
+                            </div>
+                            <p className="text-[13px] text-[#6B6B67] mt-3">
+                                Periode ini masih berjalan dan belum waktunya input meter akhir. Form <b>Update Meter Akhir</b> akan muncul
+                                {openPeriod.due_date ? <> saat mendekati jatuh tempo <b className="tabular-nums text-[#1A1A18]">{openPeriod.due_date}</b></> : ' saat mendekati jatuh tempo'}
+                                . Pemakaian dihitung dari meter awal <b className="tabular-nums text-[#1A1A18]">{angka(openPeriod.meter_start)} m³</b> sampai pembacaan berikutnya.
+                            </p>
+                        </>
+                    )
                 ) : (
                     <>
                         <h3 className="font-bold text-[#1A1A18] mb-1">Mulai Periode Baru</h3>

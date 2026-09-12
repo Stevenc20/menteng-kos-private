@@ -21,7 +21,7 @@ import { AdminButton } from '@/components/admin/AdminButton';
 
 interface WaterPeriod {
     id: number;
-    status: 'METER_DUE' | 'WAITING_PAYMENT' | 'PAID';
+    status: 'ACTIVE' | 'METER_DUE' | 'WAITING_PAYMENT' | 'PAID';
     payment_status: string;
     period_month: number;
     period_year: number;
@@ -115,6 +115,8 @@ function angka(n: number | null | undefined): string {
 
 function statusInfo(status: WaterPeriod['status']) {
     switch (status) {
+        case 'ACTIVE':
+            return { label: 'Aktif', cls: 'bg-sky-50 text-sky-800 border-sky-200' };
         case 'METER_DUE':
             return { label: 'Perlu Update Meter', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
         case 'WAITING_PAYMENT':
