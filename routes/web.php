@@ -7,11 +7,10 @@ use App\Http\Controllers\ContinuationController;
 use App\Http\Controllers\MoveOutController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\TenantController;
 use App\Http\Controllers\WaterMeterController;
 use App\Http\Controllers\WaterPeriodController;
-use App\Models\Billing;
 use App\Models\Property;
-use App\Models\Tenancy;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -144,26 +143,14 @@ Route::middleware(['auth'])->prefix('tenant')->group(function () {
     Route::post('/onboarding/revise', [OnboardingController::class, 'revise'])->name('tenant.onboarding.revise');
 
     // Tenant Dashboard
-    Route::get('/dashboard', function () {
-        $user = Auth::user();
-        $tenancy = Tenancy::with('property')->where('user_id', $user->id)->first();
+    Route::get('/dashboard', [TenantController::class, 'dashboard'])->name('tenant.dashboard');
 
-        if (! $tenancy) {
-            return redirect('/tenant/onboarding'); // No tenancy at all
-        }
-
-        // Onboarding data is now filled by the admin; the tenant lands straight on
-        // the dashboard for every status (INVITED → ACTIVE).
-        $nextBilling = Billing::where('tenancy_id', $tenancy->id)
-            ->where('billing_type', 'RENT')
-            ->orderBy('due_date', 'asc')
-            ->first();
-
-        return Inertia::render('Tenant/Dashboard', [
-            'tenancy' => $tenancy,
-            'nextBilling' => $nextBilling,
-        ]);
-    })->name('tenant.dashboard');
+    // Tenant Portal: Payments, Water Usage, Agreement
+    Route::get('/payments', [TenantController::class, 'payments'])->name('tenant.payments');
+    Route::get('/water-usage', [TenantController::class, 'waterUsage'])->name('tenant.water-usage');
+    Route::get('/agreement', [TenantController::class, 'agreement'])->name('tenant.agreement');
+    Route::get('/agreement/download', [TenantController::class, 'agreementDownload'])->name('tenant.agreement.download');
+    Route::get('/water/periods/{periodId}/photo/{kind}', [TenantController::class, 'waterPeriodPhoto'])->name('tenant.water.period.photo');
 
     // Continuation Logic (H-3)
     Route::post('/continuation', [ContinuationController::class, 'submitDecision'])->name('tenant.continuation.submit');

@@ -1,0 +1,53 @@
+interface StatusBadgeProps {
+    label: string;
+    tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'pending';
+}
+
+const TONES: Record<NonNullable<StatusBadgeProps['tone']>, string> = {
+    neutral: 'bg-neutral-100 text-neutral-700',
+    success: 'bg-emerald-100 text-emerald-700',
+    warning: 'bg-amber-100 text-amber-700',
+    danger: 'bg-red-100 text-red-700',
+    info: 'bg-sky-100 text-sky-700',
+    pending: 'bg-violet-100 text-violet-700',
+};
+
+export default function StatusBadge({ label, tone = 'neutral' }: StatusBadgeProps) {
+    return (
+        <span className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${TONES[tone]}`}>
+            {label}
+        </span>
+    );
+}
+
+export const billingTone = (status: string): StatusBadgeProps['tone'] => {
+    switch (status) {
+        case 'PAID':
+            return 'success';
+        case 'PENDING_VERIFICATION':
+        case 'REMINDER_SENT':
+            return 'pending';
+        case 'PENDING_PAYMENT':
+        case 'UPCOMING':
+            return 'info';
+        case 'OVERDUE':
+            return 'danger';
+        case 'REJECTED':
+            return 'danger';
+        default:
+            return 'neutral';
+    }
+};
+
+export const waterTone = (status: string): StatusBadgeProps['tone'] => {
+    switch (status) {
+        case 'PAID':
+            return 'success';
+        case 'WAITING_PAYMENT':
+            return 'warning';
+        case 'METER_DUE':
+            return 'neutral';
+        default:
+            return 'neutral';
+    }
+};
