@@ -121,7 +121,7 @@ test('payments page includes PAM water charges', function () {
     $tenancy = makePortalTenancy(['user' => $tenant]);
 
     WaterPeriod::create([
-        'tenancy_id' => $tenancy->id,
+        // tenancy_id deliberately left null: history belongs to the unit.
         'property_id' => $tenancy->property_id,
         'period_month' => 9,
         'period_year' => 2026,
@@ -155,7 +155,6 @@ test('water usage page uses shared allowance rule for kiosk (zero allowance)', f
     $tenancy = makePortalTenancy(['user' => $tenant, 'property' => makePortalProperty('KIOSK')]);
 
     WaterPeriod::create([
-        'tenancy_id' => $tenancy->id,
         'property_id' => $tenancy->property_id,
         'period_month' => 8,
         'period_year' => 2026,
@@ -175,6 +174,147 @@ test('water usage page uses shared allowance rule for kiosk (zero allowance)', f
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('waterRule.allowance_m3', 0))
         ->assertInertia(fn ($page) => $page->where('periods.0.billable_usage', 12));
+});
+
+test('water usage page shows periods recorded by admin even without a tenancy snapshot', function () {
+    $tenant = makePortalTenant();
+    $tenancy = makePortalTenancy(['user' => $tenant]);
+
+    WaterPeriod::create([
+        // The admin records per-unit; the period may exist before any tenancy
+        // snapshot is attached (tenancy_id null). Tenant must still see it.
+        'property_id' => $tenancy->property_id,
+        'period_month' => 7,
+        'period_year' => 2026,
+        'meter_start' => 45,
+        'meter_end' => 50,
+        'usage' => 5,
+        'billable_usage' => 0,
+        'water_rate' => 14000,
+        'total_amount' => 0,
+        'status' => 'WAITING_PAYMENT',
+        'payment_status' => 'UNPAID',
+        'due_date' => now()->addDays(2)->format('Y-m-d'),
+    ]);
+
+    $this->actingAs($tenant)
+        ->get(route('tenant.water-usage'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('periods.0.meter_start', 45))
+        ->assertInertia(fn ($page) => $page->where('periods.0.meter_end', 50))
+        ->assertInertia(fn ($page) => $page->where('periods.0.has_end', true));
+});
+
+test('kamar open period shows allowance boundary and pending status until the end is read', function () {
+    $tenant = makePortalTenant();
+    $tenancy = makePortalTenancy(['user' => $tenant, 'property' => makePortalProperty('ROOM')]);
+
+    WaterPeriod::create([
+        'property_id' => $tenancy->property_id,
+        'period_month' => 9,
+        'period_year' => 2026,
+        'meter_start' => 45,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'water_rate' => 14000,
+        'due_date' => now()->addDays(10)->format('Y-m-d'),
+    ]);
+
+    $this->actingAs($tenant)
+        ->get(route('tenant.water-usage'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('periods.0.meter_start', 45))
+        ->assertInertia(fn ($page) => $page->where('periods.0.has_end', false))
+        ->assertInertia(fn ($page) => $page->where('periods.0.allowance_end', 50))
+        ->assertInertia(fn ($page) => $page->where('periods.0.status_label', 'Menunggu Pencatatan'))
+        ->assertInertia(fn ($page) => $page->where('periods.0.total_amount', null));
+});
+
+test('kamar used exactly the allowance is billed zero', function () {
+    $tenant = makePortalTenant();
+    $tenancy = makePortalTenancy(['user' => $tenant, 'property' => makePortalProperty('ROOM')]);
+
+    WaterPeriod::create([
+        'property_id' => $tenancy->property_id,
+        'period_month' => 9,
+        'period_year' => 2026,
+        'meter_start' => 45,
+        'meter_end' => 50,
+        'usage' => 5,
+        'billable_usage' => 0,
+        'water_rate' => 14000,
+        'total_amount' => 0,
+        'status' => 'WAITING_PAYMENT',
+        'payment_status' => 'UNPAID',
+        'due_date' => now()->addDays(2)->format('Y-m-d'),
+    ]);
+
+    $this->actingAs($tenant)
+        ->get(route('tenant.water-usage'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('periods.0.usage', 5))
+        ->assertInertia(fn ($page) => $page->where('periods.0.allowance', 5))
+        ->assertInertia(fn ($page) => $page->where('periods.0.billable_usage', 0))
+        ->assertInertia(fn ($page) => $page->where('periods.0.total_amount', 0))
+        ->assertInertia(fn ($page) => $page->where('periods.0.has_end', true));
+});
+
+test('kamar over the allowance is billed for the excess only', function () {
+    $tenant = makePortalTenant();
+    $tenancy = makePortalTenancy(['user' => $tenant, 'property' => makePortalProperty('ROOM')]);
+
+    WaterPeriod::create([
+        'property_id' => $tenancy->property_id,
+        'period_month' => 9,
+        'period_year' => 2026,
+        'meter_start' => 45,
+        'meter_end' => 53,
+        'usage' => 8,
+        'billable_usage' => 3,
+        'water_rate' => 14000,
+        'total_amount' => 42000,
+        'status' => 'WAITING_PAYMENT',
+        'payment_status' => 'UNPAID',
+        'due_date' => now()->addDays(2)->format('Y-m-d'),
+    ]);
+
+    $this->actingAs($tenant)
+        ->get(route('tenant.water-usage'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('periods.0.usage', 8))
+        ->assertInertia(fn ($page) => $page->where('periods.0.allowance', 5))
+        ->assertInertia(fn ($page) => $page->where('periods.0.billable_usage', 3))
+        ->assertInertia(fn ($page) => $page->where('periods.0.total_amount', 42000));
+});
+
+test('kiosk is fully billed and never gets the room allowance boundary', function () {
+    $tenant = makePortalTenant();
+    $tenancy = makePortalTenancy(['user' => $tenant, 'property' => makePortalProperty('KIOSK')]);
+
+    WaterPeriod::create([
+        'property_id' => $tenancy->property_id,
+        'period_month' => 9,
+        'period_year' => 2026,
+        'meter_start' => 48,
+        'meter_end' => 53,
+        'usage' => 5,
+        'billable_usage' => 5,
+        'water_rate' => 14000,
+        'total_amount' => 70000,
+        'status' => 'WAITING_PAYMENT',
+        'payment_status' => 'UNPAID',
+        'due_date' => now()->addDays(2)->format('Y-m-d'),
+    ]);
+
+    $this->actingAs($tenant)
+        ->get(route('tenant.water-usage'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('periods.0.meter_start', 48))
+        ->assertInertia(fn ($page) => $page->where('periods.0.meter_end', 53))
+        ->assertInertia(fn ($page) => $page->where('periods.0.allowance', 0))
+        ->assertInertia(fn ($page) => $page->where('periods.0.allowance_end', null))
+        ->assertInertia(fn ($page) => $page->where('periods.0.billable_usage', 5))
+        ->assertInertia(fn ($page) => $page->where('periods.0.total_amount', 70000));
 });
 
 test('tenant can only download their own uploaded agreement document', function () {
@@ -215,7 +355,7 @@ test('tenant can only view their own water meter photos', function () {
     Storage::disk('local')->put($path, 'binary');
 
     $period = WaterPeriod::create([
-        'tenancy_id' => $ownerTenancy->id,
+        // tenancy snapshot left null — ownership is scoped by the unit.
         'property_id' => $ownerTenancy->property_id,
         'period_month' => 7,
         'period_year' => 2026,

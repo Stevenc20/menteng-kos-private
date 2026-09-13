@@ -113,7 +113,7 @@ class TenantController extends Controller
             ->orderBy('id', 'desc')
             ->get();
 
-        $waterCharges = WaterPeriod::where('tenancy_id', $tenancy->id)
+        $waterCharges = WaterPeriod::where('property_id', $tenancy->property_id)
             ->whereNotNull('total_amount')
             ->orderByDesc('period_year')
             ->orderByDesc('period_month')
@@ -139,7 +139,7 @@ class TenantController extends Controller
             return $tenancy;
         }
 
-        $periods = WaterPeriod::where('tenancy_id', $tenancy->id)
+        $periods = WaterPeriod::where('property_id', $tenancy->property_id)
             ->orderByDesc('period_year')
             ->orderByDesc('period_month')
             ->orderByDesc('id')
@@ -234,7 +234,9 @@ class TenantController extends Controller
     {
         $period = WaterPeriod::findOrFail($periodId);
 
-        if ($period->tenancy_id !== $this->currentTenancy()?->id) {
+        // Ownership is scoped by the UNIT (property), the same link the Admin
+        // uses — a period may exist before/without a tenancy snapshot.
+        if ($period->property_id !== $this->currentTenancy()?->property_id) {
             abort(403);
         }
 
@@ -292,20 +294,31 @@ class TenantController extends Controller
         $effectiveStatus = WaterPeriodService::effectiveStatus($period);
         $allowance = $period->usage !== null && $period->billable_usage !== null
             ? max(0, (int) $period->usage - (int) $period->billable_usage)
-            : WaterBillingService::allowanceForType($period->tenancy?->property?->type ?? $period->property?->type);
+            : WaterBillingService::allowanceForType($period->property?->type);
+        $hasEnd = $period->meter_end !== null;
 
         return [
             'id' => $period->id,
             'status' => $effectiveStatus,
-            'status_label' => self::label($effectiveStatus, self::WATER_STATUS_LABELS),
+            // Tenant-facing: an open period without a recorded end is simply
+            // "Menunggu Pencatatan", never an empty-state.
+            'status_label' => $hasEnd
+                ? self::label($effectiveStatus, self::WATER_STATUS_LABELS)
+                : 'Menunggu Pencatatan',
             'period_label' => $this->periodLabel($period),
             'meter_start' => $period->meter_start,
+            // Visual allowance boundary (meter_start + jatah), NOT a real reading.
+            // Only meaningful when the unit has an allowance (KAMAR), kiosk stays null.
+            'allowance_end' => $period->meter_start !== null && $allowance > 0
+                ? (int) $period->meter_start + $allowance
+                : null,
             'meter_start_recorded_at' => $period->meter_start_recorded_at?->toDateTimeString(),
             'has_start_photo' => (bool) $period->meter_start_photo,
             'start_photo_url' => $period->meter_start_photo
                 ? route('tenant.water.period.photo', [$period->id, 'start'])
                 : null,
             'meter_end' => $period->meter_end,
+            'has_end' => $hasEnd,
             'meter_end_recorded_at' => $period->meter_end_recorded_at?->toDateTimeString(),
             'has_end_photo' => (bool) $period->meter_end_photo,
             'end_photo_url' => $period->meter_end_photo

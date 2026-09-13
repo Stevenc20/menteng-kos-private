@@ -11,7 +11,6 @@ const NAV_LINKS = [
     { href: '/tenant/payments', label: 'Pembayaran' },
     { href: '/tenant/water-usage', label: 'Air (PAM)' },
     { href: '/tenant/agreement', label: 'Surat Pernyataan' },
-    { href: '/settings/profile', label: 'Profil' },
 ];
 
 export default function TenantLayout({ title, children }: TenantLayoutProps) {
