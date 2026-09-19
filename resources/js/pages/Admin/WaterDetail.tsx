@@ -85,7 +85,7 @@ const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep
 export default function WaterDetail({ property, tenant, periods, settings }: DetailProps) {
     const openPeriod = periods.find((p) => p.status !== 'PAID') ?? null;
 
-    const startForm = useForm({ meter_start: '', photo: null as File | null, note: '' });
+    const startForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
 
     const submitStart = (e: React.FormEvent) => {
@@ -377,6 +377,22 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                                     value={startForm.data.note}
                                     onChange={(e) => startForm.setData('note', e.target.value)}
                                 />
+                            </div>
+                            <div>
+                                <FormLabel htmlFor="allowance">Jatah Periode Ini, m³ (opsional)</FormLabel>
+                                <TextInput
+                                    id="allowance"
+                                    type="number"
+                                    min={0}
+                                    max={5}
+                                    placeholder="cth: 2"
+                                    value={startForm.data.allowance}
+                                    onChange={(e) => startForm.setData('allowance', e.target.value)}
+                                />
+                                <p className="text-[12px] text-[#8A8A84] mt-1">
+                                    Isi sisa jatah (mis. 2 m³) saat penghuni pindah kamar di tengah periode. Kosongkan untuk jatah normal 5 m³.
+                                </p>
+                                <FormError>{startForm.errors.allowance}</FormError>
                             </div>
                             <div className="flex items-end">
                                 <AdminButton isLoading={startForm.processing} className="bg-emerald-900 hover:bg-emerald-950">Mulai Periode</AdminButton>

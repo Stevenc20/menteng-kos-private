@@ -15,7 +15,9 @@ class WaterPeriod extends Model
      *  - PAID           : payment confirmed; period closed (next period continues)
      */
     public const STATUS_METER_DUE = 'METER_DUE';
+
     public const STATUS_WAITING_PAYMENT = 'WAITING_PAYMENT';
+
     public const STATUS_PAID = 'PAID';
 
     /**
@@ -30,6 +32,7 @@ class WaterPeriod extends Model
             'meter_end_recorded_at' => 'datetime',
             'usage' => 'integer',
             'billable_usage' => 'integer',
+            'allowance' => 'integer',
             'water_rate' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'due_date' => 'date',

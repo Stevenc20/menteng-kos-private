@@ -294,7 +294,7 @@ class TenantController extends Controller
         $effectiveStatus = WaterPeriodService::effectiveStatus($period);
         $allowance = $period->usage !== null && $period->billable_usage !== null
             ? max(0, (int) $period->usage - (int) $period->billable_usage)
-            : WaterBillingService::allowanceForType($period->property?->type);
+            : WaterBillingService::allowanceForPeriod($period);
         $hasEnd = $period->meter_end !== null;
 
         return [
@@ -413,7 +413,7 @@ class TenantController extends Controller
             return null;
         }
 
-        $d = \Carbon\Carbon::parse($dueDate);
+        $d = Carbon::parse($dueDate);
 
         return (self::MONTH_NAMES[(int) $d->month] ?? $d->month).' '.$d->year;
     }

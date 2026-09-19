@@ -195,6 +195,9 @@ class WaterPeriodController extends Controller
             'meter_start' => 'required|integer|min:0',
             'photo' => 'required|image|max:20480',
             'note' => 'nullable|string|max:255',
+            // Jatah sisa untuk periode pertama setelah penghuni pindah kamar di
+            // tengah siklus (mis. 5 − 3 = 2). Kosongkan untuk jatah normal.
+            'allowance' => 'nullable|integer|min:0|max:'.WaterBillingService::WATER_ALLOWANCE_M3,
         ]);
 
         $photoPath = null;
@@ -202,7 +205,13 @@ class WaterPeriodController extends Controller
         try {
             $photoPath = $this->storeMeterPhoto($request->file('photo'), $property->id);
 
-            $period = $this->periodService->startPeriod($property, (int) $validated['meter_start'], $photoPath, $validated['note'] ?? null);
+            $period = $this->periodService->startPeriod(
+                $property,
+                (int) $validated['meter_start'],
+                $photoPath,
+                $validated['note'] ?? null,
+                isset($validated['allowance']) ? (int) $validated['allowance'] : null,
+            );
         } catch (ValidationException $e) {
             if ($photoPath) {
                 Storage::disk('local')->delete($photoPath);
@@ -402,14 +411,12 @@ class WaterPeriodController extends Controller
     {
         // Included m³ for THIS period: use stored data when the period ended
         // (included = usage - billable_usage is the ground truth), otherwise the
-        // allowance rule that recordEnd would apply for this unit.
+        // per-period allowance override or the rule recordEnd would apply.
         $allowance = null;
         if ($period->usage !== null && $period->billable_usage !== null) {
             $allowance = max(0, (int) $period->usage - (int) $period->billable_usage);
-        } elseif ($period->tenancy) {
-            $allowance = WaterBillingService::allowanceM3($period->tenancy);
         } else {
-            $allowance = WaterBillingService::allowanceForType($period->property?->type);
+            $allowance = WaterBillingService::allowanceForPeriod($period);
         }
 
         return [

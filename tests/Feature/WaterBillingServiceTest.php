@@ -3,6 +3,7 @@
 use App\Models\Property;
 use App\Models\Tenancy;
 use App\Models\User;
+use App\Models\WaterPeriod;
 use App\Services\WaterBillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -100,4 +101,56 @@ test('allowanceM3 exposes the included allowance: 5 m3 for room, 0 for every kio
     $dealTenancy = makeWaterTenancy($kioskDeal, 1700000);
     expect(WaterBillingService::allowanceM3($dealTenancy))->toBe(0);
     expect(WaterBillingService::billableUsage($dealTenancy, 7))->toBe(7);
+});
+
+test('allowanceForPeriod honours the per-period override before the type rule', function () {
+    $property = Property::create(['name' => 'Kamar', 'type' => 'ROOM', 'normal_price' => 1500000, 'status' => 'AVAILABLE']);
+    $tenancy = makeWaterTenancy($property, 1500000);
+
+    $carryOver = WaterPeriod::create([
+        'property_id' => $property->id,
+        'tenancy_id' => $tenancy->id,
+        'tenant_id' => $tenancy->user_id,
+        'period_year' => now()->year,
+        'period_month' => now()->month,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'meter_start' => 100,
+        'allowance' => 2,
+    ]);
+
+    // The remaining quota (2 m³) wins over the normal 5 m³ for this period.
+    expect(WaterBillingService::allowanceForPeriod($carryOver))->toBe(2);
+    expect(WaterBillingService::billableUsageForPeriod($carryOver, 3))->toBe(1);
+    expect(WaterBillingService::billableUsageForPeriod($carryOver, 2))->toBe(0);
+
+    $normal = WaterPeriod::create([
+        'property_id' => $property->id,
+        'tenancy_id' => $tenancy->id,
+        'tenant_id' => $tenancy->user_id,
+        'period_year' => now()->year,
+        'period_month' => now()->month,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'meter_start' => 106,
+    ]);
+
+    // No override -> falls back to the normal room rule (5 m³).
+    expect(WaterBillingService::allowanceForPeriod($normal))->toBe(5);
+
+    $kiosk = Property::create(['name' => 'Kios', 'type' => 'KIOSK', 'normal_price' => 2000000, 'status' => 'AVAILABLE']);
+    $kioskTenancy = makeWaterTenancy($kiosk, 2000000);
+    $kioskPeriod = WaterPeriod::create([
+        'property_id' => $kiosk->id,
+        'tenancy_id' => $kioskTenancy->id,
+        'tenant_id' => $kioskTenancy->user_id,
+        'period_year' => now()->year,
+        'period_month' => now()->month,
+        'status' => 'METER_DUE',
+        'payment_status' => 'NOT_APPLICABLE',
+        'meter_start' => 50,
+    ]);
+
+    // Without an override a KIOSK stays at 0 allowance.
+    expect(WaterBillingService::allowanceForPeriod($kioskPeriod))->toBe(0);
 });

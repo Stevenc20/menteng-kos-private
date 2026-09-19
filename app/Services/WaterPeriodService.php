@@ -2,13 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\NotificationLog;
 use App\Models\Property;
 use App\Models\Setting;
 use App\Models\Tenancy;
 use App\Models\WaterPeriod;
 use Carbon\Carbon;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Lifecycle of a per-unit water meter period.
@@ -34,9 +35,7 @@ class WaterPeriodService
      */
     public const STATUS_ACTIVE = 'ACTIVE';
 
-    public function __construct(protected WaterNotificationService $notificationService)
-    {
-    }
+    public function __construct(protected WaterNotificationService $notificationService) {}
 
     /**
      * The status the UI should display for a period.
@@ -65,9 +64,18 @@ class WaterPeriodService
 
     /**
      * Open a new water period for the unit (meter-start + photo).
+     *
+     * @param  int|null  $allowance  per-period allowance override (m³). Set when a
+     *                               tenant moves rooms mid-cycle so the first period
+     *                               only carries the remaining quota (e.g. 2 m³).
      */
-    public function startPeriod(Property $property, int $meterStart, ?string $meterStartPhoto, ?string $note = null): WaterPeriod
-    {
+    public function startPeriod(
+        Property $property,
+        int $meterStart,
+        ?string $meterStartPhoto,
+        ?string $note = null,
+        ?int $allowance = null,
+    ): WaterPeriod {
         $tenancy = $property->currentTenancy();
         $now = now();
 
@@ -84,6 +92,7 @@ class WaterPeriodService
             'meter_start_recorded_at' => $now,
             'water_rate' => WaterBillingService::ratePerM3($property),
             'due_date' => $this->resolveDueDate($tenancy, null),
+            'allowance' => $allowance,
             'note' => $note,
         ]);
     }
@@ -105,11 +114,10 @@ class WaterPeriodService
 
         $usage = $meterEnd - (int) $period->meter_start;
 
-        // Allowance is type-based: 5m³ for KAMAR, 0 for KIOS. When the period
-        // has no tenancy snapshot, fall back to the unit type rule.
-        $billable = $period->tenancy
-            ? WaterBillingService::billableUsage($period->tenancy, $usage)
-            : max(0, $usage - WaterBillingService::allowanceForType($period->property?->type));
+        // Allowance is per-PERIOD: an override (carry-over from a mid-cycle room
+        // move) wins; otherwise the tenancy's rule applies (5m³ for KAMAR, 0 for
+        // KIOSK). A period with no tenancy snapshot falls back to the unit type.
+        $billable = WaterBillingService::billableUsageForPeriod($period, $usage);
 
         $rate = (float) ($period->water_rate ?? WaterBillingService::ratePerM3($period->property));
         $total = (int) round($billable * $rate);
@@ -153,7 +161,7 @@ class WaterPeriodService
         });
 
         // Tell the admin the new period has started (reminder to photo the meter).
-        $this->notificationService->notifyPeriod($next, \App\Models\NotificationLog::TRIGGER_NEW_PERIOD);
+        $this->notificationService->notifyPeriod($next, NotificationLog::TRIGGER_NEW_PERIOD);
 
         return $period->refresh();
     }
@@ -196,9 +204,9 @@ class WaterPeriodService
             return now()->addDays(30)->toDateString();
         }
 
-        $moveInDay = (int) \Carbon\Carbon::parse($tenancy->move_in_date)->day;
+        $moveInDay = (int) Carbon::parse($tenancy->move_in_date)->day;
 
-        $anchor = $anchorDueDate ?? \Carbon\Carbon::parse($tenancy->move_in_date)->toDateString();
+        $anchor = $anchorDueDate ?? Carbon::parse($tenancy->move_in_date)->toDateString();
 
         return DueDateService::nextDueDate($anchor, $moveInDay, $tenancy->due_day);
     }

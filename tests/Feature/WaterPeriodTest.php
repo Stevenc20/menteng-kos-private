@@ -251,6 +251,98 @@ test('water detail page exposes the billing allowance for the unit', function ()
 });
 
 // ---------------------------------------------------------------------------
+// 2b. Pindah kamar tengah siklus: jatah sisa (allowance override)
+// ---------------------------------------------------------------------------
+
+test('a mid-cycle room move starts the new period with the remaining allowance (carry-over)', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    // Tenant already used 3 m³ in the old room; the new room keeps the remaining
+    // 2 m³ of the monthly 5 m³ quota until the next due date.
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => 2,
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+    expect((int) $period->allowance)->toBe(2);
+
+    // The UI exposes the leftover quota for the open period.
+    $this->actingAs($admin)
+        ->get('/admin/water')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('properties.0.water.allowance', 2)
+        );
+
+    // Uses 3 m³ in the new room: 2 m³ free, 1 m³ billed.
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/record", [
+        'meter_end' => 103,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+
+    $period->refresh();
+    expect((int) $period->usage)->toBe(3);
+    expect((int) $period->billable_usage)->toBe(1);
+    expect((float) $period->total_amount)->toBe(14000.0);
+});
+
+test('periods after the first move-in resume the normal 5 m3 allowance', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    // First (partial) period carries only the remaining quota: 2 m³.
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => 2,
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+    expect((int) $period->allowance)->toBe(2);
+
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/record", [
+        'meter_end' => 106,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/confirm")->assertRedirect();
+
+    // The next period drops the override -> back to the normal 5 m³ rule.
+    $next = WaterPeriod::where('property_id', $property->id)->where('id', '!=', $period->id)->first();
+    expect($next->allowance)->toBeNull();
+
+    $this->actingAs($admin)->post("/admin/water/periods/{$next->id}/record", [
+        'meter_end' => 115,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+
+    $next->refresh();
+    expect((int) $next->usage)->toBe(9);         // 115 − 106
+    expect((int) $next->billable_usage)->toBe(4); // 9 − 5 normal allowance
+});
+
+test('allowance out of range is rejected when starting a period', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => 6,
+    ])->assertSessionHasErrors('allowance');
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 110,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => -1,
+    ])->assertSessionHasErrors('allowance');
+
+    expect(WaterPeriod::where('property_id', $property->id)->count())->toBe(0);
+});
+
+// ---------------------------------------------------------------------------
 // 4. Konfirmasi pembayaran
 // ---------------------------------------------------------------------------
 

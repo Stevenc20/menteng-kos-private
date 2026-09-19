@@ -169,7 +169,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
     const [testWaResult, setTestWaResult] = useState<{ status: 'sent' | 'failed'; message: string } | null>(null);
     const [testSending, setTestSending] = useState(false);
 
-    const startForm = useForm({ meter_start: '', photo: null as File | null, note: '' });
+    const startForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
     const settingsForm = useForm({
         to_admin_whatsapp: settings.to_admin_whatsapp,
@@ -660,6 +660,23 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                 value={startForm.data.note}
                                 onChange={(e) => startForm.setData('note', e.target.value)}
                             />
+                        </div>
+
+                        <div className="mt-4">
+                            <FormLabel htmlFor="allowance">Jatah Periode Ini, m³ (opsional)</FormLabel>
+                            <TextInput
+                                id="allowance"
+                                type="number"
+                                min={0}
+                                max={5}
+                                placeholder="cth: 2"
+                                value={startForm.data.allowance}
+                                onChange={(e) => startForm.setData('allowance', e.target.value)}
+                            />
+                            <FormHelper>
+                                Isi sisa jatah (mis. 2 m³) hanya saat penghuni pindah kamar di tengah periode. Kosongkan untuk jatah normal 5 m³.
+                            </FormHelper>
+                            <FormError>{startForm.errors.allowance}</FormError>
                         </div>
                     </AdminModalContent>
                     <AdminModalFooter>

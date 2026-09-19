@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Property;
 use App\Models\Setting;
 use App\Models\Tenancy;
+use App\Models\WaterPeriod;
 
 /**
  * Single source of truth for water (PAM) billing.
@@ -54,6 +55,37 @@ class WaterBillingService
     public static function allowanceM3(Tenancy $tenancy): int
     {
         return self::chargesWaterSeparately($tenancy) ? 0 : self::WATER_ALLOWANCE_M3;
+    }
+
+    /**
+     * Included m³ for a single PERIOD.
+     *
+     * A stored per-period `allowance` override wins (used for the first period
+     * after a tenant moves rooms mid-cycle, carrying over the remaining quota,
+     * e.g. 5 − 3 = 2 m³). Without an override the rule is resolved from the
+     * tenancy, falling back to the unit type.
+     */
+    public static function allowanceForPeriod(WaterPeriod $period, ?int $fallback = null): int
+    {
+        if ($period->allowance !== null) {
+            return max(0, (int) $period->allowance);
+        }
+
+        if ($fallback !== null) {
+            return $fallback;
+        }
+
+        return $period->tenancy
+            ? self::allowanceM3($period->tenancy)
+            : self::allowanceForType($period->property?->type);
+    }
+
+    /**
+     * Billable usage for a specific period, honouring its allowance override.
+     */
+    public static function billableUsageForPeriod(WaterPeriod $period, int $usageM3): int
+    {
+        return max(0, (int) $usageM3 - self::allowanceForPeriod($period));
     }
 
     /**
