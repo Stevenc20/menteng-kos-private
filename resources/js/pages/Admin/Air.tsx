@@ -2,7 +2,7 @@ import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { Droplets, Camera, CheckCircle2, AlertTriangle, Timer, Settings2, ScrollText, ExternalLink, Mail, MessageSquare, Send, Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Droplets, Camera, CheckCircle2, AlertTriangle, Timer, Settings2, ScrollText, ExternalLink, Mail, MessageSquare, Send, Loader2, ShieldCheck, ShieldAlert, Pencil } from 'lucide-react';
 import {
     AdminModal,
     AdminModalHeader,
@@ -156,7 +156,7 @@ const TRIGGER_LABEL: Record<string, string> = {
 };
 
 export default function Air({ properties, stats, activeFilter, settings, logs }: AirProps) {
-    const [modal, setModal] = useState<'start' | 'record' | 'settings' | 'logs' | 'test-email' | 'test-whatsapp' | null>(null);
+    const [modal, setModal] = useState<'start' | 'record' | 'edit-start' | 'settings' | 'logs' | 'test-email' | 'test-whatsapp' | null>(null);
     const [selectedProperty, setSelectedProperty] = useState<PropertyRow | null>(null);
     const [selectedPeriod, setSelectedPeriod] = useState<WaterPeriod | null>(null);
 
@@ -170,6 +170,7 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
     const [testSending, setTestSending] = useState(false);
 
     const startForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
+    const editForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
     const settingsForm = useForm({
         to_admin_whatsapp: settings.to_admin_whatsapp,
@@ -239,6 +240,32 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
     const openStart = (p: PropertyRow) => {
         setSelectedProperty(p);
         setModal('start');
+    };
+
+    const openEditStart = (p: WaterPeriod) => {
+        setSelectedPeriod(p);
+        editForm.setData({
+            meter_start: p.meter_start !== null ? String(p.meter_start) : '',
+            photo: null,
+            note: p.note ?? '',
+            allowance: p.allowance !== null && p.allowance !== undefined ? String(p.allowance) : '',
+        });
+        setModal('edit-start');
+    };
+
+    const submitEditStart = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedPeriod) return;
+        editForm.put(`/admin/water/periods/${selectedPeriod.id}/start`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setModal(null);
+                setSelectedPeriod(null);
+                editForm.reset();
+                toast.success('Meter awal diperbaiki');
+            },
+            onError: () => toast.error('Gagal memperbaiki meter awal'),
+        });
     };
 
     const confirmPayment = (p: WaterPeriod) => {
@@ -527,6 +554,16 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border leading-tight whitespace-normal ${status.cls}`}>{status.label}</span>
                                     </div>
                                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                                        {(row.water?.status === 'ACTIVE' || row.water?.status === 'METER_DUE') && (
+                                            <button
+                                                type="button"
+                                                onClick={() => openEditStart(row.water!)}
+                                                className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-[#E8E7E3] bg-white text-[#6B6B67] hover:bg-[#F6F5F1] hover:text-[#1A1A18] transition-colors"
+                                                title="Edit meter awal"
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         {row.water?.status === 'METER_DUE' && (
                                             <AdminButton className="h-9 px-3 text-[13px]" onClick={() => openRecord(row.water!)}>
                                                 <Camera className="w-4 h-4" /> Update Meter
@@ -583,6 +620,16 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                 <div className="flex items-center justify-between mt-3">
                                     <span className="text-[13px] tabular-nums">{row.water.usage !== null && row.water.usage !== undefined ? `Pemakaian ${angka(row.water.usage)} m³` : row.billing_note}</span>
                                     <div className="flex items-center gap-2">
+                                        {(row.water.status === 'ACTIVE' || row.water.status === 'METER_DUE') && (
+                                            <button
+                                                type="button"
+                                                onClick={() => openEditStart(row.water!)}
+                                                className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-[#E8E7E3] bg-white text-[#6B6B67] hover:bg-[#F6F5F1] hover:text-[#1A1A18] transition-colors"
+                                                title="Edit meter awal"
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         {row.water.status === 'WAITING_PAYMENT' && (
                                             <span className="text-sm font-semibold text-[#1A1A18] tabular-nums">{rupiah(row.water.total_amount)}</span>
                                         )}
@@ -682,6 +729,75 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                     <AdminModalFooter>
                         <AdminButton variant="secondary" type="button" onClick={closeStart}>Batal</AdminButton>
                         <AdminButton isLoading={startForm.processing}>Simpan Meter Awal</AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
+
+            {/* EDIT START MODAL */}
+            <AdminModal isOpen={modal === 'edit-start'} onClose={() => setModal(null)} maxWidth="sm">
+                <AdminModalHeader
+                    title="Edit Meter Awal"
+                    description={`Perbaiki angka meter awal sebelum meter akhir dicatat. Periode yang sudah ditutup tidak bisa diedit.${selectedPeriod?.tenant_name ? ` (${selectedPeriod.tenant_name})` : ''}`}
+                    onClose={() => setModal(null)}
+                />
+                <form onSubmit={submitEditStart} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalContent>
+                        <FormSection title="Meter Awal" />
+                        <FormLabel htmlFor="edit_meter_start">Angka Meter (m³)</FormLabel>
+                        <TextInput
+                            id="edit_meter_start"
+                            type="number"
+                            min={0}
+                            placeholder="cth: 1350"
+                            value={editForm.data.meter_start}
+                            onChange={(e) => editForm.setData('meter_start', e.target.value)}
+                        />
+                        <FormError>{editForm.errors.meter_start}</FormError>
+
+                        <div className="mt-4">
+                            <FormLabel htmlFor="edit_photo">Foto Meter (opsional, untuk foto ulang)</FormLabel>
+                            <TextInput
+                                id="edit_photo"
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => editForm.setData('photo', e.target.files?.[0] ?? null)}
+                            />
+                            {editForm.data.photo && (
+                                <img src={URL.createObjectURL(editForm.data.photo)} alt="preview" className="mt-3 w-full rounded-[10px] border border-[#E8E7E3] max-h-40 object-contain" />
+                            )}
+                            <FormError>{editForm.errors.photo}</FormError>
+                        </div>
+
+                        <div className="mt-4">
+                            <FormLabel htmlFor="edit_note">Catatan (opsional)</FormLabel>
+                            <TextInput
+                                id="edit_note"
+                                placeholder="cth: koreksi angka awal karena salah ketik"
+                                value={editForm.data.note}
+                                onChange={(e) => editForm.setData('note', e.target.value)}
+                            />
+                        </div>
+
+                        <div className="mt-4">
+                            <FormLabel htmlFor="edit_allowance">Jatah Periode Ini, m³ (opsional)</FormLabel>
+                            <TextInput
+                                id="edit_allowance"
+                                type="number"
+                                min={0}
+                                max={5}
+                                placeholder="cth: 2"
+                                value={editForm.data.allowance}
+                                onChange={(e) => editForm.setData('allowance', e.target.value)}
+                            />
+                            <FormHelper>
+                                Jatah sisa saat pindah kamar di tengah periode. Kosongkan untuk jatah normal 5 m³.
+                            </FormHelper>
+                            <FormError>{editForm.errors.allowance}</FormError>
+                        </div>
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton variant="secondary" type="button" onClick={() => setModal(null)}>Batal</AdminButton>
+                        <AdminButton isLoading={editForm.processing}>Simpan Perbaikan</AdminButton>
                     </AdminModalFooter>
                 </form>
             </AdminModal>

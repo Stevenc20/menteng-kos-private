@@ -232,6 +232,66 @@ class WaterPeriodController extends Controller
     }
 
     /**
+     * [ADMIN] Correct the meter-start of an OPEN period (e.g. the initial reading
+     * was typed wrong, or it changed before the first close).
+     */
+    public function updateMeterStart(Request $request, $periodId)
+    {
+        $period = WaterPeriod::with('property', 'tenancy')->findOrFail($periodId);
+
+        if ($period->status !== WaterPeriod::STATUS_METER_DUE) {
+            return redirect()->back()->withErrors(['meter_start' => 'Hanya periode yang masih terbuka (belum ada meter akhir) yang bisa diedit.']);
+        }
+
+        $validated = $request->validate([
+            'meter_start' => 'required|integer|min:0',
+            'photo' => 'nullable|image|max:20480',
+            'note' => 'nullable|string|max:255',
+            'allowance' => 'nullable|integer|min:0|max:'.WaterBillingService::WATER_ALLOWANCE_M3,
+        ]);
+
+        $photoPath = null;
+
+        try {
+            if ($request->hasFile('photo')) {
+                $photoPath = $this->storeMeterPhoto($request->file('photo'), $period->property_id);
+            }
+
+            $data = [
+                'meter_start' => (int) $validated['meter_start'],
+                'meter_start_recorded_at' => now(),
+                'meter_start_photo' => $photoPath ?? $period->meter_start_photo,
+                'note' => $validated['note'] ?? $period->note,
+            ];
+
+            if (array_key_exists('allowance', $validated)) {
+                $data['allowance'] = $validated['allowance'];
+            }
+
+            $period->update($data);
+        } catch (ValidationException $e) {
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
+
+            throw $e;
+        } catch (\Throwable $e) {
+            if ($photoPath) {
+                Storage::disk('local')->delete($photoPath);
+            }
+
+            return redirect()->back()->withErrors(['meter_start' => $e->getMessage()]);
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Meter awal periode '.($period->property?->name ?? '').' diperbaiki menjadi '.number_format((int) $period->meter_start).' m³.',
+        ]);
+
+        return redirect()->back();
+    }
+
+    /**
      * [ADMIN] Record the meter-end reading + photo; computes usage & amount.
      */
     public function recordEnd(Request $request, $periodId)

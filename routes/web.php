@@ -112,6 +112,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/water', [WaterPeriodController::class, 'index'])->name('admin.water');
     Route::get('/water/{property}', [WaterPeriodController::class, 'show'])->name('admin.water.show');
     Route::post('/water/{property}/start', [WaterPeriodController::class, 'startPeriod'])->name('admin.water.start');
+    Route::put('/water/periods/{period}/start', [WaterPeriodController::class, 'updateMeterStart'])->name('admin.water.updateStart');
     Route::post('/water/periods/{period}/record', [WaterPeriodController::class, 'recordEnd'])->name('admin.water.record');
     Route::post('/water/periods/{period}/confirm', [WaterPeriodController::class, 'confirmPayment'])->name('admin.water.confirm');
     Route::get('/water/periods/{period}/photo/{kind}', [WaterPeriodController::class, 'getPhoto'])->name('admin.water.photo');

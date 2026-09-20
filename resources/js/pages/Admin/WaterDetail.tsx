@@ -2,7 +2,7 @@ import { useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { Link, router, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { ArrowLeft, Camera, CheckCircle2, Droplets } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, Droplets, Pencil } from 'lucide-react';
 import { AdminButton } from '@/components/admin/AdminButton';
 import { FormLabel, FormError, TextInput } from '@/components/admin/AdminForm';
 
@@ -87,6 +87,9 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
 
     const startForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
+    const editForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
+
+    const [editingStart, setEditingStart] = useState(false);
 
     const submitStart = (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,6 +123,31 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
             preserveScroll: true,
             onSuccess: () => toast.success('Pembayaran terkonfirmasi'),
             onError: () => toast.error('Gagal mengonfirmasi pembayaran'),
+        });
+    };
+
+    const openEditStart = () => {
+        if (!openPeriod) return;
+        editForm.setData({
+            meter_start: openPeriod.meter_start !== null ? String(openPeriod.meter_start) : '',
+            photo: null,
+            note: openPeriod.note ?? '',
+            allowance: openPeriod.allowance !== null && openPeriod.allowance !== undefined ? String(openPeriod.allowance) : '',
+        });
+        setEditingStart(true);
+    };
+
+    const submitEditStart = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!openPeriod) return;
+        editForm.put(`/admin/water/periods/${openPeriod.id}/start`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setEditingStart(false);
+                editForm.reset();
+                toast.success('Meter awal diperbaiki');
+            },
+            onError: () => toast.error('Gagal memperbaiki meter awal'),
         });
     };
 
@@ -226,10 +254,73 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
 
             {/* Inline form: update meter (when Perlu Update), running info (when Aktif), or start (when none) */}
             <div className="bg-white rounded-2xl border border-[#E8E7E3] shadow-sm p-6 mb-8">
+                {openPeriod && editingStart && (
+                    <form onSubmit={submitEditStart} className="mb-6 rounded-[10px] border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                        <p className="text-[13px] font-bold text-amber-900">Edit Meter Awal</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <FormLabel htmlFor="wd_edit_start">Angka Meter (m³)</FormLabel>
+                                <TextInput
+                                    id="wd_edit_start"
+                                    type="number"
+                                    min={0}
+                                    placeholder="cth: 1350"
+                                    value={editForm.data.meter_start}
+                                    onChange={(e) => editForm.setData('meter_start', e.target.value)}
+                                />
+                                <FormError>{editForm.errors.meter_start}</FormError>
+                            </div>
+                            <div>
+                                <FormLabel htmlFor="wd_edit_photo">Foto Meter (opsional)</FormLabel>
+                                <TextInput
+                                    id="wd_edit_photo"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => editForm.setData('photo', e.target.files?.[0] ?? null)}
+                                />
+                                <FormError>{editForm.errors.photo}</FormError>
+                            </div>
+                            {editForm.data.photo && (
+                                <img src={URL.createObjectURL(editForm.data.photo)} alt="preview" className="sm:col-span-2 rounded-[10px] border border-[#E8E7E3] max-h-40 object-contain" />
+                            )}
+                            <div>
+                                <FormLabel htmlFor="wd_edit_note">Catatan (opsional)</FormLabel>
+                                <TextInput
+                                    id="wd_edit_note"
+                                    placeholder="cth: koreksi angka awal karena salah ketik"
+                                    value={editForm.data.note}
+                                    onChange={(e) => editForm.setData('note', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <FormLabel htmlFor="wd_edit_allowance">Jatah Periode Ini, m³ (opsional)</FormLabel>
+                                <TextInput
+                                    id="wd_edit_allowance"
+                                    type="number"
+                                    min={0}
+                                    max={5}
+                                    placeholder="cth: 2"
+                                    value={editForm.data.allowance}
+                                    onChange={(e) => editForm.setData('allowance', e.target.value)}
+                                />
+                                <FormError>{editForm.errors.allowance}</FormError>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <AdminButton isLoading={editForm.processing}>Simpan Perbaikan</AdminButton>
+                            <AdminButton variant="secondary" type="button" onClick={() => { setEditingStart(false); editForm.reset(); }}>Batal</AdminButton>
+                        </div>
+                    </form>
+                )}
                 {openPeriod ? (
                     openPeriod.status === 'METER_DUE' ? (
                     <>
-                        <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-amber-600" /> Update Meter Akhir</h3>
+                        <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2"><Camera className="w-5 h-5 text-amber-600" /> Update Meter Akhir</span>
+                            <button type="button" onClick={openEditStart} className="inline-flex items-center gap-1.5 text-[13px] text-[#6B6B67] hover:text-[#1A1A18]" title="Edit meter awal">
+                                <Pencil className="w-3.5 h-3.5" /> Edit meter awal
+                            </button>
+                        </h3>
                         <form onSubmit={submitRecord}>
                             <div className="flex items-center gap-4 bg-[#F7F7F5] rounded-[10px] px-4 py-3 text-sm mb-4">
                                 <div>
@@ -317,7 +408,12 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                         </>
                     ) : (
                         <>
-                            <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center gap-2"><Droplets className="w-5 h-5 text-sky-600" /> Periode Berjalan</h3>
+                            <h3 className="font-bold text-[#1A1A18] mb-4 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2"><Droplets className="w-5 h-5 text-sky-600" /> Periode Berjalan</span>
+                            <button type="button" onClick={openEditStart} className="inline-flex items-center gap-1.5 text-[13px] text-[#6B6B67] hover:text-[#1A1A18]" title="Edit meter awal">
+                                <Pencil className="w-3.5 h-3.5" /> Edit meter awal
+                            </button>
+                        </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[#F7F7F5] rounded-[10px] px-4 py-3 text-sm">
                                 <div>
                                     <p className="text-[12px] text-[#8A8A84]">Meter awal</p>

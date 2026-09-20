@@ -342,6 +342,90 @@ test('allowance out of range is rejected when starting a period', function () {
     expect(WaterPeriod::where('property_id', $property->id)->count())->toBe(0);
 });
 
+test('admin can correct the meter awal of an open period before it is closed', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => 2,
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+    expect((int) $period->meter_start)->toBe(100);
+    expect((int) $period->allowance)->toBe(2);
+
+    // Correct the reading (typo: it was actually 98) and add a note.
+    $this->actingAs($admin)->put("/admin/water/periods/{$period->id}/start", [
+        'meter_start' => 98,
+        'note' => 'koreksi angka awal',
+    ])->assertRedirect();
+
+    $period->refresh();
+    expect((int) $period->meter_start)->toBe(98);
+    expect((int) $period->meter_start_recorded_at->timestamp)->toBeGreaterThan(0);
+    expect($period->note)->toBe('koreksi angka awal');
+    // Allowance is untouched when not sent again.
+    expect((int) $period->allowance)->toBe(2);
+});
+
+test('editing meter awal updates the allowance only when resubmitted', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+        'allowance' => 2,
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+
+    // Admin clears the carry-over (normal 5 m³ applies).
+    $this->actingAs($admin)->put("/admin/water/periods/{$period->id}/start", [
+        'meter_start' => 100,
+        'allowance' => '',
+    ])->assertRedirect();
+
+    $period->refresh();
+    expect($period->allowance)->toBeNull();
+
+    // And sets a new one from the edit screen.
+    $this->actingAs($admin)->put("/admin/water/periods/{$period->id}/start", [
+        'meter_start' => 100,
+        'allowance' => 3,
+    ])->assertRedirect();
+
+    $period->refresh();
+    expect((int) $period->allowance)->toBe(3);
+});
+
+test('meter awal editing is rejected once the period is closed', function () {
+    Storage::fake('local');
+    [$admin, $property] = waterUnit();
+
+    $this->actingAs($admin)->post("/admin/water/{$property->id}/start", [
+        'meter_start' => 100,
+        'photo' => waterPng('start.jpg'),
+    ])->assertRedirect();
+
+    $period = WaterPeriod::where('property_id', $property->id)->first();
+    $this->actingAs($admin)->post("/admin/water/periods/{$period->id}/record", [
+        'meter_end' => 105,
+        'photo' => waterPng('end.jpg'),
+    ])->assertRedirect();
+
+    // Closed period cannot be edited anymore.
+    $this->actingAs($admin)->put("/admin/water/periods/{$period->id}/start", [
+        'meter_start' => 90,
+    ])->assertRedirect()->assertSessionHasErrors('meter_start');
+
+    $period->refresh();
+    expect((int) $period->meter_start)->toBe(100);
+    expect((int) $period->meter_end)->toBe(105);
+});
+
 // ---------------------------------------------------------------------------
 // 4. Konfirmasi pembayaran
 // ---------------------------------------------------------------------------
