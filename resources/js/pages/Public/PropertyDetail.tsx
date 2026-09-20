@@ -98,8 +98,8 @@ export default function PropertyDetail({ property }: PropertyDetailProps) {
     // Alternatively, we can assume standard shared facilities keywords. Let's just list them under "Fasilitas Unit".
 
     const generateWhatsAppLink = () => {
-        const waNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '6281234567890';
-        const text = `Halo Admin Menteng Kos Private,\n\nSaya tertarik dengan unit berikut:\n\nUnit: ${property.name}\nTipe: ${property.type === 'ROOM' ? 'Kamar Kos' : 'Kios'}\nHarga tertera: ${property.normal_price ? formatPrice(property.normal_price) : '-'}/bulan\n\nSaya ingin menanyakan ketersediaan, mengajukan harga, dan menjadwalkan survey.\n\nNama:\nTanggal rencana masuk:\n`;
+        const waNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '6281291903483';
+        const text = `Halo Admin Menteng Kos Private,\n\nSaya ingin mengajukan survey untuk unit berikut di Menteng Kos Private:\n\nUNIT: ${property.name}\nTipe: ${property.type === 'ROOM' ? 'Kamar Kos' : 'Kios'}\nHarga tertera: ${property.normal_price ? formatPrice(property.normal_price) : '-'}/bulan\n\nSaya ingin menanyakan ketersediaan, mengajukan harga, dan menjadwalkan survey.\n\nNama:\nTanggal rencana masuk:\n`;
         return `https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`;
     };
 

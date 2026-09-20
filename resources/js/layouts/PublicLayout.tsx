@@ -82,7 +82,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                             Tenant Login
                         </Link>
                         <a 
-                            href="https://wa.me/6281234567890?text=Halo,%20saya%20ingin%20jadwalkan%20survey%20Menteng%20Kos%20Private."
+                            href="https://wa.me/6281291903483?text=Halo,%20saya%20ingin%20jadwalkan%20survey%20Menteng%20Kos%20Private."
                             target="_blank"
                             rel="noopener noreferrer"
                             className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all shadow-md active:scale-95 ${btnBg}`}
@@ -161,7 +161,7 @@ export default function PublicLayout({ children, title = 'Menteng Kos Private', 
                                 </Link>
                                 
                                 <a 
-                                    href="https://wa.me/6281234567890?text=Halo,%20saya%20ingin%20jadwalkan%20survey%20Menteng%20Kos%20Private."
+                                    href="https://wa.me/6281291903483?text=Halo,%20saya%20ingin%20jadwalkan%20survey%20Menteng%20Kos%20Private."
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="bg-[#1A1A18] text-white px-5 py-3 rounded-xl text-center text-sm font-medium mt-4 shadow-md active:scale-95 transition-transform"
