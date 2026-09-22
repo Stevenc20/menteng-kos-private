@@ -44,7 +44,12 @@ function cropDataUrl(canvas: HTMLCanvasElement): string {
     const out = document.createElement('canvas');
     out.width = sw;
     out.height = sh;
-    out.getContext('2d')?.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    const octx = out.getContext('2d');
+    if (octx) {
+        octx.fillStyle = '#ffffff';
+        octx.fillRect(0, 0, sw, sh);
+        octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    }
     return out.toDataURL('image/png');
 }
 
@@ -56,15 +61,43 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(({ classN
     const onEndRef = useRef(onEnd);
     onEndRef.current = onEnd;
 
+    // Sinkronkan buffer (bitmap) kanvas dengan ukuran CSS × devicePixelRatio.
+    // Kalau ukurannya berubah (modal dibuka, rotasi, dsb) dan buffer tidak ikut
+    // disesuaikan, goresan terlihat membesar/ber-zoom karena buffer lama
+    // diregangkan oleh CSS.
+    const syncBuffer = () => {
+        const c = canvasRef.current;
+        if (!c) return;
+        const rect = c.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.max(1, Math.round(rect.width * dpr));
+        const h = Math.max(1, Math.round(rect.height * dpr));
+        if (c.width === w && c.height === h) return;
+        const snapshot = emptyRef.current ? null : c.toDataURL('image/png');
+        c.width = w;
+        c.height = h;
+        if (snapshot) {
+            const img = new Image();
+            img.onload = () => {
+                const ctx = c.getContext('2d');
+                if (!ctx) return;
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+            };
+            img.src = snapshot;
+        }
+    };
+
     useEffect(() => {
         const c = canvasRef.current;
         if (!c) return;
         c.style.touchAction = 'none';
-        const rect = c.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return;
-        const dpr = window.devicePixelRatio || 1;
-        c.width = Math.max(1, Math.round(rect.width * dpr));
-        c.height = Math.max(1, Math.round(rect.height * dpr));
+        syncBuffer();
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(syncBuffer);
+            ro.observe(c);
+            return () => ro.disconnect();
+        }
     }, []);
 
     const getCurrentImage = () => {
