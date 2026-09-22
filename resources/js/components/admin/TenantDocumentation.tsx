@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import { router, useForm } from "@inertiajs/react";
 import { AdminButton } from "@/components/admin/AdminButton";
 import { toast } from "sonner";
@@ -46,6 +46,30 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
 
     const [showPropModal, setShowPropModal] = useState(false);
     const [selected, setSelected] = useState<Set<number>>(new Set());
+
+    // ---- Edit START METERAN & Catatan pada Surat (approval/detail) ----
+    const [showMeteranForm, setShowMeteranForm] = useState(false);
+    const { data: meteranForm, setData: setMeteranForm, processing: processingMeteranForm, reset: resetMeteranForm } = useForm({
+        meteran_start: (agreement?.meteran_start || '') as string,
+        notes: (agreement?.notes || '') as string,
+    });
+
+    const openMeteranForm = () => {
+        setMeteranForm('meteran_start', agreement?.meteran_start || '');
+        setMeteranForm('notes', agreement?.notes || '');
+        setShowMeteranForm(true);
+    };
+
+    const saveMeteranForm = () => {
+        router.put(`/admin/tenants/${tenancy.id}/agreements/meteran-notes`, meteranForm, {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success("Start Meteran & Catatan berhasil diperbarui");
+                setShowMeteranForm(false);
+            },
+            onError: (e) => toast.error(e.meteran_start || e.notes || "Gagal memperbarui Start Meteran & Catatan"),
+        });
+    };
 
     const uploadDoc = (type: string, files: File[], source: "UPLOAD" | "CAMERA", propMediaIds: number[] = []) => {
         const formData = new FormData();
@@ -142,10 +166,59 @@ export function TenantDocumentation({ tenancy, agreement, moveInDoc, moveOutDoc 
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h12z" /></svg>
                                     Cetak Surat
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={openMeteranForm}
+                                    className="no-print inline-flex items-center gap-2 border border-neutral-300 bg-white text-neutral-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    Edit
+                                </button>
                             </div>
                             <div className="printable-statement bg-neutral-50 rounded-xl border border-neutral-200 p-4 sm:p-6 text-sm overflow-x-hidden"
                                  dangerouslySetInnerHTML={{ __html: agreement.document_html }}
                             />
+                            <AdminModal isOpen={showMeteranForm} onClose={() => setShowMeteranForm(false)}>
+                                <AdminModalHeader title="Edit Start Meteran & Catatan" onClose={() => setShowMeteranForm(false)} />
+                                <form onSubmit={saveMeteranForm}>
+                                    <AdminModalContent>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-semibold text-neutral-700 mb-1">START METERAN</label>
+                                                <input
+                                                    type="text"
+                                                    value={meteranForm.meteran_start}
+                                                    onChange={(e) => setMeteranForm("meteran_start", e.target.value)}
+                                                    placeholder="cth: 01234"
+                                                    className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-neutral-700 mb-1">Catatan</label>
+                                                <textarea
+                                                    value={meteranForm.notes}
+                                                    onChange={(e) => setMeteranForm("notes", e.target.value)}
+                                                    placeholder="cth: pemakaian diakumulasi hingga tiap tanggal jatuh tempo"
+                                                    rows={3}
+                                                    className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900"
+                                                />
+                                            </div>
+                                        </div>
+                                    </AdminModalContent>
+                                    <AdminModalFooter>
+                                        <button type="button" onClick={() => setShowMeteranForm(false)} className="px-4 py-2 text-sm font-semibold text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">
+                                            Batal
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={processingMeteranForm}
+                                            className="px-5 py-2 text-sm font-semibold text-white bg-[#1A1A18] hover:bg-[#333333] rounded-lg transition-colors disabled:opacity-60"
+                                        >
+                                            {processingMeteranForm ? "Menyimpan..." : "Simpan"}
+                                        </button>
+                                    </AdminModalFooter>
+                                </form>
+                            </AdminModal>
                         </>
                     ) : (
                         <div className="no-print p-4 border border-dashed border-neutral-300 rounded-xl text-center text-sm text-neutral-500">
