@@ -57,7 +57,7 @@ export default function SignatureModal({ open, onClose, title, subtitle, padRef,
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-            <DialogContent className="w-full max-w-none sm:max-w-xl h-[100dvh] sm:h-auto min-h-0 max-h-[100dvh] overflow-hidden rounded-none sm:rounded-2xl border-neutral-200 p-0 sm:p-6 gap-0 sm:gap-4 flex flex-col">
+            <DialogContent className="bg-white text-neutral-900 w-full max-w-none sm:max-w-xl h-[100dvh] sm:h-auto min-h-0 max-h-[100dvh] overflow-hidden rounded-none sm:rounded-2xl border-neutral-200 p-0 sm:p-6 gap-0 sm:gap-4 flex flex-col">
                 <DialogHeader className="px-4 pt-4 sm:px-0 sm:pt-0">
                     <DialogTitle className="text-base sm:text-lg">{title}</DialogTitle>
                     <DialogDescription>
