@@ -440,6 +440,32 @@ class AdminController extends Controller
     }
 
     /**
+     * Admin edit START METERAN & Catatan pada Surat Pernyataan yang sudah
+     * disetujui. Hanya menulis ulang skema di halaman Approval/Detail — kita
+     * tidak pernah men-touch kolom document_html lama (snapshot point-in-time
+     * yang ditandatangani tenant) kecuali nilai meteran/catatan: harus tetap
+     * sinkron dengan nilai tersimpan di tabel agreements agar cetak ulang dan
+     * revisi admin selalu menunjukkan angka meteran & catatan terbaru.
+     */
+    public function updateAgreementMeteranNotes(Request $request, $id)
+    {
+        $tenancy = Tenancy::findOrFail($id);
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->firstOrFail();
+
+        $validated = $request->validate([
+            'meteran_start' => 'nullable|string|max:20',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $agreement->update([
+            'meteran_start' => $validated['meteran_start'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return back()->with('success', 'Start meteran & catatan berhasil diperbarui.');
+    }
+
+    /**
      * Admin update tenant profile data (name, NIK, birth, job, address, whatsapp).
      */
     public function updateTenantProfile(Request $request, $id)
