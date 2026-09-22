@@ -25,6 +25,8 @@ export interface StatementDocumentProps {
     setDendaPerDay: (v: string) => void;
     meteran: string;
     setMeteran: (v: string) => void;
+    notes?: string;
+    setNotes?: (v: string) => void;
     usaha: string;
     setUsaha: (v: string) => void;
     facilities: string[];
@@ -43,7 +45,7 @@ export interface StatementDocumentProps {
     kioskSeparateWater?: boolean;
 }
 
-function SheetPage({ num, meteran, meteranValue, onMeteranChange, kioskSeparateWater, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; kioskSeparateWater?: boolean; children: ReactNode }) {
+function SheetPage({ num, meteran, meteranValue, onMeteranChange, notesValue, onNotesChange, kioskSeparateWater, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; notesValue?: string; onNotesChange?: (v: string) => void; kioskSeparateWater?: boolean; children: ReactNode }) {
     return (
         <div className="relative mx-auto mb-6 w-full min-w-0 max-w-[794px] min-h-[1122px] bg-white shadow-lg border border-neutral-200">
             <div className="flex justify-between items-start px-[9%] pt-6">
@@ -74,6 +76,18 @@ function SheetPage({ num, meteran, meteranValue, onMeteranChange, kioskSeparateW
                                     {meteranValue}m³ - {Number(meteranValue) + 5}m³
                                 </div>
                             )
+                        )}
+                        {onNotesChange && (
+                            <div className="mt-1.5 flex items-center gap-1 whitespace-nowrap">
+                                <span className="text-[9px] italic text-neutral-500">Catatan:</span>
+                                <DocInput
+                                    value={notesValue ?? ''}
+                                    onChange={onNotesChange}
+                                    maxLength={120}
+                                    placeholder="................"
+                                    className="w-28"
+                                />
+                            </div>
                         )}
                     </div>
                 )}
@@ -187,6 +201,7 @@ function FacilitiesEditor({ items, onChange, lines }: {
 export default function StatementDocument(props: StatementDocumentProps) {
     const { isKiosk, hasSecond, occ1, occ2, sewaNumeral, dueDay, setDueDay, reminderDay,
         dendaPerDay, setDendaPerDay, meteran, setMeteran, usaha, setUsaha,
+        notes, setNotes,
         facilities, setFacilities, tanggal, paraf1Img, paraf2Img, onParafEnd,
         sig1Img, sig2Img, onSigEnd, sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater } = props;
 
@@ -249,7 +264,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
             <>
             <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
                 {/* HALAMAN 1 */}
-                <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} kioskSeparateWater={kioskSeparateWater}>
+                <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} notesValue={notes} onNotesChange={setNotes} kioskSeparateWater={kioskSeparateWater}>
                     <h2 className="text-center font-bold tracking-wide uppercase text-base sm:text-lg mb-1">Surat Pernyataan</h2>
                     <h2 className="text-center font-bold tracking-wide uppercase text-base mb-4">Kios</h2>
                     <div className="space-y-1">
@@ -375,7 +390,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
         <>
         <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
             {/* HALAMAN 1 */}
-            <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran}>
+            <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} notesValue={notes} onNotesChange={setNotes}>
                 <h2 className="text-center font-bold tracking-wide uppercase text-base sm:text-lg mb-4">Surat Pernyataan</h2>
                 <div className="space-y-1">
                     <p>Yang bertanda tangan di bawah ini:</p>

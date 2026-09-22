@@ -44,6 +44,7 @@ export interface StatementParams {
     meteran: string;           // start meteran
     usaha: string;             // Kios: jenis usaha
     facilities: string[];      // default dari property.facilities
+    notes?: string;            // Catatan pindah kamar / pemakaian (opsional)
     tanggal: string;           // "09 September 2026"
     // KIOSK: bila harga deal di bawah harga standar, air PAM ditagih terpisah
     // (tanpa jatah 5m³ gratis). Hanya relevan untuk template Kios.
@@ -122,12 +123,14 @@ const meteranBoxHTML = (p: StatementParams) => `
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
-        ${
-            p.kioskSeparateWater
-                ? `<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³` : '..................'}</div>
-                   <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>`
-                : `<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}</div>`
-        }
+        <div data-meteran-value="1" style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;min-height:14px;">
+            ${
+                p.kioskSeparateWater
+                    ? `${p.meteran ? `${esc(p.meteran)}m³` : '..................'}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`
+                    : `${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}`
+            }
+        </div>
+        ${p.notes ? `<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">${esc(p.notes)}</div>` : ''}
     </div>`;
 
 export const roomStatementHTML = (p: StatementParams) => {

@@ -178,6 +178,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         // Field interaktif Surat Pernyataan
         usaha: '',
         meteran_air: '',
+        notes: '',
         due_date_day: initDueDay,
         denda_per_day: initDenda,
         facilities: initFacilities,
@@ -431,6 +432,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
             reminderDay: calcReminderDay(data.due_date_day || initDueDay),
             dendaPerDay: data.denda_per_day || initDenda,
             meteran: data.meteran_air,
+            notes: data.notes,
             usaha: data.usaha,
             facilities: data.facilities,
             tanggal: indonesianToday(),
@@ -875,6 +877,12 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                 setDendaPerDay={(v) => setData('denda_per_day', v)}
                                 meteran={data.meteran_air}
                                 setMeteran={(v) => setData('meteran_air', v)}
+                                notes={data.notes}
+                                setNotes={(v) => setData('notes', v)}
+                                notes={data.notes}
+                                setNotes={(v) => setData('notes', v)}
+                                notes={data.notes}
+                                setNotes={(v) => setData('notes', v)}
                                 usaha={data.usaha}
                                 setUsaha={(v) => setData('usaha', v)}
                                 facilities={data.facilities}

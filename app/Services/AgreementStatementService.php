@@ -23,6 +23,98 @@ class AgreementStatementService
     /** Heading of the documentation section in the KIOSK statement. */
     private const DOCUMENTATION_HEADING = 'Dokumentasi kios saat diserahkan';
 
+    /** Marker wrapping the live START METERAN value emitted by the template. */
+    private const METERAN_VALUE_MARKER = 'data-meteran-value="1"';
+
+    /** Marker wrapping the Catatan line emitted by the template. */
+    private const METERAN_NOTES_MARKER = 'data-meteran-notes="1"';
+
+    /**
+     * Surgically patch an existing Surat Pernyataan `document_html` snapshot's
+     * START METERAN and Catatan values. We never regenerate the snapshot (it is
+     * point-in-time, signed by the tenant); instead we replace the element
+     * bodies between the two stable template markers, so a signed statement
+     * updated by admin keeps its original layout and signatures.
+     */
+    public static function updateMeteranAndNotes(string $html, ?string $meteran, ?string $notes): string
+    {
+        if ($html === '') {
+            return $html;
+        }
+
+        $separate = str_contains($html, 'Pemakaian diakumulasi');
+        $meteranVal = trim((string) $meteran);
+        $notesVal = trim((string) $notes);
+
+        $html = self::replaceMarkedElementBody($html, self::METERAN_VALUE_MARKER,
+            self::meteranValueInnerHtml($meteranVal, $separate));
+
+        $html = self::replaceMarkedElementBody($html, self::METERAN_NOTES_MARKER, self::notesLineHtml($notesVal, $separate));
+
+        return $html;
+    }
+
+    /**
+     * The inner HTML placed inside the value element.
+     */
+    private static function meteranValueInnerHtml(string $meteran, bool $separate): string
+    {
+        if ($meteran === '') {
+            return '..................';
+        }
+
+        if ($separate) {
+            return $meteran.'m³'
+                .'<br style="letter-spacing:0;font-weight:normal;" />'
+                .'<span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>';
+        }
+
+        return $meteran.'m³ - '.(is_numeric($meteran) ? (int) $meteran + 5 : $meteran.'m³').'m³';
+    }
+
+    /**
+     * The Catatan block (or nothing when notes are empty). A blank note keeps
+     * the box present in kiosk snapshots but with the italic placeholder removed.
+     */
+    private static function notesLineHtml(string $notes, bool $separate): string
+    {
+        if ($notes === '') {
+            return '<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">&nbsp;</div>';
+        }
+
+        return '<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;'
+            .($separate ? 'border-top:1px dashed #ccc;padding-top:2px;' : '')
+            .'">'.e($notes).'</div>';
+    }
+
+    /**
+     * Replace the whole element body of the first element carrying $markerAttr
+     * (an element like <div data-meteran-value="1" ...>...</div>) with $body,
+     * preserving its opening tag. Returns $html unchanged when the marker is
+     * missing (e.g. legacy kiosk snapshot for the notes line).
+     */
+    private static function replaceMarkedElementBody(string $html, string $markerAttr, string $body): string
+    {
+        $pos = strpos($html, $markerAttr);
+        if ($pos === false) {
+            return $html;
+        }
+
+        // Find the end of the opening tag, then the matching closing </div>.
+        $tagEnd = strpos($html, '>', $pos);
+        if ($tagEnd === false) {
+            return $html;
+        }
+
+        $closeTag = '</div>';
+        $closePos = strpos($html, $closeTag, $tagEnd);
+        if ($closePos === false) {
+            return $html;
+        }
+
+        return substr($html, 0, $tagEnd + 1).$body.substr($html, $closePos);
+    }
+
     public static function injectDocumentationPhotos(string $html, ?RoomDocumentation $moveIn): string
     {
         if ($html === '' || ! $moveIn || $moveIn->media->isEmpty()) {

@@ -87,6 +87,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/tenants/{id}/agreements/upload', [AdminController::class, 'uploadAgreementDocument'])->name('admin.tenants.agreements.upload');
     Route::get('/tenants/{id}/agreements/download', [AdminController::class, 'downloadAgreementDocument'])->name('admin.tenants.agreements.download');
     Route::post('/tenants/{id}/agreements/finalize-uploaded', [AdminController::class, 'finalizeUploadedAgreement'])->name('admin.tenants.agreements.finalizeUploaded');
+    Route::put('/tenants/{id}/agreements/meteran-notes', [AdminController::class, 'updateAgreementMeteranNotes'])->name('admin.tenants.agreements.meteranNotes');
     Route::post('/tenants/{id}/documentations', [AdminController::class, 'storeRoomDocumentation'])->name('admin.tenants.documentations.store');
     Route::delete('/tenants/documentations/media/{mediaId}', [AdminController::class, 'deleteDocumentationMedia'])->name('admin.tenants.documentations.media.destroy');
 

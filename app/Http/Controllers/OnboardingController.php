@@ -435,12 +435,16 @@ class OnboardingController extends Controller
             'signature_2' => 'nullable|string',
             'paraf_2' => 'nullable|string',
             'move_in_date' => 'required|date',
+            'meteran_air' => 'nullable|string',
+            'notes' => 'nullable|string',
         ]);
 
         $agreement = Agreement::updateOrCreate(
             ['tenancy_id' => $tenancy->id],
             [
                 'document_html' => $validated['document_html'],
+                'meteran_start' => $validated['meteran_air'] ?? null,
+                'notes' => $validated['notes'] ?? null,
                 'status' => 'SIGNED',
                 'signed_at' => now(),
             ]
