@@ -63,6 +63,9 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
     // Rendered paraf images (drawn once, reused on all required pages)
     const [paraf1Img, setParaf1Img] = useState('');
     const [paraf2Img, setParaf2Img] = useState('');
+    // Rendered tanda tangan images (drawn on the last page, reused in HTML)
+    const [sig1Img, setSig1Img] = useState('');
+    const [sig2Img, setSig2Img] = useState('');
 
     const p = (profile as Profile) ?? {};
 
@@ -448,14 +451,16 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         parafPad2.current?.clear();
         setParaf1Img('');
         setParaf2Img('');
+        setSig1Img('');
+        setSig2Img('');
     };
 
     const submitAgreement = () => {
-        if (sigPad1.current?.isEmpty() || parafPad1.current?.isEmpty()) {
+        if (!sig1Img || !paraf1Img) {
             alert("Harap lengkapi Tanda Tangan dan Paraf Anda (Occupant 1).");
             return;
         }
-        if (data.has_second_occupant && (sigPad2.current?.isEmpty() || parafPad2.current?.isEmpty())) {
+        if (data.has_second_occupant && (!sig2Img || !paraf2Img)) {
             alert("Harap lengkapi Tanda Tangan dan Paraf Penghuni Kedua.");
             return;
         }
@@ -474,10 +479,10 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
             return;
         }
 
-        const sig1 = sigPad1.current?.getImage?.() ?? '';
-        const sig2 = data.has_second_occupant ? sigPad2.current?.getImage?.() ?? '' : '';
-        const paraf1 = parafPad1.current?.getImage?.() ?? '';
-        const paraf2 = data.has_second_occupant ? parafPad2.current?.getImage?.() ?? '' : '';
+        const sig1 = sig1Img;
+        const sig2 = data.has_second_occupant ? sig2Img : '';
+        const paraf1 = paraf1Img;
+        const paraf2 = data.has_second_occupant ? paraf2Img : '';
 
         const payload = {
             ...data,
@@ -877,12 +882,17 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                 tanggal={indonesianToday()}
                                 paraf1Img={paraf1Img}
                                 paraf2Img={paraf2Img}
-                                onParafEnd={(occupant) => {
-                                    const url = occupant === 1 ? parafPad1.current?.getImage?.() : parafPad2.current?.getImage?.();
-                                    if (url) {
-                                        if (occupant === 1) setParaf1Img(url);
-                                        else setParaf2Img(url);
-                                    }
+                                onParafEnd={(occupant, url) => {
+                                    if (!url) return;
+                                    if (occupant === 1) setParaf1Img(url);
+                                    else setParaf2Img(url);
+                                }}
+                                sig1Img={sig1Img}
+                                sig2Img={sig2Img}
+                                onSigEnd={(occupant, url) => {
+                                    if (!url) return;
+                                    if (occupant === 1) setSig1Img(url);
+                                    else setSig2Img(url);
                                 }}
                                 sigRef1={sigPad1}
                                 parafRef1={parafPad1}

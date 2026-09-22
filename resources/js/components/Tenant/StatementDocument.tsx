@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import SignaturePad from './SignaturePad';
+import { type ReactNode, useState } from 'react';
+import SignatureModal from './SignatureModal';
 
 // Bagian surat yang bisa diisi dirender sebagai input tetap menyatu dengan
 // desain dokumen (garis bawah putus-putus), mengikuti template PDF/docx resmi.
@@ -32,7 +32,10 @@ export interface StatementDocumentProps {
     tanggal: string;
     paraf1Img: string;
     paraf2Img: string;
-    onParafEnd: (occupant: 1 | 2) => void;
+    onParafEnd: (occupant: 1 | 2, url: string) => void;
+    sig1Img: string;
+    sig2Img: string;
+    onSigEnd: (occupant: 1 | 2, url: string) => void;
     sigRef1: any;
     parafRef1: any;
     sigRef2: any;
@@ -98,29 +101,27 @@ export const DocInput = ({ value, onChange, maxLength, placeholder, className = 
     />
 );
 
-function ParafSlot({ editable, side, drawn, onEnd, padRef, topClass = 'top-[63%]' }: {
-    editable: boolean;
+function ParafSlot({ side, drawn, label, onClick, topClass = 'top-[63%]' }: {
     side: 'left' | 'right';
     drawn: string;
-    onEnd: () => void;
-    padRef: any;
+    label: string;
+    onClick: () => void;
     topClass?: string;
 }) {
     return (
         <div className={`absolute ${side === 'left' ? 'left-[0.5%]' : 'right-[0.5%]'} ${topClass} flex flex-col items-center w-[8%] min-w-[40px] max-w-[64px] z-10`}>
-            {editable ? (
-                <SignaturePad
-                    ref={padRef}
-                    onEnd={onEnd}
-                    className="w-full h-16 sm:h-20 border border-neutral-400 rounded-sm bg-white"
-                />
-            ) : drawn ? (
-                <img src={drawn} alt="Paraf" className="w-full border border-neutral-400 rounded-sm bg-white" />
-            ) : (
-                <div className="w-full h-16 sm:h-20 rounded-sm bg-neutral-50"></div>
-            )}
+            <button
+                type="button"
+                onClick={onClick}
+                title={`Klik untuk ${label.toLowerCase()}`}
+                className={`w-full h-16 sm:h-20 rounded-sm flex items-center justify-center border ${drawn ? '' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden ${drawn ? 'border-neutral-400 bg-white' : ''}`}
+            >
+                {drawn
+                    ? <img src={drawn} alt={label} className="w-full rounded-sm bg-white" />
+                    : <span className="text-[8px] sm:text-[9px] text-neutral-400 text-center leading-tight px-0.5">Klik {label.toLowerCase()}</span>}
+            </button>
             <span className="mt-1 text-[10px] sm:text-xs text-neutral-500 whitespace-nowrap">
-                {side === 'left' ? 'Paraf (1)' : 'Paraf (2)'}
+                {label}
             </span>
         </div>
     );
@@ -187,7 +188,36 @@ export default function StatementDocument(props: StatementDocumentProps) {
     const { isKiosk, hasSecond, occ1, occ2, sewaNumeral, dueDay, setDueDay, reminderDay,
         dendaPerDay, setDendaPerDay, meteran, setMeteran, usaha, setUsaha,
         facilities, setFacilities, tanggal, paraf1Img, paraf2Img, onParafEnd,
-        sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater } = props;
+        sig1Img, sig2Img, onSigEnd, sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater } = props;
+
+    // Modal paraf / tanda tangan: 0 = tertutup, 1 = occupant 1, 2 = occupant 2.
+    const [parafModal, setParafModal] = useState<0 | 1 | 2>(0);
+    const [sigModal, setSigModal] = useState<0 | 1 | 2>(0);
+
+    const modals = (
+        <>
+            <SignatureModal
+                open={parafModal !== 0}
+                onClose={() => setParafModal(0)}
+                title={parafModal === 2 ? 'Paraf (2)' : 'Paraf (1)'}
+                subtitle={`Tulis ${parafModal === 2 ? occ2.name : occ1.name} lalu tekan Simpan.`}
+                padRef={parafModal === 2 ? parafRef2 : parafRef1}
+                padKey="paraf"
+                initialImage={parafModal === 2 ? paraf2Img : paraf1Img}
+                onConfirm={(url) => onParafEnd(parafModal === 2 ? 2 : 1, url)}
+            />
+            <SignatureModal
+                open={sigModal !== 0}
+                onClose={() => setSigModal(0)}
+                title={sigModal === 2 ? 'Tanda Tangan (2)' : 'Tanda Tangan (1)'}
+                subtitle={`Tulis ${sigModal === 2 ? occ2.name : occ1.name} lalu tekan Simpan.`}
+                padRef={sigModal === 2 ? sigRef2 : sigRef1}
+                padKey="sig"
+                initialImage={sigModal === 2 ? sig2Img : sig1Img}
+                onConfirm={(url) => onSigEnd(sigModal === 2 ? 2 : 1, url)}
+            />
+        </>
+    );
 
     const duaDigit = (v: string) => v.replace(/\D/g, '');
 
@@ -216,6 +246,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
 
     if (isKiosk) {
         return (
+            <>
             <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
                 {/* HALAMAN 1 */}
                 <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} kioskSeparateWater={kioskSeparateWater}>
@@ -298,8 +329,8 @@ export default function StatementDocument(props: StatementDocumentProps) {
                             <li>Keluar masuk <strong>gerbang utama wajib menutup dan mengunci Kembali</strong>, apabila diatas <strong>pukul 22.00 WIB</strong>, <strong>wajib mengembok gerbang utama!</strong>.</li>
                         </ul>
                     </div>
-                    <ParafSlot editable topClass="top-[78%]" padRef={parafRef1} side="left" drawn={paraf1Img} onEnd={() => onParafEnd(1)} />
-                    {hasSecond && <ParafSlot editable topClass="top-[78%]" padRef={parafRef2} side="right" drawn={paraf2Img} onEnd={() => onParafEnd(2)} />}
+                    <ParafSlot topClass="top-[78%]" side="left" label="Paraf (1)" drawn={paraf1Img} onClick={() => setParafModal(1)} />
+                    {hasSecond && <ParafSlot topClass="top-[78%]" side="right" label="Paraf (2)" drawn={paraf2Img} onClick={() => setParafModal(2)} />}
                 </SheetPage>
 
                 {/* HALAMAN 2 */}
@@ -329,16 +360,19 @@ export default function StatementDocument(props: StatementDocumentProps) {
                         <p><strong>Dibuat di:</strong> Jakarta</p>
                         <p><strong>Pada tanggal:</strong> {tanggal}</p>
                         <p className="pt-4"><strong>Yang Membuat Pernyataan,</strong></p>
-                        <SignatureBlock hasSecond={hasSecond} occ1={occ1} occ2={occ2} sigRef1={sigRef1} sigRef2={sigRef2} label="Tanda Tangan" />
+                        <SignatureBlock hasSecond={hasSecond} occ1={occ1} occ2={occ2} img1={sig1Img} img2={sig2Img} label="Tanda Tangan" onSigClick={(o) => setSigModal(o)} />
                     </div>
-                    <ParafSlot editable={false} topClass="top-[52%]" padRef={parafRef1} side="left" drawn={paraf1Img} onEnd={() => onParafEnd(1)} />
-                    {hasSecond && <ParafSlot editable={false} topClass="top-[52%]" padRef={parafRef2} side="right" drawn={paraf2Img} onEnd={() => onParafEnd(2)} />}
+                    <ParafSlot topClass="top-[52%]" side="left" label="Paraf (1)" drawn={paraf1Img} onClick={() => setParafModal(1)} />
+                    {hasSecond && <ParafSlot topClass="top-[52%]" side="right" label="Paraf (2)" drawn={paraf2Img} onClick={() => setParafModal(2)} />}
                 </SheetPage>
             </div>
+            {modals}
+            </>
         );
     }
 
     return (
+        <>
         <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
             {/* HALAMAN 1 */}
             <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran}>
@@ -370,8 +404,8 @@ export default function StatementDocument(props: StatementDocumentProps) {
                     </ul>
                     <p className="text-justify">Menjaga keamanan dan kenyaman Bersama, seperti:</p>
                 </div>
-                <ParafSlot editable padRef={parafRef1} side="left" drawn={paraf1Img} onEnd={() => onParafEnd(1)} />
-                {hasSecond && <ParafSlot editable padRef={parafRef2} side="right" drawn={paraf2Img} onEnd={() => onParafEnd(2)} />}
+                <ParafSlot side="left" label="Paraf (1)" drawn={paraf1Img} onClick={() => setParafModal(1)} />
+                {hasSecond && <ParafSlot side="right" label="Paraf (2)" drawn={paraf2Img} onClick={() => setParafModal(2)} />}
             </SheetPage>
 
             {/* HALAMAN 2 */}
@@ -406,8 +440,8 @@ export default function StatementDocument(props: StatementDocumentProps) {
                     </p>
                     <p className="text-justify">Jika saya berniat untuk mengakhiri masa sewa sebelum waktu yang disepakati, saya akan memberikan pemberitahuan kepada pihak <strong>PENGELOLA KOS</strong> 5 hari</p>
                 </div>
-                <ParafSlot editable={false} padRef={parafRef1} side="left" drawn={paraf1Img} onEnd={() => onParafEnd(1)} />
-                {hasSecond && <ParafSlot editable={false} padRef={parafRef2} side="right" drawn={paraf2Img} onEnd={() => onParafEnd(2)} />}
+                <ParafSlot side="left" label="Paraf (1)" drawn={paraf1Img} onClick={() => setParafModal(1)} />
+                {hasSecond && <ParafSlot side="right" label="Paraf (2)" drawn={paraf2Img} onClick={() => setParafModal(2)} />}
             </SheetPage>
 
             {/* HALAMAN 3 */}
@@ -426,37 +460,54 @@ export default function StatementDocument(props: StatementDocumentProps) {
                     <p><strong>Dibuat di:</strong> Jakarta</p>
                     <p><strong>Pada tanggal:</strong> {tanggal}</p>
                     <p className="pt-4"><strong>Yang Membuat Pernyataan,</strong></p>
-                    <SignatureBlock hasSecond={hasSecond} occ1={occ1} occ2={occ2} sigRef1={sigRef1} sigRef2={sigRef2} label="Tanda Tangan" />
+                    <SignatureBlock hasSecond={hasSecond} occ1={occ1} occ2={occ2} img1={sig1Img} img2={sig2Img} label="Tanda Tangan" onSigClick={(o) => setSigModal(o)} />
                 </div>
             </SheetPage>
         </div>
+        {modals}
+        </>
     );
 }
 
-function SignatureBlock({ hasSecond, occ1, occ2, sigRef1, sigRef2, label }: {
+function SignatureBlock({ hasSecond, occ1, occ2, img1, img2, label, onSigClick }: {
     hasSecond: boolean;
     occ1: Occ;
     occ2: Occ;
-    sigRef1: any;
-    sigRef2: any;
+    img1: string;
+    img2: string;
     label: string;
+    onSigClick: (occupant: 1 | 2) => void;
 }) {
     return (
         <div className={`grid gap-10 pt-6 ${hasSecond ? 'grid-cols-1 sm:grid-cols-2' : 'max-w-[300px]'}`}>
             <div>
                 <p>{label} (1),</p>
-                <div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
-                    <SignaturePad ref={sigRef1} className="w-full h-28" />
-                </div>
+                <button
+                    type="button"
+                    onClick={() => onSigClick(1)}
+                    title={`Klik untuk ${label.toLowerCase()} (1)`}
+                    className={`mt-2 w-full h-28 max-w-[280px] rounded-sm flex items-center justify-center border ${img1 ? 'border-neutral-400 bg-white' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden`}
+                >
+                    {img1
+                        ? <img src={img1} alt={`${label} (1)`} className="w-full rounded-sm bg-white" />
+                        : <span className="text-xs text-neutral-400 text-center px-2">Klik untuk tanda tangan</span>}
+                </button>
                 <p className="mt-3">Nama: <strong>{occ1.name}</strong>.</p>
                 <p>No. KTP: <strong>{occ1.nik}</strong>.</p>
             </div>
             {hasSecond && (
                 <div>
                     <p>{label} (2),</p>
-<div className="mt-2 bg-white border border-neutral-300 overflow-hidden max-w-[280px]">
-                    <SignaturePad ref={sigRef2} className="w-full h-28" />
-                </div>
+                    <button
+                        type="button"
+                        onClick={() => onSigClick(2)}
+                        title={`Klik untuk ${label.toLowerCase()} (2)`}
+                        className={`mt-2 w-full h-28 max-w-[280px] rounded-sm flex items-center justify-center border ${img2 ? 'border-neutral-400 bg-white' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden`}
+                    >
+                        {img2
+                            ? <img src={img2} alt={`${label} (2)`} className="w-full rounded-sm bg-white" />
+                            : <span className="text-xs text-neutral-400 text-center px-2">Klik untuk tanda tangan</span>}
+                    </button>
                     <p className="mt-3">Nama: <strong>{occ2.name}</strong>.</p>
                     <p>No. KTP: <strong>{occ2.nik}</strong>.</p>
                 </div>

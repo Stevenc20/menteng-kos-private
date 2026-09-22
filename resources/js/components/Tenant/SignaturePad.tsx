@@ -10,6 +10,7 @@ export interface SignaturePadHandle {
     clear(): void;
     isEmpty(): boolean;
     getImage(): string;
+    loadImage(dataUrl: string): void;
 }
 
 interface SignaturePadProps {
@@ -84,6 +85,27 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(({ classN
         },
         getImage() {
             return getCurrentImage();
+        },
+        loadImage(dataUrl) {
+            const c = canvasRef.current;
+            if (!c || !dataUrl) return;
+            const ctx = c.getContext('2d');
+            if (!ctx) return;
+            const img = new Image();
+            img.onload = () => {
+                const maxW = c.width - 8;
+                const maxH = c.height - 8;
+                const scale = Math.min(1, maxW / (img.width || 1), maxH / (img.height || 1));
+                const w = Math.max(1, Math.round((img.width || 1) * scale));
+                const h = Math.max(1, Math.round((img.height || 1) * scale));
+                const x = Math.round((c.width - w) / 2);
+                const y = Math.round((c.height - h) / 2);
+                ctx.clearRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, x, y, w, h);
+                emptyRef.current = false;
+                lastRef.current = null;
+            };
+            img.src = dataUrl;
         },
     }), []);
 
