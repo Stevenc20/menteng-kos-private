@@ -117,7 +117,7 @@ function ParafSlot({ side, drawn, label, onClick, topClass = 'top-[63%]' }: {
                 className={`w-full h-16 sm:h-20 rounded-sm flex items-center justify-center border ${drawn ? '' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden ${drawn ? 'border-neutral-400 bg-white' : ''}`}
             >
                 {drawn
-                    ? <img src={drawn} alt={label} className="w-full rounded-sm bg-white" />
+                    ? <img src={drawn} alt={label} className="w-full h-full rounded-sm object-contain bg-white" />
                     : <span className="text-[8px] sm:text-[9px] text-neutral-400 text-center leading-tight px-0.5">Klik {label.toLowerCase()}</span>}
             </button>
             <span className="mt-1 text-[10px] sm:text-xs text-neutral-500 whitespace-nowrap">
@@ -489,7 +489,7 @@ function SignatureBlock({ hasSecond, occ1, occ2, img1, img2, label, onSigClick }
                     className={`mt-2 w-full h-28 max-w-[280px] rounded-sm flex items-center justify-center border ${img1 ? 'border-neutral-400 bg-white' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden`}
                 >
                     {img1
-                        ? <img src={img1} alt={`${label} (1)`} className="w-full rounded-sm bg-white" />
+                        ? <img src={img1} alt={`${label} (1)`} className="w-full h-full rounded-sm object-contain bg-white" />
                         : <span className="text-xs text-neutral-400 text-center px-2">Klik untuk tanda tangan</span>}
                 </button>
                 <p className="mt-3">Nama: <strong>{occ1.name}</strong>.</p>
@@ -505,7 +505,7 @@ function SignatureBlock({ hasSecond, occ1, occ2, img1, img2, label, onSigClick }
                         className={`mt-2 w-full h-28 max-w-[280px] rounded-sm flex items-center justify-center border ${img2 ? 'border-neutral-400 bg-white' : 'border-dashed border-neutral-400 bg-neutral-50'} overflow-hidden`}
                     >
                         {img2
-                            ? <img src={img2} alt={`${label} (2)`} className="w-full rounded-sm bg-white" />
+                            ? <img src={img2} alt={`${label} (2)`} className="w-full h-full rounded-sm object-contain bg-white" />
                             : <span className="text-xs text-neutral-400 text-center px-2">Klik untuk tanda tangan</span>}
                     </button>
                     <p className="mt-3">Nama: <strong>{occ2.name}</strong>.</p>
