@@ -52,8 +52,10 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
-        ${e.kioskSeparateWater?`<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${e.meteran?`${t(e.meteran)}m³`:`..................`}</div>
-                   <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</div>`:`<div style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;">${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`..................`}</div>`}
+        <div data-meteran-value="1" style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;min-height:14px;">
+            ${e.kioskSeparateWater?`${e.meteran?`${t(e.meteran)}m³`:`..................`}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`:`${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`..................`}`}
+        </div>
+        ${e.notes?`<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">${t(e.notes)}</div>`:``}
     </div>`,d=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 18px;font-size:17px;">SURAT PERNYATAAN</h2>
         <p>Yang bertanda tangan di bawah ini:</p>
