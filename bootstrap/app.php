@@ -46,10 +46,14 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
 
-        // Abaikan notice tempnam jika storage views fallback ke temp OS agar tidak meledak menjadi Error 500
-        $exceptions->render(function (\ErrorException $e) {
+        $exceptions->dontReportDuplicates();
+
+        $exceptions->stopIgnoring(\ErrorException::class);
+
+        // Jangan render atau lempar error jika ada warning tempnam
+        $exceptions->renderable(function (\ErrorException $e) {
             if (str_contains($e->getMessage(), 'tempnam()')) {
-                return null;
+                return response('');
             }
         });
     })->create();
