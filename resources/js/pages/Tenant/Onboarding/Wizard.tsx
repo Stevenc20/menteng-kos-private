@@ -182,6 +182,9 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         due_date_day: initDueDay,
         denda_per_day: initDenda,
         facilities: initFacilities,
+        is_daily_transit: false,
+        transit_days: '7',
+        water_allowance: '5',
 
         // For Final Agreement
         document_html: '',
@@ -433,6 +436,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
             dendaPerDay: data.denda_per_day || initDenda,
             meteran: data.meteran_air,
             notes: data.notes,
+            waterAllowance: data.water_allowance || (data.is_daily_transit ? 3 : 5),
             usaha: data.usaha,
             facilities: data.facilities,
             tanggal: indonesianToday(),
@@ -721,8 +725,114 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                     <span>Jenis:</span> <span className="font-medium text-neutral-900">{isKiosk ? 'Kios' : 'Kamar'}</span>
                                     <span>Harga Sewa:</span> <span className="font-medium text-neutral-900">{formatRupiah(tenancy.agreed_price)} / bulan</span>
                                     <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}</span>
-                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {initDueDay} setiap bulan</span>
+                                    <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {data.due_date_day || initDueDay} setiap bulan</span>
                                 </div>
+                            </div>
+
+                            {/* Opsi Sewa Transit Harian (Bisa diaktifkan/diedit bebas) */}
+                            <div className="mt-4 pt-4 border-t border-neutral-200">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <label className="font-bold text-neutral-900 text-sm flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={data.is_daily_transit}
+                                                onChange={(e) => {
+                                                    const checked = e.target.checked;
+                                                    setData((prev) => ({
+                                                        ...prev,
+                                                        is_daily_transit: checked,
+                                                        water_allowance: checked ? '3' : '5',
+                                                        due_date_day: checked ? '1' : initDueDay,
+                                                        notes: checked
+                                                            ? (prev.notes || `Transit kamar sementara ${data.transit_days || '7'} hari sebelum pindah kamar.`)
+                                                            : (prev.notes.startsWith('Transit kamar') ? '' : prev.notes),
+                                                    }));
+                                                }}
+                                                className="w-4 h-4 rounded text-neutral-900 focus:ring-neutral-900 border-neutral-300"
+                                            />
+                                            <span>⚡ Mode Transit Kamar / Sewa Harian</span>
+                                        </label>
+                                        <p className="text-xs text-neutral-500 mt-1">
+                                            Aktifkan untuk kamar transit sementara. Jatuh tempo disugestikan ke awal bulan (tgl 1) dan jatah air diset ke 3m³, tetap bisa diedit bebas.
+                                        </p>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase ${data.is_daily_transit ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-600'}`}>
+                                        {data.is_daily_transit ? 'Transit Harian' : 'Bulanan Normal'}
+                                    </span>
+                                </div>
+
+                                {data.is_daily_transit && (
+                                    <div className="mt-4 p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-neutral-700 mb-1">Durasi Transit (Hari)</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max="60"
+                                                        value={data.transit_days}
+                                                        onChange={(e) => {
+                                                            const d = e.target.value;
+                                                            setData((prev) => ({
+                                                                ...prev,
+                                                                transit_days: d,
+                                                                notes: `Transit kamar sementara ${d || 0} hari sebelum pindah kamar.`,
+                                                            }));
+                                                        }}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:border-neutral-900"
+                                                        placeholder="Contoh: 7"
+                                                    />
+                                                    <span className="absolute right-3 top-1.5 text-xs text-neutral-400">hari</span>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-semibold text-neutral-700 mb-1">Jatuh Tempo Bulanan</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max="31"
+                                                        value={data.due_date_day}
+                                                        onChange={(e) => setData('due_date_day', e.target.value)}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:border-neutral-900"
+                                                        placeholder="1"
+                                                    />
+                                                    <span className="absolute right-3 top-1.5 text-xs text-neutral-400">tgl</span>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-semibold text-neutral-700 mb-1">Jatah Air Free</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="10"
+                                                        value={data.water_allowance}
+                                                        onChange={(e) => setData('water_allowance', e.target.value)}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:border-neutral-900"
+                                                        placeholder="3"
+                                                    />
+                                                    <span className="absolute right-3 top-1.5 text-xs text-neutral-400">m³</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">Catatan Tambahan Surat (Pindah Kamar / Keterangan)</label>
+                                            <input
+                                                type="text"
+                                                value={data.notes}
+                                                onChange={(e) => setData('notes', e.target.value)}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-neutral-900"
+                                                placeholder="Contoh: Transit kamar sementara 7 hari s/d tgl 1 lalu pindah ke kamar 203."
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         {Object.keys(errors).length > 0 && (
@@ -879,10 +989,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                 setMeteran={(v) => setData('meteran_air', v)}
                                 notes={data.notes}
                                 setNotes={(v) => setData('notes', v)}
-                                notes={data.notes}
-                                setNotes={(v) => setData('notes', v)}
-                                notes={data.notes}
-                                setNotes={(v) => setData('notes', v)}
+                                waterAllowance={data.water_allowance || (data.is_daily_transit ? 3 : 5)}
                                 usaha={data.usaha}
                                 setUsaha={(v) => setData('usaha', v)}
                                 facilities={data.facilities}

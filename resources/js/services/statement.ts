@@ -45,6 +45,7 @@ export interface StatementParams {
     usaha: string;             // Kios: jenis usaha
     facilities: string[];      // default dari property.facilities
     notes?: string;            // Catatan pindah kamar / pemakaian (opsional)
+    waterAllowance?: number | string; // Jatah air (default: 5m3, harian/transit: 3m3)
     tanggal: string;           // "09 September 2026"
     // KIOSK: bila harga deal di bawah harga standar, air PAM ditagih terpisah
     // (tanpa jatah 5m³ gratis). Hanya relevan untuk template Kios.
@@ -119,7 +120,9 @@ const signatureColumnsHTML = (p: StatementParams) => `
 
 // ═══════════════════════ TEMPLATE KAMAR (3 halaman) ═══════════════════════
 
-const meteranBoxHTML = (p: StatementParams) => `
+const meteranBoxHTML = (p: StatementParams) => {
+    const allowance = Number(p.waterAllowance ?? 5) || 5;
+    return `
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
@@ -127,11 +130,12 @@ const meteranBoxHTML = (p: StatementParams) => `
             ${
                 p.kioskSeparateWater
                     ? `${p.meteran ? `${esc(p.meteran)}m³` : '..................'}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`
-                    : `${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + 5}m³` : '..................'}`
+                    : `${p.meteran ? `${esc(p.meteran)}m³ - ${Number(p.meteran) + allowance}m³` : '..................'}`
             }
         </div>
         ${p.notes ? `<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">${esc(p.notes)}</div>` : ''}
     </div>`;
+};
 
 export const roomStatementHTML = (p: StatementParams) => {
     const facCount = Math.max(6, p.facilities.length);
@@ -185,6 +189,8 @@ export const roomStatementHTML = (p: StatementParams) => {
         </ul>
         <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`;
 
+    const allowance = Number(p.waterAllowance ?? 5) || 5;
+
     const p2 = `
         <ul style="padding-left:24px;margin:0;">
             <li style="margin:8px 0;text-align:justify;">Selain penghuni kos-an dilarang membawa <strong>tamu</strong> kedalam <strong>kamar</strong> termasuk <strong>kurir</strong> dan <strong>tamu</strong> &ldquo;tidak dikenal&rdquo; hanya boleh diterima diluar kamar, kecuali ada <strong>izin</strong> dari <strong>PENGELOLA KOS</strong>.</li>
@@ -196,8 +202,8 @@ export const roomStatementHTML = (p: StatementParams) => {
         <p style="font-weight:bold;">4. Kewajiban Terhadap Biaya Yang Terhutang</p>
         <p style="text-align:justify;">Saya sebagai penghuni kos bersedia <strong>membayar biaya yang terhutang</strong> seperti:</p>
         <ol style="padding-left:24px;margin:4px 0;">
-            <li style="margin:6px 0;text-align:justify;">Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>5m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
-            <li style="margin:6px 0;text-align:justify;">Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>5m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
+            <li style="margin:6px 0;text-align:justify;">Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>${allowance}m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
+            <li style="margin:6px 0;text-align:justify;">Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>${allowance}m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
             <li style="margin:6px 0;text-align:justify;"><strong>Pembacaan meteran air</strong> akan dilakukan <strong>setiap tanggal</strong> pembayaran kos untuk masing-masing kamar.</li>
         </ol>
         <p style="font-weight:bold;">5. Keterlambatan Pembayaran</p>

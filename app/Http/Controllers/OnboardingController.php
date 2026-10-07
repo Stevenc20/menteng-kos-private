@@ -435,6 +435,8 @@ class OnboardingController extends Controller
             'signature_2' => 'nullable|string',
             'paraf_2' => 'nullable|string',
             'move_in_date' => 'required|date',
+            'due_date_day' => 'nullable|integer|min:1|max:31',
+            'water_allowance' => 'nullable|integer|min:0|max:10',
             'meteran_air' => 'nullable|string',
             'notes' => 'nullable|string',
         ]);
@@ -474,14 +476,27 @@ class OnboardingController extends Controller
         // data, so the tenancy is activated immediately (no further approval step).
         if ($isAdminContext) {
             DB::transaction(function () use ($tenancy, $validated) {
-                $tenancy->update([
+                $tenancyUpdate = [
                     'status' => 'ACTIVE',
                     'approval_status' => 'APPROVED',
                     'approved_at' => now(),
                     'approved_by' => Auth::id(),
                     'rejection_reason' => null,
                     'move_in_date' => $validated['move_in_date'],
-                ]);
+                ];
+                if (! empty($validated['due_date_day'])) {
+                    $tenancyUpdate['due_day'] = $validated['due_date_day'];
+                }
+
+                $tenancy->update($tenancyUpdate);
+
+                // Jika ada water allowance khusus (misal 3m³ untuk harian/transit) dan ada water period yang masih aktif
+                if (isset($validated['water_allowance'])) {
+                    $openPeriod = $tenancy->openWaterPeriod();
+                    if ($openPeriod) {
+                        $openPeriod->update(['allowance' => (int) $validated['water_allowance']]);
+                    }
+                }
 
                 $property = Property::find($tenancy->property_id);
                 if ($property && $property->status !== 'OCCUPIED') {
@@ -492,10 +507,14 @@ class OnboardingController extends Controller
             return redirect()->route('admin.tenants')->with('success', 'Data penghuni berhasil disimpan dan tenant diaktifkan.');
         }
 
-        $tenancy->update([
+        $tenantUpdate = [
             'status' => 'PENDING_ADMIN_APPROVAL',
             'move_in_date' => $validated['move_in_date'],
-        ]);
+        ];
+        if (! empty($validated['due_date_day'])) {
+            $tenantUpdate['due_day'] = $validated['due_date_day'];
+        }
+        $tenancy->update($tenantUpdate);
 
         return redirect()->route('tenant.onboarding')->with('success', 'Agreement submitted successfully.');
     }

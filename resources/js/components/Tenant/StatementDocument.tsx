@@ -43,9 +43,11 @@ export interface StatementDocumentProps {
     sigRef2: any;
     parafRef2: any;
     kioskSeparateWater?: boolean;
+    waterAllowance?: number | string;
 }
 
-function SheetPage({ num, meteran, meteranValue, onMeteranChange, notesValue, onNotesChange, kioskSeparateWater, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; notesValue?: string; onNotesChange?: (v: string) => void; kioskSeparateWater?: boolean; children: ReactNode }) {
+function SheetPage({ num, meteran, meteranValue, onMeteranChange, notesValue, onNotesChange, kioskSeparateWater, waterAllowance, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; notesValue?: string; onNotesChange?: (v: string) => void; kioskSeparateWater?: boolean; waterAllowance?: number | string; children: ReactNode }) {
+    const allowanceNum = Number(waterAllowance ?? 5) || 5;
     return (
         <div className="relative mx-auto mb-6 w-full min-w-0 max-w-[794px] min-h-[1122px] bg-white shadow-lg border border-neutral-200">
             <div className="flex justify-between items-start px-[9%] pt-6">
@@ -73,7 +75,7 @@ function SheetPage({ num, meteran, meteranValue, onMeteranChange, notesValue, on
                         ) : (
                             meteranValue && (
                                 <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-neutral-700">
-                                    {meteranValue}m³ - {Number(meteranValue) + 5}m³
+                                    {meteranValue}m³ - {Number(meteranValue) + allowanceNum}m³
                                 </div>
                             )
                         )}
@@ -203,7 +205,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
         dendaPerDay, setDendaPerDay, meteran, setMeteran, usaha, setUsaha,
         notes, setNotes,
         facilities, setFacilities, tanggal, paraf1Img, paraf2Img, onParafEnd,
-        sig1Img, sig2Img, onSigEnd, sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater } = props;
+        sig1Img, sig2Img, onSigEnd, sigRef1, parafRef1, sigRef2, parafRef2, kioskSeparateWater, waterAllowance } = props;
 
     // Modal paraf / tanda tangan: 0 = tertutup, 1 = occupant 1, 2 = occupant 2.
     const [parafModal, setParafModal] = useState<0 | 1 | 2>(0);
@@ -390,7 +392,7 @@ export default function StatementDocument(props: StatementDocumentProps) {
         <>
         <div className="w-full min-w-0 bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
             {/* HALAMAN 1 */}
-            <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} notesValue={notes} onNotesChange={setNotes}>
+            <SheetPage num={1} meteran meteranValue={meteran} onMeteranChange={setMeteran} notesValue={notes} onNotesChange={setNotes} waterAllowance={waterAllowance}>
                 <h2 className="text-center font-bold tracking-wide uppercase text-base sm:text-lg mb-4">Surat Pernyataan</h2>
                 <div className="space-y-1">
                     <p>Yang bertanda tangan di bawah ini:</p>
@@ -436,8 +438,8 @@ export default function StatementDocument(props: StatementDocumentProps) {
                     <p className="font-bold">4. Kewajiban Terhadap Biaya Yang Terhutang</p>
                     <p className="text-justify">Saya sebagai penghuni kos bersedia <strong>membayar biaya yang terhutang</strong> seperti:</p>
                     <ol className="list-decimal pl-5 space-y-2 text-justify">
-                        <li>Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>5m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
-                        <li>Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>5m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
+                        <li>Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>{Number(waterAllowance ?? 5) || 5}m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
+                        <li>Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>{Number(waterAllowance ?? 5) || 5}m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
                         <li><strong>Pembacaan meteran air</strong> akan dilakukan <strong>setiap tanggal</strong> pembayaran kos untuk masing-masing kamar.</li>
                     </ol>
                     <p className="font-bold">5. Keterlambatan Pembayaran</p>

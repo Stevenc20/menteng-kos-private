@@ -48,15 +48,15 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
                 <p>No. KTP: <strong>${t(e.occ2.nik)}</strong>.</p>
             </div>
         `:``}
-    </div>`,u=e=>`
+    </div>`,u=e=>{let n=Number(e.waterAllowance??5)||5;return`
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
         <div data-meteran-value="1" style="margin-top:2px;letter-spacing:2px;font-weight:bold;font-size:12px;white-space:nowrap;min-height:14px;">
-            ${e.kioskSeparateWater?`${e.meteran?`${t(e.meteran)}m³`:`..................`}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`:`${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+5}m³`:`..................`}`}
+            ${e.kioskSeparateWater?`${e.meteran?`${t(e.meteran)}m³`:`..................`}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`:`${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+n}m³`:`..................`}`}
         </div>
         ${e.notes?`<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">${t(e.notes)}</div>`:``}
-    </div>`,d=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
+    </div>`},d=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 18px;font-size:17px;">SURAT PERNYATAAN</h2>
         <p>Yang bertanda tangan di bawah ini:</p>
         ${s([[`Nama (1)`,n.occ1.name],[`Tempat, Tgl Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
@@ -78,7 +78,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             <li style="margin:6px 0;text-align:justify;">Mematuhi peraturan <strong>HUKUM</strong> yang berlaku di <strong>Indonesia</strong> dan <strong>Menjaga norma kesopanan</strong> serta <strong>kesusilaan (TIDAK BOLEH OPEN BO)</strong>. Dan <strong>tidak menimbulkan kegaduhan bagi penghuni lain</strong>.</li>
             <li style="margin:6px 0;text-align:justify;">Keluar masuk <strong>gerbang utama wajib menutup dan mengunci Kembali</strong>, dan bila diatas <strong>pukul 22.00 WIB</strong>, <strong>wajib mengembok gerbang utama!</strong>.</li>
         </ul>
-        <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`,d=`
+        <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`,d=Number(n.waterAllowance??5)||5,f=`
         <ul style="padding-left:24px;margin:0;">
             <li style="margin:8px 0;text-align:justify;">Selain penghuni kos-an dilarang membawa <strong>tamu</strong> kedalam <strong>kamar</strong> termasuk <strong>kurir</strong> dan <strong>tamu</strong> &ldquo;tidak dikenal&rdquo; hanya boleh diterima diluar kamar, kecuali ada <strong>izin</strong> dari <strong>PENGELOLA KOS</strong>.</li>
             <li style="margin:8px 0;text-align:justify;"><strong>Dilarang</strong> menyewakan kamar kepada orang lain selain nama yang sudah tertera dalam <strong>SURAT PERNYATAAN</strong>, jika melanggar maka <strong>pengelola kos BERHAK memutus SEWA/KONTRAK</strong> dan penghuni wajib mengosongkan kamar serta membersihkan kamar seperti semula dan tidak menerima <strong>KOMPENSASI</strong>.</li>
@@ -89,8 +89,8 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         <p style="font-weight:bold;">4. Kewajiban Terhadap Biaya Yang Terhutang</p>
         <p style="text-align:justify;">Saya sebagai penghuni kos bersedia <strong>membayar biaya yang terhutang</strong> seperti:</p>
         <ol style="padding-left:24px;margin:4px 0;">
-            <li style="margin:6px 0;text-align:justify;">Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>5m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
-            <li style="margin:6px 0;text-align:justify;">Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>5m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
+            <li style="margin:6px 0;text-align:justify;">Setiap kamar akan dikenakan biaya perbulan sebesar <strong>Rp 100.000</strong> (seratus ribu rupiah) untuk <strong>iuran sampah</strong> dan <strong>air</strong> sebanyak <strong>${d}m³ per kamar</strong> dihitung berdasarkan angka meteran yang terpasang dimasing-masing kamar.</li>
+            <li style="margin:6px 0;text-align:justify;">Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>${d}m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
             <li style="margin:6px 0;text-align:justify;"><strong>Pembacaan meteran air</strong> akan dilakukan <strong>setiap tanggal</strong> pembayaran kos untuk masing-masing kamar.</li>
         </ol>
         <p style="font-weight:bold;">5. Keterlambatan Pembayaran</p>
@@ -101,7 +101,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         <p style="text-align:justify;">
             Jika saya terlambat melakukan pembayaran setelah tanggal jatuh tempo, saya akan dikenakan denda sebesar <strong>${t(e(n.dendaPerDay))}</strong> per hari keterlambatan sesuai dengan ketentuan yang berlaku. Maksimal denda keterlambatan <strong>2 hari, diatas 2 hari wajib mengosongkan kosan</strong>.
         </p>
-        <p style="text-align:justify;">Jika saya berniat untuk mengakhiri masa sewa sebelum waktu yang disepakati, saya akan memberikan pemberitahuan kepada pihak <strong>PENGELOLA KOS</strong> 5 hari</p>`,f=`
+        <p style="text-align:justify;">Jika saya berniat untuk mengakhiri masa sewa sebelum waktu yang disepakati, saya akan memberikan pemberitahuan kepada pihak <strong>PENGELOLA KOS</strong> 5 hari</p>`,p=`
         <p style="text-align:justify;">sebelumnya dan bertanggung jawab atas pembayaran sewa yang masih terhutang serta kewajiban lain, seperti: air <strong>PDAM</strong> yang <strong>telah digunakan</strong> hingga <strong>saat pengosongan dilakukan</strong>.</p>
         <p style="font-weight:bold;">6. Pengosongan Kamar</p>
         <p style="font-weight:bold;">7. Peraturan Tambahan</p>
@@ -118,8 +118,8 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         ${l(n)}`;return`${o}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
         ${c(1,a,u(n),`63%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-        ${c(2,d,void 0,`35%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-        ${c(3,f)}
+        ${c(2,f,void 0,`35%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+        ${c(3,p)}
     </div>`},f=n=>{let r=Math.max(8,n.facilities.length),i=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dendaPerDay)||0),a=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),d=n.hasSecond?`<p style="margin:10px 0 2px;">Dan pasangan saya,</p>
            ${s([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}`:``,f=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 6px;font-size:17px;">SURAT PERNYATAAN</h2>
