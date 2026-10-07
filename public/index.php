@@ -13,13 +13,8 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
 // Register the Composer autoloader...
 require __DIR__.'/../vendor/autoload.php';
 
-// Mute E_NOTICE/E_WARNING khusus 'tempnam()' agar Laravel tidak mengonversinya menjadi ErrorException HTTP 500
-set_error_handler(function ($severity, $message, $file, $line) {
-    if (str_contains($message, 'tempnam()')) {
-        return true; // abaikan, PHP akan memakai fallback temp file tanpa crash
-    }
-    return false; // biarkan error lain ditangani handler default
-}, E_WARNING | E_NOTICE);
+// Matikan Notice dan Warning agar tempnam() tidak diubah Laravel menjadi ErrorException
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 // Bootstrap Laravel and handle the request...
 /** @var Application $app */
