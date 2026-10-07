@@ -23,6 +23,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Pastikan folder cache storage selalu ada agar tidak pernah memicu UnexpectedValueException & tempnam()
+        $viewPath = storage_path('framework/views');
+        if (! is_dir($viewPath)) {
+            @mkdir($viewPath, 0775, true);
+        }
+        $sessionsPath = storage_path('framework/sessions');
+        if (! is_dir($sessionsPath)) {
+            @mkdir($sessionsPath, 0775, true);
+        }
+
         if (config('app.env') === 'production' || request()->header('x-forwarded-proto') === 'https') {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         } else {
