@@ -7,7 +7,9 @@ use App\Models\AgreementSignature;
 use App\Models\Property;
 use App\Models\Tenancy;
 use App\Models\TenantProfile;
+use App\Services\AgreementStatementService;
 use App\Services\KtpOcrService;
+use App\Services\ProrataBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +86,11 @@ class OnboardingController extends Controller
                     'has_uploaded_document' => (bool) $agreement->uploaded_document_path,
                     'uploaded_document_type' => $agreement->uploaded_document_type,
                     'has_digital_document' => (bool) $agreement->document_html,
+                    'document_html' => $agreement->document_html,
+                    'meteran_start' => $agreement->meteran_start,
+                    'notes' => $agreement->notes,
+                    'status' => $agreement->status,
+                    'version' => $agreement->version ?? 1,
                 ] : null,
             ]);
         }
@@ -110,6 +117,20 @@ class OnboardingController extends Controller
             return Inertia::render('Tenant/Onboarding/WaitingApproval', [
                 'tenancy' => $tenancy,
                 'agreement' => $agreement,
+            ]);
+        }
+
+        // If admin has already prepared & saved the statement (status DRAFT) for the tenant
+        // to read, initial (paraf), and sign digitally, render the read-only statement signing page.
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        if ($agreement && $agreement->status === 'DRAFT' && filled($agreement->document_html)) {
+            $signatures = AgreementSignature::where('agreement_id', $agreement->id)->get();
+
+            return Inertia::render('Tenant/Onboarding/SignStatement', [
+                'tenancy' => $tenancy,
+                'profile' => $profile ?? (object) [],
+                'agreement' => $agreement,
+                'signatures' => $signatures,
             ]);
         }
 
@@ -164,6 +185,16 @@ class OnboardingController extends Controller
     public function storeInfo(Request $request)
     {
         $tenancy = $this->contextTenancy($request);
+        $isAdminContext = $request->route() && $request->route()->hasParameter('tenancy');
+
+        // When admin has already prepared the tenant's onboarding & statement, the tenant
+        // cannot re-enter or modify identity/KTP data (admin fixes any errors).
+        if (! $isAdminContext) {
+            $existingAgreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+            if ($existingAgreement && filled($existingAgreement->document_html)) {
+                abort(403, 'Data identitas dikelola oleh Admin. Silakan hubungi Admin jika ada perbaikan data.');
+            }
+        }
 
         $validated = $request->validate([
             'whatsapp' => 'required|string',
@@ -421,32 +452,155 @@ class OnboardingController extends Controller
     }
 
     /**
-     * Submit Agreement and Signatures
+     * Submit Agreement and Signatures (or save prepared statement draft by Admin)
      */
     public function submitAgreement(Request $request)
     {
         $tenancy = $this->contextTenancy($request);
         $isAdminContext = $request->route() && $request->route()->hasParameter('tenancy');
+        $saveOnly = $isAdminContext && ($request->boolean('save_only') || empty($request->input('signature_1')));
+
+        // Enforce that a tenant cannot modify identity, KTP, room, rent price, move-in date,
+        // due date, facilities, or statement content when admin has already prepared a DRAFT statement.
+        $existingAgreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        $isPreparedByAdmin = ! $isAdminContext && $existingAgreement && $existingAgreement->status === 'DRAFT' && filled($existingAgreement->document_html);
 
         $validated = $request->validate([
             'document_html' => 'required|string',
-            'signature_1' => 'required|string', // Base64 data image
-            'paraf_1' => 'required|string',
+            'signature_1' => $saveOnly ? 'nullable|string' : 'required|string',
+            'paraf_1' => $saveOnly ? 'nullable|string' : 'required|string',
             'signature_2' => 'nullable|string',
             'paraf_2' => 'nullable|string',
-            'move_in_date' => 'required|date',
+            'move_in_date' => $isPreparedByAdmin ? 'nullable|date' : 'required|date',
+            'agreed_price' => 'nullable|numeric|min:0',
             'due_date_day' => 'nullable|integer|min:1|max:31',
             'water_allowance' => 'nullable|integer|min:0|max:10',
             'meteran_air' => 'nullable|string',
             'notes' => 'nullable|string',
+            'usaha' => 'nullable|string|max:255',
+            'denda_per_day' => 'nullable|numeric|min:0',
+            'facilities' => 'nullable|array',
+            'facilities.*' => 'nullable|string',
+            'initial_paid_until' => 'nullable|date',
+            'initial_payment_status' => 'nullable|string|in:UNPAID,PAID,PENDING_PAYMENT',
+            'prorata_basis_mode' => 'nullable|string|in:ACTUAL,30_DAYS',
+            'prorata_end_date' => 'nullable|date',
+            'prorata_status' => 'nullable|string|in:UNPAID,PENDING_PAYMENT,PAID,NOT_APPLICABLE',
         ]);
+
+        // Admin-only Save (Simpan Data Awal & Surat Pernyataan untuk Ditandatangani Tenant)
+        if ($saveOnly) {
+            DB::transaction(function () use ($tenancy, $validated) {
+                $previousTerms = AgreementStatementService::snapshotTerms($tenancy);
+
+                $cleanFacilities = isset($validated['facilities']) && is_array($validated['facilities'])
+                    ? array_values(array_filter(array_map(fn ($f) => trim((string) $f), $validated['facilities']), fn ($f) => $f !== ''))
+                    : $tenancy->facilities;
+
+                $dueDay = ! empty($validated['due_date_day']) ? (int) $validated['due_date_day'] : ($tenancy->due_day ?? 1);
+
+                $tenancyUpdate = [
+                    'status' => in_array($tenancy->status, ['INVITED', 'ONBOARDING_IN_PROGRESS']) ? 'AGREEMENT_PENDING' : $tenancy->status,
+                    'move_in_date' => $validated['move_in_date'] ?? $tenancy->move_in_date,
+                    'due_day' => $dueDay,
+                    'facilities' => $cleanFacilities,
+                    'usaha' => $validated['usaha'] ?? $tenancy->usaha,
+                    'denda_per_day' => isset($validated['denda_per_day']) ? (float) $validated['denda_per_day'] : $tenancy->denda_per_day,
+                    'water_allowance' => isset($validated['water_allowance']) ? (int) $validated['water_allowance'] : $tenancy->water_allowance,
+                ];
+                if (isset($validated['agreed_price']) && $validated['agreed_price'] !== '') {
+                    $tenancyUpdate['agreed_price'] = (float) $validated['agreed_price'];
+                }
+
+                $tenancy->update($tenancyUpdate);
+
+                // Sync property facilities if provided by admin so future documents can reuse them
+                if (is_array($cleanFacilities) && count($cleanFacilities) > 0 && $tenancy->property) {
+                    $tenancy->property->update(['facilities' => $cleanFacilities]);
+                }
+
+                // Sync prorata & initial payment if initial_paid_until is provided
+                if (array_key_exists('initial_paid_until', $validated) && ! empty($validated['initial_paid_until'])) {
+                    ProrataBillingService::syncTenancyProrata($tenancy, [
+                        'agreed_price' => $tenancy->agreed_price,
+                        'move_in_date' => $tenancy->move_in_date,
+                        'due_day' => $dueDay,
+                        'initial_paid_until' => $validated['initial_paid_until'],
+                        'initial_payment_status' => $validated['initial_payment_status'] ?? 'PAID',
+                        'prorata_basis_mode' => $validated['prorata_basis_mode'] ?? 'ACTUAL',
+                        'prorata_end_date' => $validated['prorata_end_date'] ?? null,
+                        'prorata_status' => $validated['prorata_status'] ?? 'PENDING_PAYMENT',
+                    ]);
+                }
+
+                $tenancy->refresh();
+                $docHtml = AgreementStatementService::injectOrUpdatePaymentTermsBlock($validated['document_html'], $tenancy);
+
+                $existing = Agreement::where('tenancy_id', $tenancy->id)->first();
+                if ($existing && $existing->status === 'SIGNED') {
+                    // Track revision if already signed
+                    AgreementStatementService::recordTermsRevisionIfNeeded(
+                        $tenancy,
+                        $previousTerms,
+                        Auth::id(),
+                        'Pembaruan data onboarding & ketentuan pembayaran oleh Admin.'
+                    );
+                    $existing->update([
+                        'meteran_start' => $validated['meteran_air'] ?? $existing->meteran_start,
+                        'notes' => $validated['notes'] ?? $existing->notes,
+                    ]);
+                } else {
+                    Agreement::updateOrCreate(
+                        ['tenancy_id' => $tenancy->id],
+                        [
+                            'document_html' => $docHtml,
+                            'meteran_start' => $validated['meteran_air'] ?? null,
+                            'notes' => $validated['notes'] ?? null,
+                            'status' => 'DRAFT',
+                        ]
+                    );
+                }
+
+                // Update user name from KTP 1 if user still has placeholder name
+                $profile = TenantProfile::where('user_id', $tenancy->user_id)->first();
+                if ($profile && filled($profile->ktp_1_name) && $tenancy->user && in_array($tenancy->user->name, ['Invited Tenant', ''], true)) {
+                    $tenancy->user->update(['name' => $profile->ktp_1_name]);
+                }
+            });
+
+            return redirect()->route('admin.tenants.show', $tenancy->id)
+                ->with('success', 'Data awal dan Surat Pernyataan berhasil disimpan. Tenant dapat login untuk membaca, memberi paraf, dan menandatangani surat.');
+        }
+
+        // If admin context also sent prorata fields during direct sign-and-activate
+        if ($isAdminContext && ! empty($validated['initial_paid_until'])) {
+            ProrataBillingService::syncTenancyProrata($tenancy, [
+                'agreed_price' => $validated['agreed_price'] ?? $tenancy->agreed_price,
+                'move_in_date' => $validated['move_in_date'] ?? $tenancy->move_in_date,
+                'due_day' => ! empty($validated['due_date_day']) ? (int) $validated['due_date_day'] : ($tenancy->due_day ?? 1),
+                'initial_paid_until' => $validated['initial_paid_until'],
+                'initial_payment_status' => $validated['initial_payment_status'] ?? 'PAID',
+                'prorata_basis_mode' => $validated['prorata_basis_mode'] ?? 'ACTUAL',
+                'prorata_end_date' => $validated['prorata_end_date'] ?? null,
+                'prorata_status' => $validated['prorata_status'] ?? 'PENDING_PAYMENT',
+            ]);
+            $tenancy->refresh();
+        }
+
+        $finalHtml = $isAdminContext
+            ? AgreementStatementService::injectOrUpdatePaymentTermsBlock($validated['document_html'], $tenancy)
+            : $validated['document_html'];
 
         $agreement = Agreement::updateOrCreate(
             ['tenancy_id' => $tenancy->id],
             [
-                'document_html' => $validated['document_html'],
-                'meteran_start' => $validated['meteran_air'] ?? null,
-                'notes' => $validated['notes'] ?? null,
+                'document_html' => $finalHtml,
+                'meteran_start' => $isPreparedByAdmin
+                    ? ($existingAgreement->meteran_start ?? $validated['meteran_air'] ?? null)
+                    : ($validated['meteran_air'] ?? null),
+                'notes' => $isPreparedByAdmin
+                    ? ($existingAgreement->notes ?? $validated['notes'] ?? null)
+                    : ($validated['notes'] ?? null),
                 'status' => 'SIGNED',
                 'signed_at' => now(),
             ]
@@ -456,7 +610,7 @@ class OnboardingController extends Controller
         AgreementSignature::updateOrCreate(
             ['agreement_id' => $agreement->id, 'occupant_type' => 'OCCUPANT_1'],
             [
-                'signature_image' => $validated['signature_1'], // Store base64 or decode and save as file
+                'signature_image' => $validated['signature_1'],
                 'paraf_image' => $validated['paraf_1'],
             ]
         );
@@ -507,11 +661,15 @@ class OnboardingController extends Controller
             return redirect()->route('admin.tenants')->with('success', 'Data penghuni berhasil disimpan dan tenant diaktifkan.');
         }
 
+        // Tenant context: if admin prepared the DRAFT statement, do NOT let the tenant
+        // overwrite move_in_date or due_day (keep admin's values as single source of truth).
         $tenantUpdate = [
             'status' => 'PENDING_ADMIN_APPROVAL',
-            'move_in_date' => $validated['move_in_date'],
         ];
-        if (! empty($validated['due_date_day'])) {
+        if (! $isPreparedByAdmin && ! empty($validated['move_in_date'])) {
+            $tenantUpdate['move_in_date'] = $validated['move_in_date'];
+        }
+        if (! $isPreparedByAdmin && ! empty($validated['due_date_day'])) {
             $tenantUpdate['due_day'] = $validated['due_date_day'];
         }
         $tenancy->update($tenantUpdate);

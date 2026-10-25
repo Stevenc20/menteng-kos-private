@@ -2,18 +2,17 @@
 
 namespace App\Services;
 
+use App\Models\Agreement;
+use App\Models\AgreementRevision;
 use App\Models\RoomDocumentation;
+use App\Models\Tenancy;
 use Illuminate\Support\Collection;
 
 /**
  * Injects the tenant's BEFORE (MOVE_IN) documentation photos into the
  * Surat Pernyataan HTML so the "Dokumentasi kios saat diserahkan" section
- * always reflects the latest persisted photos from the database.
- *
- * `document_html` is a point-in-time snapshot signed by the tenant; we never
- * rewrite the stored snapshot. Instead the admin review page receives the
- * snapshot with the placeholder box replaced by a live photo grid, so viewing
- * and printing (window.print → "Save as PDF") always show the CURRENT photos.
+ * always reflects the latest persisted photos from the database, and manages
+ * trackable revisions when payment/prorata terms change on a signed statement.
  */
 class AgreementStatementService
 {
@@ -28,6 +27,183 @@ class AgreementStatementService
 
     /** Marker wrapping the Catatan line emitted by the template. */
     private const METERAN_NOTES_MARKER = 'data-meteran-notes="1"';
+
+    /** Marker wrapping the Prorata & Payment Terms summary block. */
+    private const PAYMENT_TERMS_MARKER = 'data-payment-terms-block="1"';
+
+    /**
+     * Build the HTML summary block for confirmed initial payment, prorata adjustment,
+     * and monthly due date (tanggal 1) to be displayed in the Surat Pernyataan.
+     */
+    public static function buildPaymentTermsBlockHtml(Tenancy $tenancy): string
+    {
+        if (! $tenancy->initial_paid_until && $tenancy->prorata_days === null) {
+            return '';
+        }
+
+        $rentFormatted = number_format((float) $tenancy->agreed_price, 0, ',', '.');
+        $moveIn = $tenancy->move_in_date ?: '-';
+        $paidUntil = $tenancy->initial_paid_until ?: '-';
+        $dueDay = $tenancy->due_day !== null ? (int) $tenancy->due_day : 1;
+        $dueDayText = $dueDay === 0 ? 'akhir bulan' : 'tanggal '.$dueDay.' setiap bulan';
+
+        $rows = [
+            '<li>Harga sewa bulanan: <strong>Rp '.$rentFormatted.' / bulan</strong></li>',
+            '<li>Tanggal masuk: <strong>'.e($moveIn).'</strong> · Periode pembayaran awal dibayar s/d: <strong>'.e($paidUntil).'</strong></li>',
+        ];
+
+        if ((int) $tenancy->prorata_days > 0 && (float) $tenancy->prorata_amount > 0) {
+            $prorataStart = e((string) $tenancy->prorata_start_date);
+            $prorataEnd = e((string) $tenancy->prorata_end_date);
+            $days = (int) $tenancy->prorata_days;
+            $dailyRate = number_format((float) $tenancy->prorata_daily_rate, 0, ',', '.');
+            $prorataTotal = number_format((float) $tenancy->prorata_amount, 0, ',', '.');
+
+            $rows[] = '<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>'.$prorataStart.' s/d '.$prorataEnd.'</strong> (<strong>'.$days.' hari</strong> × tarif harian <strong>Rp '.$dailyRate.'</strong>) = <strong>Rp '.$prorataTotal.'</strong></li>';
+        } else {
+            $rows[] = '<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>';
+        }
+
+        if ($tenancy->normal_period_start_date) {
+            $rows[] = '<li>Periode sewa bulanan normal dimulai: <strong>'.e((string) $tenancy->normal_period_start_date).'</strong></li>';
+        }
+
+        $rows[] = '<li>Tanggal jatuh tempo sewa bulanan: <strong>'.e($dueDayText).'</strong></li>';
+
+        return '<div data-payment-terms-block="1" style="border:1px solid #d4d4d0;background:#fafaf8;padding:8px 12px;margin:8px 0;font-size:12px;line-height:1.5;">'
+            .'<div style="font-weight:bold;margin-bottom:4px;">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo:</div>'
+            .'<ul style="padding-left:18px;margin:0;">'.implode('', $rows).'</ul>'
+            .'</div>';
+    }
+
+    /**
+     * Inject or update the payment terms block in a statement HTML string.
+     */
+    public static function injectOrUpdatePaymentTermsBlock(string $html, Tenancy $tenancy): string
+    {
+        if ($html === '') {
+            return $html;
+        }
+
+        $blockHtml = self::buildPaymentTermsBlockHtml($tenancy);
+
+        if (str_contains($html, self::PAYMENT_TERMS_MARKER)) {
+            $pos = strpos($html, '<div '.self::PAYMENT_TERMS_MARKER);
+            if ($pos !== false) {
+                $endPos = strpos($html, '</div></div>', $pos);
+                if ($endPos !== false) {
+                    return substr($html, 0, $pos).$blockHtml.substr($html, $endPos + strlen('</div></div>'));
+                }
+            }
+        }
+
+        if ($blockHtml === '') {
+            return $html;
+        }
+
+        // Insert right before "5. Keterlambatan Pembayaran" (Room) or "3. Kepatuhan Terhadap Pembayaran" (Kiosk)
+        foreach (['<p style="font-weight:bold;">5. Keterlambatan Pembayaran</p>', '<p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>'] as $anchor) {
+            $anchorPos = strpos($html, $anchor);
+            if ($anchorPos !== false) {
+                return substr($html, 0, $anchorPos).$blockHtml.substr($html, $anchorPos);
+            }
+        }
+
+        return $html.$blockHtml;
+    }
+
+    /**
+     * Snapshot payment terms of a tenancy for audit / revision tracking.
+     */
+    public static function snapshotTerms(Tenancy $tenancy): array
+    {
+        return [
+            'agreed_price' => (float) $tenancy->agreed_price,
+            'move_in_date' => $tenancy->move_in_date,
+            'due_day' => $tenancy->due_day,
+            'initial_paid_until' => $tenancy->initial_paid_until,
+            'initial_payment_status' => $tenancy->initial_payment_status,
+            'prorata_start_date' => $tenancy->prorata_start_date,
+            'prorata_end_date' => $tenancy->prorata_end_date,
+            'prorata_days' => $tenancy->prorata_days,
+            'prorata_basis_mode' => $tenancy->prorata_basis_mode,
+            'prorata_basis_days' => $tenancy->prorata_basis_days,
+            'prorata_daily_rate' => $tenancy->prorata_daily_rate !== null ? (float) $tenancy->prorata_daily_rate : null,
+            'prorata_amount' => $tenancy->prorata_amount !== null ? (float) $tenancy->prorata_amount : null,
+            'prorata_status' => $tenancy->prorata_status,
+            'normal_period_start_date' => $tenancy->normal_period_start_date,
+        ];
+    }
+
+    /**
+     * Record a trackable revision when payment terms change on an existing Agreement.
+     * If the agreement was already SIGNED, this preserves the previous document HTML
+     * and terms snapshot in `agreement_revisions`, increments `version`, and optionally
+     * resets status to `DRAFT` if re-signature is required (`$requireResign = true`).
+     */
+    public static function recordTermsRevisionIfNeeded(
+        Tenancy $tenancy,
+        array $previousTerms,
+        ?int $adminUserId = null,
+        ?string $reason = null,
+        bool $requireResign = false
+    ): ?AgreementRevision {
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        if (! $agreement) {
+            return null;
+        }
+
+        $newTerms = self::snapshotTerms($tenancy);
+        if ($previousTerms == $newTerms) {
+            return null;
+        }
+
+        $previousHtml = $agreement->document_html;
+        $updatedHtml = $previousHtml
+            ? self::injectOrUpdatePaymentTermsBlock($previousHtml, $tenancy)
+            : $previousHtml;
+
+        // If the agreement is still DRAFT, simply update its document_html in place
+        if ($agreement->status !== 'SIGNED') {
+            $agreement->update([
+                'document_html' => $updatedHtml,
+            ]);
+
+            return null;
+        }
+
+        $nextVersion = ((int) ($agreement->version ?: 1)) + 1;
+        $revisionReason = $reason ?: 'Pembaruan rincian pembayaran awal / penyesuaian jatuh tempo (prorata) oleh Admin.';
+
+        $revision = AgreementRevision::create([
+            'agreement_id' => $agreement->id,
+            'tenancy_id' => $tenancy->id,
+            'version' => $nextVersion,
+            'previous_document_html' => $previousHtml,
+            'new_document_html' => $updatedHtml,
+            'previous_terms_snapshot' => $previousTerms,
+            'new_terms_snapshot' => $newTerms,
+            'revision_reason' => $revisionReason,
+            'revised_by' => $adminUserId,
+        ]);
+
+        $updatePayload = [
+            'document_html' => $updatedHtml,
+            'version' => $nextVersion,
+            'revision_notes' => $revisionReason,
+            'revised_at' => now(),
+            'revised_by' => $adminUserId,
+        ];
+
+        if ($requireResign) {
+            $updatePayload['status'] = 'DRAFT';
+            $updatePayload['signed_at'] = null;
+        }
+
+        $agreement->update($updatePayload);
+
+        return $revision;
+    }
 
     /**
      * Surgically patch an existing Surat Pernyataan `document_html` snapshot's

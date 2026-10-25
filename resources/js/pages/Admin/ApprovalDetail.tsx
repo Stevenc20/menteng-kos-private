@@ -4,7 +4,7 @@ import { router, useForm } from '@inertiajs/react';
 import { AdminModal, AdminModalHeader, AdminModalContent, AdminModalFooter } from '@/components/admin/AdminModal';
 import { AdminButton } from '@/components/admin/AdminButton';
 import { Loader2 } from 'lucide-react';
-import { calcDueDay } from '@/services/statement';
+import { calcDueDay, calculateProrataClient, type ProrataInfo } from '@/services/statement';
 import { TenantDocumentation } from '@/components/admin/TenantDocumentation';
 
 interface ApprovalDetailProps {
@@ -12,6 +12,9 @@ interface ApprovalDetailProps {
     profile: any;
     agreement: any;
     signatures: any[];
+    revisions?: any[];
+    billings?: any[];
+    prorataPreview?: any;
     approvedBy: any;
     moveInDoc: any;
     moveOutDoc: any;
@@ -45,10 +48,43 @@ const formatRupiah = (val: string | number) => new Intl.NumberFormat('id-ID', { 
 
 const formatDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
-export default function ApprovalDetail({ tenancy, profile, agreement, signatures, approvedBy, moveInDoc, moveOutDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayNumber, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
+export default function ApprovalDetail({ tenancy, profile, agreement, signatures, revisions = [], billings = [], prorataPreview, approvedBy, moveInDoc, moveOutDoc, waterMeter, effectiveMoveInDate, moveInDateIsStale, dueDayNumber, dueDayLabel, nextDueDate }: ApprovalDetailProps) {
     const isPending = tenancy.status === 'PENDING_ADMIN_APPROVAL' && tenancy.approval_status !== 'REJECTED';
     const isRejected = tenancy.approval_status === 'REJECTED';
     const isApproved = tenancy.status === 'ACTIVE';
+
+    // Pengaturan Pembayaran Awal & Prorata Modal
+    const [prorataModal, setProrataModal] = useState(false);
+    const prorataForm = useForm({
+        move_in_date: effectiveMoveInDate || tenancy.move_in_date || '',
+        agreed_price: String(Number(tenancy.agreed_price) || 0),
+        due_day: String(dueDayNumber ?? 1),
+        initial_paid_until: tenancy.initial_paid_until ?? '',
+        initial_payment_status: (tenancy.initial_payment_status || 'UNPAID') as 'UNPAID' | 'PAID',
+        prorata_basis_mode: (tenancy.prorata_basis_mode || 'ACTUAL') as 'ACTUAL' | '30_DAYS',
+        prorata_end_date: tenancy.prorata_end_date ?? '',
+        prorata_status: (tenancy.prorata_status || 'PENDING_PAYMENT') as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID',
+        revision_reason: '',
+        require_resign: false,
+    });
+
+    const liveModalProrata: ProrataInfo | null = calculateProrataClient({
+        moveInDate: prorataForm.data.move_in_date,
+        monthlyRent: Number(prorataForm.data.agreed_price) || 0,
+        initialPaidUntil: prorataForm.data.initial_paid_until || null,
+        initialPaymentStatus: prorataForm.data.initial_payment_status,
+        basisMode: prorataForm.data.prorata_basis_mode,
+        prorataEndDate: prorataForm.data.prorata_end_date || null,
+        prorataStatus: prorataForm.data.prorata_status,
+    });
+
+    const submitProrataSettings = (e: React.FormEvent) => {
+        e.preventDefault();
+        prorataForm.put(`/admin/tenants/${tenancy.id}/details`, {
+            preserveScroll: true,
+            onSuccess: () => setProrataModal(false),
+        });
+    };
 
     // Approve Confirmation Modal
     const [confirmModal, setConfirmModal] = useState(false);
@@ -355,6 +391,108 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                     </div>
                 </Card>
 
+                {/* Pengaturan Pembayaran Awal & Penyesuaian Jatuh Tempo (Prorata) */}
+                <Card title="Pengaturan Pembayaran Awal & Penyesuaian Jatuh Tempo (Prorata)">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <p className="text-sm text-neutral-500">
+                            Penyesuaian periode awal agar jatuh tempo sewa bulanan seluruh tenant seragam pada <strong>tanggal 1 setiap bulan</strong>.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <AdminButton variant="secondary" onClick={() => router.get(`/admin/tenants/${tenancy.id}/onboarding`)}>
+                                Buka Wizard Onboarding / Surat
+                            </AdminButton>
+                            <AdminButton onClick={() => setProrataModal(true)}>
+                                Atur Pembayaran Awal &amp; Prorata
+                            </AdminButton>
+                        </div>
+                    </div>
+
+                    {!tenancy.initial_paid_until ? (
+                        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 mb-4">
+                            <strong>Perhatian:</strong> Periode pembayaran awal yang sudah dibayar belum dikonfirmasi. Sistem tidak akan menagihkan atau membuat tagihan prorata otomatis sampai Admin menetapkan tanggal akhir periode yang sudah dibayar.
+                        </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+                        <InfoRow label="Tanggal Masuk" value={formatDate(effectiveMoveInDate || tenancy.move_in_date)} />
+                        <InfoRow label="Tarif Sewa Bulanan" value={`${formatRupiah(tenancy.agreed_price)} / bulan`} />
+                        <InfoRow label="Periode Sudah Dibayar s/d" value={tenancy.initial_paid_until ? formatDate(tenancy.initial_paid_until) : 'Belum dikonfirmasi'} />
+                        <InfoRow
+                            label="Status Pembayaran Awal"
+                            value={
+                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    tenancy.initial_payment_status === 'PAID' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                    {tenancy.initial_payment_status === 'PAID' ? 'LUNAS (PAID)' : 'BELUM LUNAS (UNPAID)'}
+                                </span>
+                            }
+                        />
+                        <InfoRow
+                            label="Periode Penyesuaian (Prorata)"
+                            value={
+                                tenancy.prorata_start_date && tenancy.prorata_end_date
+                                    ? `${formatDate(tenancy.prorata_start_date)} s/d ${formatDate(tenancy.prorata_end_date)}`
+                                    : '-'
+                            }
+                        />
+                        <InfoRow
+                            label="Jumlah Hari Prorata"
+                            value={tenancy.prorata_days != null ? `${tenancy.prorata_days} hari (${tenancy.prorata_basis_mode === '30_DAYS' ? 'Basis 30 Hari' : `Basis Aktual ${tenancy.prorata_basis_days ?? ''} Hari`})` : '-'}
+                        />
+                        <InfoRow
+                            label="Tarif Harian yang Digunakan"
+                            value={tenancy.prorata_daily_rate != null ? `${formatRupiah(tenancy.prorata_daily_rate)} / hari` : '-'}
+                        />
+                        <InfoRow
+                            label="Total Biaya Penyesuaian (Prorata)"
+                            value={tenancy.prorata_amount != null ? <strong className="text-emerald-700">{formatRupiah(tenancy.prorata_amount)}</strong> : '-'}
+                        />
+                        <InfoRow
+                            label="Status Pembayaran Prorata"
+                            value={
+                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    tenancy.prorata_status === 'PAID'
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : tenancy.prorata_status === 'UNPAID'
+                                            ? 'bg-red-50 text-red-700'
+                                            : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                    {tenancy.prorata_status === 'PAID'
+                                        ? 'LUNAS (PAID)'
+                                        : tenancy.prorata_status === 'UNPAID'
+                                            ? 'BELUM LUNAS (UNPAID)'
+                                            : 'MENUNGGU PEMBAYARAN'}
+                                </span>
+                            }
+                        />
+                        <InfoRow
+                            label="Jatuh Tempo Normal Berikutnya"
+                            value={tenancy.normal_period_start_date ? `${formatDate(tenancy.normal_period_start_date)} (Tanggal 1 setiap bulan)` : (nextDueDate ? formatDate(nextDueDate) : 'Tanggal 1 setiap bulan')}
+                        />
+                    </div>
+
+                    {revisions?.length > 0 && (
+                        <div className="mt-6 pt-4 border-t border-neutral-200">
+                            <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">
+                                Riwayat Revisi Ketentuan Pembayaran &amp; Surat Pernyataan ({revisions.length})
+                            </p>
+                            <div className="space-y-2">
+                                {revisions.map((rev: any) => (
+                                    <div key={rev.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <span className="font-bold text-neutral-900">Versi #{rev.version_number}</span>
+                                            <span className="text-neutral-600 ml-2">{rev.reason || 'Pembaruan ketentuan sewa / prorata oleh Admin'}</span>
+                                        </div>
+                                        <span className="text-neutral-400">
+                                            {rev.created_by} • {formatDate(rev.created_at)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </Card>
+
                 {/* Data Penghuni */}
                 <Card title="Data Penghuni">
                     <div className="flex items-center justify-between mb-4">
@@ -596,6 +734,164 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                     <AdminModalFooter>
                         <AdminButton variant="secondary" onClick={() => setEditModal(false)} disabled={editForm.processing}>Batal</AdminButton>
                         <AdminButton type="submit" isLoading={editForm.processing}>Simpan Perubahan</AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
+
+            {/* Pengaturan Pembayaran Awal & Prorata Modal */}
+            <AdminModal isOpen={prorataModal} onClose={() => !prorataForm.processing && setProrataModal(false)} maxWidth="lg">
+                <form onSubmit={submitProrataSettings} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalHeader
+                        title="Atur Pembayaran Awal & Penyesuaian Jatuh Tempo (Prorata)"
+                        description="Sesuaikan periode pembayaran awal dan prorata agar jatuh tempo bulanan jatuh pada tanggal 1 setiap bulan."
+                        onClose={() => !prorataForm.processing && setProrataModal(false)}
+                    />
+                    <AdminModalContent>
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <label className="block text-sm font-medium">
+                                    Tanggal Masuk
+                                    <input
+                                        type="date"
+                                        value={prorataForm.data.move_in_date}
+                                        onChange={e => prorataForm.setData('move_in_date', e.target.value)}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                        required
+                                    />
+                                </label>
+                                <label className="block text-sm font-medium">
+                                    Tarif Sewa Bulanan (Rp)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={prorataForm.data.agreed_price}
+                                        onChange={e => prorataForm.setData('agreed_price', e.target.value)}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                        required
+                                    />
+                                </label>
+                                <label className="block text-sm font-medium">
+                                    Jatuh Tempo Bulanan (Tgl)
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="31"
+                                        value={prorataForm.data.due_day}
+                                        onChange={e => prorataForm.setData('due_day', e.target.value)}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label className="block text-sm font-medium">
+                                    Periode Sudah Dibayar s/d Tanggal
+                                    <input
+                                        type="date"
+                                        value={prorataForm.data.initial_paid_until}
+                                        onChange={e => prorataForm.setData('initial_paid_until', e.target.value)}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                    />
+                                    <span className="text-xs text-neutral-400 block mt-0.5">
+                                        Tanggal berakhirnya pembayaran awal tenant (contoh: 2026-11-24).
+                                    </span>
+                                </label>
+                                <label className="block text-sm font-medium">
+                                    Status Pembayaran Awal
+                                    <select
+                                        value={prorataForm.data.initial_payment_status}
+                                        onChange={e => prorataForm.setData('initial_payment_status', e.target.value as 'UNPAID' | 'PAID')}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                    >
+                                        <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                        <option value="PAID">Lunas (PAID)</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label className="block text-sm font-medium">
+                                    Dasar Perhitungan Hari Prorata
+                                    <select
+                                        value={prorataForm.data.prorata_basis_mode}
+                                        onChange={e => prorataForm.setData('prorata_basis_mode', e.target.value as 'ACTUAL' | '30_DAYS')}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                    >
+                                        <option value="ACTUAL">Hari Aktual Kalender Bulan Berjalan</option>
+                                        <option value="30_DAYS">Standar 30 Hari per Bulan</option>
+                                    </select>
+                                </label>
+                                <label className="block text-sm font-medium">
+                                    Status Pembayaran Prorata
+                                    <select
+                                        value={prorataForm.data.prorata_status}
+                                        onChange={e => prorataForm.setData('prorata_status', e.target.value as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID')}
+                                        className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                    >
+                                        <option value="PENDING_PAYMENT">Menunggu Pembayaran (PENDING_PAYMENT)</option>
+                                        <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                        <option value="PAID">Lunas (PAID)</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            {/* Ringkasan Perhitungan Prorata Transparan Sebelum Disimpan */}
+                            {!prorataForm.data.initial_paid_until ? (
+                                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                                    <strong>Perhatian:</strong> Periode pembayaran awal belum diisi. Sistem tidak akan menagihkan biaya prorata otomatis sebelum Anda mengonfirmasi tanggal akhir periode yang sudah dibayar.
+                                </div>
+                            ) : liveModalProrata && (
+                                <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-2 text-xs">
+                                    <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                                        <span className="font-bold text-neutral-900 uppercase tracking-wider">
+                                            Ringkasan Perhitungan Prorata (Preview Sebelum Disimpan)
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded bg-white border border-neutral-200 text-neutral-700 font-semibold">
+                                            {liveModalProrata.prorataDays ?? 0} Hari
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-neutral-600">
+                                        <div>Tanggal Mulai Prorata: <strong className="text-neutral-900">{formatDate(liveModalProrata.prorataStartDate)}</strong></div>
+                                        <div>Tanggal Akhir Prorata: <strong className="text-neutral-900">{formatDate(liveModalProrata.prorataEndDate)}</strong></div>
+                                        <div>Jumlah Hari Prorata: <strong className="text-neutral-900">{liveModalProrata.prorataDays ?? 0} hari</strong></div>
+                                        <div>Tarif Harian: <strong className="text-neutral-900">{formatRupiah(liveModalProrata.prorataDailyRate ?? 0)} / hari</strong></div>
+                                        <div>Total Biaya Prorata: <strong className="text-emerald-700 text-sm">{formatRupiah(liveModalProrata.prorataAmount ?? 0)}</strong></div>
+                                        <div>Jatuh Tempo Normal Berikutnya: <strong className="text-neutral-900">{formatDate(liveModalProrata.normalPeriodStartDate)} (Tgl 1)</strong></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {agreement?.status === 'SIGNED' && (
+                                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3">
+                                    <p className="text-xs text-amber-900 font-semibold">
+                                        Dokumen Surat Pernyataan sudah ditandatangani (SIGNED). Perubahan ketentuan pembayaran akan dicatat dalam Riwayat Revisi (Versi baru).
+                                    </p>
+                                    <label className="block text-xs font-medium text-neutral-800">
+                                        Catatan / Alasan Revisi
+                                        <input
+                                            type="text"
+                                            value={prorataForm.data.revision_reason}
+                                            onChange={e => prorataForm.setData('revision_reason', e.target.value)}
+                                            placeholder="Contoh: Penyesuaian periode prorata pembayaran awal s/d 1 Desember"
+                                            className="mt-1 w-full bg-white border border-neutral-300 rounded-lg p-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
+                                        />
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs font-medium text-neutral-800 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={prorataForm.data.require_resign}
+                                            onChange={e => prorataForm.setData('require_resign', e.target.checked)}
+                                            className="rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
+                                        />
+                                        Wajibkan tenant menandatangani ulang Surat Pernyataan versi revisi (ubah status ke DRAFT)
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton type="button" variant="secondary" onClick={() => setProrataModal(false)} disabled={prorataForm.processing}>Batal</AdminButton>
+                        <AdminButton type="submit" isLoading={prorataForm.processing}>Simpan Ketentuan Pembayaran</AdminButton>
                     </AdminModalFooter>
                 </form>
             </AdminModal>

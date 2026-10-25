@@ -1,8 +1,11 @@
 import TenantLayout from '@/layouts/TenantLayout';
+import { Link } from '@inertiajs/react';
 
 interface AgreementProps {
     tenancy: any;
+    profile?: any;
     agreement: any;
+    revisions?: any[];
     signatures: any[];
     moveInPhotoUrls: string[];
 }
@@ -12,8 +15,9 @@ const OCCUPANT_LABELS: Record<string, string> = {
     OCCUPANT_2: 'Penghuni 2',
 };
 
-export default function Agreement({ tenancy, agreement, signatures, moveInPhotoUrls }: AgreementProps) {
+export default function Agreement({ tenancy, agreement, revisions = [], signatures, moveInPhotoUrls }: AgreementProps) {
     const hasStatement = !!agreement?.document_html;
+    const isDraft = agreement?.status === 'DRAFT' && hasStatement;
 
     return (
         <TenantLayout title="Surat Pernyataan">
@@ -41,17 +45,49 @@ export default function Agreement({ tenancy, agreement, signatures, moveInPhotoU
                         <div className="bg-white rounded-2xl border border-neutral-200 p-5 shadow-sm">
                             <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
                                 <div>
-                                    <h2 className="font-bold text-neutral-900">Surat Pernyataan Digital</h2>
+                                    <h2 className="font-bold text-neutral-900">
+                                        Surat Pernyataan Digital
+                                        {agreement.version && agreement.version > 1 ? ` (Revisi v${agreement.version})` : ''}
+                                    </h2>
                                     <p className="text-xs text-neutral-500 mt-0.5">
                                         Status {agreement.status_label}
-                                        {agreement.signed_at ? ` · Ditandatangani ${agreement.signed_at.split(' ')[0]}` : ''}
+                                        {agreement.signed_at ? ` · Ditandatangani ${String(agreement.signed_at).split(' ')[0]}` : ''}
                                     </p>
                                 </div>
+                                {isDraft && (
+                                    <Link
+                                        href="/tenant/onboarding"
+                                        className="bg-neutral-900 text-white text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-neutral-800 transition-colors"
+                                    >
+                                        ✍️ Bubuhkan Paraf &amp; Tanda Tangan
+                                    </Link>
+                                )}
                             </div>
                             <div
                                 className="overflow-x-auto border border-neutral-200 rounded-xl bg-neutral-50 max-h-[70vh] overflow-y-auto"
                                 dangerouslySetInnerHTML={{ __html: agreement.document_html }}
                             />
+                        </div>
+                    )}
+
+                    {/* Revision History */}
+                    {revisions && revisions.length > 0 && (
+                        <div className="bg-white rounded-2xl border border-neutral-200 p-5 shadow-sm">
+                            <h2 className="font-bold text-neutral-900 mb-2">Riwayat Revisi Ketentuan Pembayaran</h2>
+                            <p className="text-xs text-neutral-500 mb-3">
+                                Setiap perubahan ketentuan pembayaran atau jatuh tempo setelah dokumen ditandatangani tercatat secara transparan.
+                            </p>
+                            <div className="space-y-2">
+                                {revisions.map((rev: any) => (
+                                    <div key={rev.id} className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs">
+                                        <div className="flex items-center justify-between font-semibold text-neutral-800">
+                                            <span>Versi Revisi v{rev.version}</span>
+                                            <span className="text-neutral-500">{rev.created_at ? String(rev.created_at).slice(0, 10) : '-'}</span>
+                                        </div>
+                                        <p className="text-neutral-600 mt-1">{rev.revision_reason}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 

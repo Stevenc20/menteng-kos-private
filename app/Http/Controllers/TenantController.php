@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agreement;
+use App\Models\AgreementRevision;
 use App\Models\AgreementSignature;
 use App\Models\Billing;
 use App\Models\RoomDocumentation;
 use App\Models\Tenancy;
+use App\Models\TenantProfile;
 use App\Models\WaterPeriod;
 use App\Services\AgreementStatementService;
 use App\Services\DueDateService;
@@ -83,6 +85,10 @@ class TenantController extends Controller
             ->reject(fn ($b) => $b->status === 'PAID')
             ->first();
 
+        $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        $hasAgreement = $agreement && (filled($agreement->document_html) || ! empty($agreement->uploaded_document_path));
+        $needsSignature = $agreement && $agreement->status === 'DRAFT' && filled($agreement->document_html);
+
         return Inertia::render('Tenant/Dashboard', [
             'tenancy' => $tenancy->load('property'),
             'statusLabel' => self::label($tenancy->status, self::TENANCY_STATUS_LABELS),
@@ -90,10 +96,8 @@ class TenantController extends Controller
             'nextDueDate' => $this->nextDueDate($tenancy),
             'nextBilling' => $nextBilling ? $this->billingPayload($nextBilling) : null,
             'waterRule' => $this->waterRulePayload($tenancy),
-            'hasAgreement' => Agreement::where('tenancy_id', $tenancy->id)->where(function ($q) {
-                $q->whereNotNull('document_html')->where('document_html', '!=', '')
-                    ->orWhereNotNull('uploaded_document_path');
-            })->exists(),
+            'hasAgreement' => (bool) $hasAgreement,
+            'needsSignature' => (bool) $needsSignature,
         ]);
     }
 
@@ -164,6 +168,7 @@ class TenantController extends Controller
         }
 
         $agreement = Agreement::where('tenancy_id', $tenancy->id)->first();
+        $profile = TenantProfile::where('user_id', $tenancy->user_id)->first();
         $moveInDoc = RoomDocumentation::with('media')
             ->where('tenancy_id', $tenancy->id)
             ->where('documentation_type', 'MOVE_IN')
@@ -176,20 +181,31 @@ class TenantController extends Controller
             );
         }
 
+        $revisions = $agreement
+            ? AgreementRevision::where('agreement_id', $agreement->id)->orderByDesc('version')->get()
+            : collect();
+
         return Inertia::render('Tenant/Agreement', [
             'tenancy' => $tenancy->load('property'),
+            'profile' => $profile,
             'agreement' => $agreement ? [
                 'id' => $agreement->id,
                 'status' => $agreement->status,
-                'status_label' => $agreement->status === 'SIGNED' ? 'Ditandatangani' : 'Draft',
-                'signed_at' => $agreement->signed_at,
+                'status_label' => $agreement->status === 'SIGNED' ? 'Ditandatangani' : 'Menunggu Paraf & Tanda Tangan',
+                'signed_at' => $agreement->signed_at?->toDateTimeString() ?? (string) $agreement->signed_at,
+                'version' => $agreement->version ?? 1,
+                'revision_notes' => $agreement->revision_notes,
+                'revised_at' => $agreement->revised_at?->toDateTimeString(),
                 'document_html' => $agreement->document_html,
+                'meteran_start' => $agreement->meteran_start,
+                'notes' => $agreement->notes,
                 'has_uploaded' => (bool) $agreement->uploaded_document_path,
                 'uploaded_type' => $agreement->uploaded_document_type,
                 'download_url' => $agreement->uploaded_document_path
                     ? route('tenant.agreement.download')
                     : null,
             ] : null,
+            'revisions' => $revisions,
             'signatures' => AgreementSignature::where('agreement_id', $agreement?->id)
                 ->orderBy('occupant_type')
                 ->get()
@@ -273,16 +289,26 @@ class TenantController extends Controller
     {
         $latestProof = $billing->paymentProofs()->latest('id')->first();
 
+        $periodLabel = $billing->period_type === 'PRORATA'
+            ? ($billing->description ?: 'Tagihan Prorata Penyesuaian Jatuh Tempo')
+            : $this->periodLabelFromDueDate($billing->due_date);
+
         return [
             'id' => $billing->id,
             'billing_type' => $billing->billing_type,
+            'period_type' => $billing->period_type ?? 'MONTHLY',
+            'period_start' => $billing->period_start,
+            'period_end' => $billing->period_end,
+            'days_count' => $billing->days_count,
+            'daily_rate' => $billing->daily_rate !== null ? (float) $billing->daily_rate : null,
+            'description' => $billing->description,
             'amount' => (float) $billing->amount,
             'excess_water_charge' => (float) $billing->excess_water_charge,
             'total' => round((float) $billing->amount + (float) $billing->excess_water_charge),
             'due_date' => $billing->due_date,
             'status' => $billing->status,
             'status_label' => self::label($billing->status, self::BILLING_STATUS_LABELS),
-            'period_label' => $this->periodLabelFromDueDate($billing->due_date),
+            'period_label' => $periodLabel,
             'is_payable' => in_array($billing->status, ['UPCOMING', 'REMINDER_SENT', 'PENDING_PAYMENT', 'OVERDUE', 'REJECTED'], true),
             'has_pending_proof' => $latestProof?->status === 'PENDING',
             'latest_proof_status' => $latestProof?->status,

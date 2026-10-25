@@ -3,12 +3,30 @@ import { Head, useForm, router } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatementDocument from '@/components/Tenant/StatementDocument';
 import KtpCaptureFlow from '@/components/KtpCaptureFlow';
-import { buildStatementHTML as buildStatementTemplateHTML, formatRupiah, indonesianToday, calcDueDay, calcReminderDay, type StatementParams } from '@/services/statement';
+import { buildStatementHTML as buildStatementTemplateHTML, formatRupiah, indonesianToday, calcDueDay, calcReminderDay, calculateProrataClient, type StatementParams, type ProrataInfo } from '@/services/statement';
 
 interface Tenancy {
     id: number;
     agreed_price: string;
     move_in_date: string;
+    due_day?: number | null;
+    initial_paid_until?: string | null;
+    initial_payment_status?: string | null;
+    prorata_start_date?: string | null;
+    prorata_end_date?: string | null;
+    prorata_days?: number | null;
+    prorata_basis_mode?: 'ACTUAL' | '30_DAYS' | null;
+    prorata_basis_days?: number | null;
+    prorata_daily_rate?: string | number | null;
+    prorata_amount?: string | number | null;
+    prorata_status?: string | null;
+    normal_period_start_date?: string | null;
+    facilities?: string[] | null;
+    usaha?: string | null;
+    denda_per_day?: string | number | null;
+    water_allowance?: number | null;
+    meteran_start?: string | null;
+    notes?: string | null;
     property: {
         name: string;
         type: string;
@@ -92,14 +110,13 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         const t = new Date();
         return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     };
-    // Tanggal masuk = hari ini saat onboarding. Jika admin sudah mengatur tanggal
-    // resmi di masa depan, ikuti itu; jika kosong/berada di masa lalu, pakai hari ini.
+    // Tanggal masuk = tanggal yang ditetapkan pada tenancy (atau hari ini jika kosong).
     const givenMoveIn = tenancy.move_in_date;
     const todayStr = todayISO();
-    const moveInDate = !givenMoveIn || givenMoveIn < todayStr ? todayStr : givenMoveIn;
-    const initDueDay = calcDueDay(moveInDate);
-    const initDenda = String(Math.round(Number(tenancy.agreed_price) / 30) || 0);
-    const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.property?.facilities?.[i] ?? '');
+    const moveInDate = givenMoveIn || todayStr;
+    const initDueDay = tenancy.due_day ? String(tenancy.due_day) : (adminTenancyId ? '1' : calcDueDay(moveInDate));
+    const initDenda = String(tenancy.denda_per_day ?? (Math.round(Number(tenancy.agreed_price) / 30) || 0));
+    const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.facilities?.[i] ?? tenancy.property?.facilities?.[i] ?? '');
     const sewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(tenancy.agreed_price) || 0);
 
     const [captureOccupant, setCaptureOccupant] = useState<1 | 2 | null>(null);
@@ -175,16 +192,23 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         ktp_2_photo_preview: (p.ktp_2_photo ? `${apiBase}/ktp/ktp_2` : null) as string | null,
         ktp_2_photo_path: p.ktp_2_photo ?? '',
 
-        // Field interaktif Surat Pernyataan
-        usaha: '',
-        meteran_air: '',
-        notes: '',
+        // Field interaktif Surat Pernyataan & Pengaturan Pembayaran / Prorata
+        agreed_price: String(Number(tenancy.agreed_price) || 0),
+        move_in_date: moveInDate,
+        initial_paid_until: tenancy.initial_paid_until ?? '',
+        initial_payment_status: (tenancy.initial_payment_status || 'UNPAID') as 'UNPAID' | 'PAID',
+        prorata_basis_mode: (tenancy.prorata_basis_mode || 'ACTUAL') as 'ACTUAL' | '30_DAYS',
+        prorata_end_date: tenancy.prorata_end_date ?? '',
+        prorata_status: (tenancy.prorata_status || 'PENDING_PAYMENT') as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID',
+        usaha: tenancy.usaha ?? '',
+        meteran_air: tenancy.meteran_start ?? '',
+        notes: tenancy.notes ?? '',
         due_date_day: initDueDay,
         denda_per_day: initDenda,
         facilities: initFacilities,
         is_daily_transit: false,
         transit_days: '7',
-        water_allowance: '5',
+        water_allowance: String(tenancy.water_allowance ?? '5'),
 
         // For Final Agreement
         document_html: '',
@@ -412,6 +436,20 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         });
     };
 
+    const liveProrataPreview: ProrataInfo | null = calculateProrataClient({
+        moveInDate: data.move_in_date || moveInDate,
+        monthlyRent: Number(data.agreed_price) || Number(tenancy.agreed_price) || 0,
+        initialPaidUntil: data.initial_paid_until || null,
+        initialPaymentStatus: data.initial_payment_status || 'UNPAID',
+        basisMode: data.prorata_basis_mode || 'ACTUAL',
+        prorataEndDate: data.prorata_end_date || null,
+        prorataStatus: data.prorata_status || 'PENDING_PAYMENT',
+    });
+
+    const activeSewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(
+        Number(data.agreed_price) || Number(tenancy.agreed_price) || 0
+    );
+
     const buildStatementHTML = (signatures?: StatementParams['signatures']) => {
         // Single source of truth: services/statement (KAMAR vs KIOS)
         const params: StatementParams = {
@@ -430,7 +468,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                 address: data.ktp_2_address,
                 nik: data.ktp_2_nik,
             },
-            sewaNumeral,
+            sewaNumeral: activeSewaNumeral,
             dueDay: data.due_date_day || initDueDay,
             reminderDay: calcReminderDay(data.due_date_day || initDueDay),
             dendaPerDay: data.denda_per_day || initDenda,
@@ -442,6 +480,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
             tanggal: indonesianToday(),
             signatures,
             kioskSeparateWater,
+            prorata: liveProrataPreview,
         };
         return buildStatementTemplateHTML(isKiosk, params);
     };
@@ -492,7 +531,8 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
 
         const payload = {
             ...data,
-            move_in_date: moveInDate,
+            move_in_date: data.move_in_date || moveInDate,
+            agreed_price: Number(data.agreed_price) || Number(tenancy.agreed_price) || 0,
             document_html: buildStatementHTML({ paraf1, paraf2, sig1, sig2 }),
             due_date_day: dueNum,
             denda_per_day: String(dendaNum),
@@ -505,6 +545,42 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         router.post(`${apiBase}/agreement`, payload, {
             onSuccess: () => {
                 // Onboarding selesai & data tersimpan permanen → draft tidak perlu lagi.
+                try {
+                    sessionStorage.removeItem(DRAFT_KEY);
+                } catch { /* abaikan */ }
+            },
+        });
+    };
+
+    const saveAdminPreparedStatement = () => {
+        if (!adminTenancyId) return;
+        if (!data.meteran_air.trim()) {
+            alert("Harap isi START METERAN (WAJIB DIISI) pada halaman pertama surat sebelum menyimpan.");
+            return;
+        }
+        const dueNum = Number(data.due_date_day);
+        const dendaNum = Number(data.denda_per_day);
+        if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 31) {
+            alert("Tanggal jatuh tempo pembayaran tidak valid (harus 1-31).");
+            return;
+        }
+        if (!Number.isFinite(dendaNum) || dendaNum <= 0) {
+            alert("Denda keterlambatan per hari tidak valid (harus angka lebih dari 0).");
+            return;
+        }
+
+        const payload = {
+            ...data,
+            save_only: true,
+            move_in_date: data.move_in_date || moveInDate,
+            agreed_price: Number(data.agreed_price) || Number(tenancy.agreed_price) || 0,
+            document_html: buildStatementHTML(),
+            due_date_day: dueNum,
+            denda_per_day: String(dendaNum),
+        };
+
+        router.post(`${apiBase}/agreement`, payload, {
+            onSuccess: () => {
                 try {
                     sessionStorage.removeItem(DRAFT_KEY);
                 } catch { /* abaikan */ }
@@ -719,15 +795,157 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                 </div>
                             )}
                             <div>
-                                <h3 className="font-bold text-neutral-900 border-b border-neutral-200 pb-2 mb-2">Informasi Unit</h3>
+                                <h3 className="font-bold text-neutral-900 border-b border-neutral-200 pb-2 mb-2">Informasi Unit &amp; Jadwal Sewa</h3>
                                 <div className="grid grid-cols-2 gap-2 text-neutral-600">
                                     <span>Unit:</span> <span className="font-medium text-neutral-900">{tenancy.property.name}</span>
                                     <span>Jenis:</span> <span className="font-medium text-neutral-900">{isKiosk ? 'Kios' : 'Kamar'}</span>
-                                    <span>Harga Sewa:</span> <span className="font-medium text-neutral-900">{formatRupiah(tenancy.agreed_price)} / bulan</span>
-                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(moveInDate)}</span>
+                                    <span>Harga Sewa:</span> <span className="font-medium text-neutral-900">{formatRupiah(Number(data.agreed_price) || tenancy.agreed_price)} / bulan</span>
+                                    <span>Tanggal Masuk:</span> <span className="font-medium text-neutral-900">{formatDisplayDate(data.move_in_date || moveInDate)}</span>
                                     <span>Jatuh Tempo:</span> <span className="font-medium text-neutral-900">tanggal {data.due_date_day || initDueDay} setiap bulan</span>
                                 </div>
                             </div>
+
+                            {/* Pengaturan Pembayaran Awal & Penyesuaian Jatuh Tempo (Prorata) — Admin */}
+                            {adminTenancyId && (
+                                <div className="mt-4 pt-4 border-t border-neutral-200 space-y-4">
+                                    <div>
+                                        <h3 className="font-bold text-neutral-900 text-sm">
+                                            Pengaturan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo (Prorata)
+                                        </h3>
+                                        <p className="text-xs text-neutral-500 mt-0.5">
+                                            Sesuaikan periode pembayaran awal agar jatuh tempo sewa bulanan seluruh tenant seragam pada <strong>tanggal 1 setiap bulan</strong>.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">Tanggal Masuk</label>
+                                            <input
+                                                type="date"
+                                                value={data.move_in_date}
+                                                onChange={(e) => setData('move_in_date', e.target.value)}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">Tarif Sewa Bulanan (Rp)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={data.agreed_price}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setData((prev) => ({
+                                                        ...prev,
+                                                        agreed_price: val,
+                                                        denda_per_day: String(Math.round((Number(val) || 0) / 30)),
+                                                    }));
+                                                }}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">Jatuh Tempo Bulanan (Tgl)</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="31"
+                                                value={data.due_date_day}
+                                                onChange={(e) => setData('due_date_day', e.target.value)}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:border-neutral-900"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                Periode yang Sudah Dibayar s/d Tanggal
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={data.initial_paid_until}
+                                                onChange={(e) => setData('initial_paid_until', e.target.value)}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            />
+                                            <span className="block text-[11px] text-neutral-500 mt-1">
+                                                Isi tanggal berakhirnya periode pembayaran awal yang sudah dibayar tenant (contoh: 2026-11-24).
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                Status Pembayaran Awal
+                                            </label>
+                                            <select
+                                                value={data.initial_payment_status}
+                                                onChange={(e) => setData('initial_payment_status', e.target.value as 'UNPAID' | 'PAID')}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            >
+                                                <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                                <option value="PAID">Lunas (PAID)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                Dasar Jumlah Hari Perhitungan Prorata
+                                            </label>
+                                            <select
+                                                value={data.prorata_basis_mode}
+                                                onChange={(e) => setData('prorata_basis_mode', e.target.value as 'ACTUAL' | '30_DAYS')}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            >
+                                                <option value="ACTUAL">Hari Aktual Kalender Bulan Berjalan</option>
+                                                <option value="30_DAYS">Standar 30 Hari per Bulan</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                Status Pembayaran Prorata
+                                            </label>
+                                            <select
+                                                value={data.prorata_status}
+                                                onChange={(e) => setData('prorata_status', e.target.value as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID')}
+                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                            >
+                                                <option value="PENDING_PAYMENT">Menunggu Pembayaran (PENDING_PAYMENT)</option>
+                                                <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                                <option value="PAID">Lunas (PAID)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Ringkasan Perhitungan Prorata Transparan */}
+                                    {!data.initial_paid_until ? (
+                                        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                                            <strong>Perhatian:</strong> Periode pembayaran awal yang sudah dibayar belum diisi. Sistem tidak akan membuat tagihan prorata otomatis sebelum Anda mengonfirmasi tanggal akhir periode yang sudah dibayar.
+                                        </div>
+                                    ) : liveProrataPreview && (
+                                        <div className="p-4 rounded-xl bg-white border border-neutral-300 space-y-2 text-xs">
+                                            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                                                <span className="font-bold text-neutral-900 uppercase tracking-wider">
+                                                    Ringkasan Perhitungan Prorata
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-700 font-semibold">
+                                                    {liveProrataPreview.prorataDays && liveProrataPreview.prorataDays > 0
+                                                        ? `${liveProrataPreview.prorataDays} Hari Penyesuaian`
+                                                        : 'Tanpa Prorata (0 Hari)'}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-neutral-600">
+                                                <div>Periode Sudah Dibayar s/d: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.initialPaidUntil || '')}</strong></div>
+                                                <div>Periode Prorata: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.prorataStartDate || '')} s/d {formatDisplayDate(liveProrataPreview.prorataEndDate || '')}</strong></div>
+                                                <div>Jumlah Hari Prorata: <strong className="text-neutral-900">{liveProrataPreview.prorataDays ?? 0} hari</strong></div>
+                                                <div>Tarif Harian: <strong className="text-neutral-900">{formatRupiah(liveProrataPreview.prorataDailyRate ?? 0)} / hari</strong> ({liveProrataPreview.prorataBasisDays} hari)</div>
+                                                <div>Total Biaya Prorata: <strong className="text-emerald-700 text-sm">{formatRupiah(liveProrataPreview.prorataAmount ?? 0)}</strong></div>
+                                                <div>Jatuh Tempo Normal Berikutnya: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.normalPeriodStartDate || '')} (Tgl 1)</strong></div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Opsi Sewa Transit Harian (Bisa diaktifkan/diedit bebas) */}
                             <div className="mt-4 pt-4 border-t border-neutral-200">
@@ -955,11 +1173,32 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                 return (
                     <div className="space-y-6 w-full min-w-0">
                         <div>
-                            <h2 className="text-2xl font-bold tracking-tight mb-2">Tanda Tangan Digital</h2>
+                            <h2 className="text-2xl font-bold tracking-tight mb-2">
+                                {adminTenancyId ? 'Siapkan Surat Pernyataan & Tanda Tangan' : 'Tanda Tangan Digital'}
+                            </h2>
                             <p className="text-sm text-neutral-500">
-                                Dokumen menggunakan template {isKiosk ? <strong className="text-neutral-900">KIOS</strong> : <strong className="text-neutral-900">KAMAR</strong>}. Baca surat sesuai halaman, isi kolom bergaris, lalu buat paraf pada setiap halaman dan tanda tangan pada akhir surat.
+                                Dokumen menggunakan template {isKiosk ? <strong className="text-neutral-900">KIOS</strong> : <strong className="text-neutral-900">KAMAR</strong>}.{' '}
+                                {adminTenancyId
+                                    ? 'Lengkapi kolom bergaris (Start Meteran, Fasilitas, Jatuh Tempo, Denda), lalu klik "Simpan (Siapkan Surat untuk Tenant)" agar tenant dapat membaca, memberi paraf, dan tanda tangan sendiri saat login.'
+                                    : 'Baca surat sesuai halaman, isi kolom bergaris, lalu buat paraf pada setiap halaman dan tanda tangan pada akhir surat.'}
                             </p>
                         </div>
+
+                        {adminTenancyId && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div>
+                                    <strong className="block text-sm mb-0.5">Alur Standar Admin → Tenant:</strong>
+                                    Pastikan <strong>START METERAN</strong> dan daftar <strong>Fasilitas</strong> di bawah sudah terisi, kemudian tekan tombol <strong>Simpan (Siapkan Surat untuk Tenant)</strong>.
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={saveAdminPreparedStatement}
+                                    className="shrink-0 px-5 py-2.5 rounded-xl font-bold bg-neutral-900 text-white hover:bg-neutral-800 shadow transition-colors"
+                                >
+                                    💾 Simpan (Siapkan Surat)
+                                </button>
+                            </div>
+                        )}
 
                         <div className="w-full min-w-0 overflow-x-hidden bg-neutral-200/70 border border-neutral-300 rounded-xl p-2 sm:p-4">
                             <StatementDocument
@@ -979,7 +1218,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                     address: data.ktp_2_address,
                                     nik: data.ktp_2_nik,
                                 }}
-                                sewaNumeral={sewaNumeral}
+                                sewaNumeral={activeSewaNumeral}
                                 dueDay={data.due_date_day}
                                 setDueDay={(v) => setData('due_date_day', v)}
                                 reminderDay={calcReminderDay(data.due_date_day || initDueDay)}
@@ -1014,6 +1253,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                 sigRef2={sigPad2}
                                 parafRef2={parafPad2}
                                 kioskSeparateWater={kioskSeparateWater}
+                                prorata={liveProrataPreview}
                             />
                         </div>
 
@@ -1024,8 +1264,17 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                             <button onClick={prevStep} className="w-full sm:w-auto px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 transition-colors">
                                 Kembali
                             </button>
+                            {adminTenancyId && (
+                                <button
+                                    type="button"
+                                    onClick={saveAdminPreparedStatement}
+                                    className="w-full sm:flex-1 px-6 py-3 rounded-lg font-bold bg-emerald-700 text-white hover:bg-emerald-800 shadow-lg transition-colors"
+                                >
+                                    Simpan (Siapkan Surat untuk Tenant)
+                                </button>
+                            )}
                             <button onClick={submitAgreement} className="w-full sm:flex-1 px-8 py-3 rounded-lg font-bold bg-neutral-900 text-white hover:bg-neutral-800 shadow-lg transition-colors">
-                                Submit & Selesai
+                                {adminTenancyId ? 'Tanda Tangan Langsung & Selesai' : 'Submit & Selesai'}
                             </button>
                         </div>
                     </div>

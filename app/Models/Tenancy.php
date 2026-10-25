@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Tenancy extends Model
 {
+    protected $casts = [
+        'facilities' => 'array',
+    ];
+
     /**
      * Get the user associated with the tenancy.
      */

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agreement;
+use App\Models\AgreementRevision;
 use App\Models\AgreementSignature;
+use App\Models\Billing;
 use App\Models\Property;
 use App\Models\PropertyMedia;
 use App\Models\RoomDocumentation;
@@ -15,6 +17,7 @@ use App\Models\WaterMeter;
 use App\Services\AgreementStatementService;
 use App\Services\DueDateService;
 use App\Services\ImageWatermarkService;
+use App\Services\ProrataBillingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -422,11 +425,28 @@ class AdminController extends Controller
             : ($tenancy->move_in_date ? (int) Carbon::parse($tenancy->move_in_date)->day : 1);
         $dueDayNumber = DueDateService::dueDay($moveInDay, $tenancy->due_day);
 
+        $revisions = $agreement
+            ? AgreementRevision::with('revisor')->where('agreement_id', $agreement->id)->orderByDesc('version')->get()
+            : collect();
+
+        $billings = Billing::where('tenancy_id', $tenancy->id)->orderBy('due_date', 'desc')->orderByDesc('id')->get();
+
+        $prorataPreview = ProrataBillingService::calculateProrata(
+            $tenancy->agreed_price,
+            $displayMoveIn,
+            $tenancy->initial_paid_until,
+            $tenancy->prorata_basis_mode ?? ProrataBillingService::BASIS_ACTUAL,
+            $tenancy->prorata_end_date
+        );
+
         return Inertia::render('Admin/ApprovalDetail', [
             'tenancy' => $tenancy,
             'profile' => $profile,
             'agreement' => $agreement,
             'signatures' => $signatures,
+            'revisions' => $revisions,
+            'billings' => $billings,
+            'prorataPreview' => $prorataPreview,
             'approvedBy' => $approvedBy,
             'moveInDoc' => $moveInDoc,
             'moveOutDoc' => $moveOutDoc,
@@ -435,7 +455,10 @@ class AdminController extends Controller
             'moveInDateIsStale' => $isStale,
             'dueDayNumber' => $dueDayNumber,
             'dueDayLabel' => $dueDayNumber === 0 ? 'akhir bulan' : (string) $dueDayNumber,
-            'nextDueDate' => DueDateService::nextDueDate($displayMoveIn, $moveInDay, $tenancy->due_day)->toDateString(),
+            'nextDueDate' => $tenancy->normal_period_start_date
+                && Carbon::parse($tenancy->normal_period_start_date)->gte(Carbon::today())
+                ? $tenancy->normal_period_start_date
+                : DueDateService::nextDueDate($displayMoveIn, $moveInDay, $tenancy->due_day)->toDateString(),
         ]);
     }
 
@@ -538,29 +561,71 @@ class AdminController extends Controller
     }
 
     /**
-     * Admin quick-edit tenancy details (price, move-in date, due day).
+     * Admin quick-edit tenancy details (price, move-in date, due day, prorata & initial payment).
      */
     public function updateTenancyDetails(Request $request, $id)
     {
         $tenancy = Tenancy::findOrFail($id);
+        $previousTerms = AgreementStatementService::snapshotTerms($tenancy);
 
         $validated = $request->validate([
             'agreed_price' => 'nullable|numeric|min:0',
             'move_in_date' => 'nullable|date',
             'due_day' => 'nullable|integer|min:0|max:31',
+            'initial_paid_until' => 'nullable|date',
+            'initial_payment_status' => 'nullable|string|in:UNPAID,PAID,PENDING_PAYMENT',
+            'prorata_basis_mode' => 'nullable|string|in:ACTUAL,30_DAYS',
+            'prorata_end_date' => 'nullable|date',
+            'prorata_status' => 'nullable|string|in:UNPAID,PENDING_PAYMENT,PAID,NOT_APPLICABLE',
+            'revision_reason' => 'nullable|string|max:500',
+            'require_resign' => 'nullable|boolean',
         ]);
 
-        $data = array_filter($validated, fn ($v) => $v !== null && $v !== '');
-
+        $data = [];
+        if (isset($validated['agreed_price']) && $validated['agreed_price'] !== '') {
+            $data['agreed_price'] = (float) $validated['agreed_price'];
+        }
+        if (! empty($validated['move_in_date'])) {
+            $data['move_in_date'] = $validated['move_in_date'];
+        }
         if (array_key_exists('due_day', $validated)) {
             $data['due_day'] = $validated['due_day'] !== null && $validated['due_day'] !== ''
                 ? (int) $validated['due_day']
                 : null;
         }
 
-        $tenancy->update($data);
+        if (! empty($data)) {
+            $tenancy->update($data);
+        }
 
-        return redirect()->back()->with('success', 'Data penyewaan berhasil diperbarui.');
+        // If prorata / initial payment fields are submitted, synchronize prorata calculation & billings
+        if (array_key_exists('initial_paid_until', $validated) || array_key_exists('prorata_status', $validated) || array_key_exists('prorata_basis_mode', $validated)) {
+            ProrataBillingService::syncTenancyProrata($tenancy, [
+                'agreed_price' => $tenancy->agreed_price,
+                'move_in_date' => $tenancy->move_in_date,
+                'due_day' => $tenancy->due_day ?? 1,
+                'initial_paid_until' => array_key_exists('initial_paid_until', $validated)
+                    ? $validated['initial_paid_until']
+                    : $tenancy->initial_paid_until,
+                'initial_payment_status' => $validated['initial_payment_status'] ?? $tenancy->initial_payment_status ?? 'UNPAID',
+                'prorata_basis_mode' => $validated['prorata_basis_mode'] ?? $tenancy->prorata_basis_mode ?? ProrataBillingService::BASIS_ACTUAL,
+                'prorata_end_date' => $validated['prorata_end_date'] ?? null,
+                'prorata_status' => $validated['prorata_status'] ?? $tenancy->prorata_status ?? 'PENDING_PAYMENT',
+            ]);
+        }
+
+        $tenancy->refresh();
+
+        // Trackable revision mechanism if the statement was already signed and payment terms changed
+        AgreementStatementService::recordTermsRevisionIfNeeded(
+            $tenancy,
+            $previousTerms,
+            \Illuminate\Support\Facades\Auth::id(),
+            $validated['revision_reason'] ?? null,
+            $request->boolean('require_resign')
+        );
+
+        return redirect()->back()->with('success', 'Data penyewaan dan ketentuan pembayaran berhasil diperbarui.');
     }
 
     /**

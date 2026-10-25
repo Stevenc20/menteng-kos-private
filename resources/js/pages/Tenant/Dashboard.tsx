@@ -10,6 +10,7 @@ interface DashboardProps {
     nextBilling: any;
     waterRule: any;
     hasAgreement: boolean;
+    needsSignature?: boolean;
 }
 
 export default function Dashboard({
@@ -20,6 +21,7 @@ export default function Dashboard({
     nextBilling,
     waterRule,
     hasAgreement,
+    needsSignature,
 }: DashboardProps) {
     const formatRupiah = (val: string | number) =>
         new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(val));
@@ -39,6 +41,26 @@ export default function Dashboard({
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome Home.</h1>
                 <p className="text-neutral-500 mt-1">Kelola kebutuhan kos Anda dalam satu tempat.</p>
             </div>
+
+            {needsSignature && (
+                <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+                    <div>
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 uppercase tracking-wider mb-1">
+                            Persyaratan Onboarding
+                        </span>
+                        <h3 className="font-bold text-neutral-900 text-base">Surat Pernyataan Anda Siap Ditandatangani</h3>
+                        <p className="text-sm text-neutral-600 mt-0.5">
+                            Admin telah melengkapi data Anda. Silakan baca Surat Pernyataan, bubuhkan paraf di setiap halaman, dan lakukan tanda tangan digital.
+                        </p>
+                    </div>
+                    <Link
+                        href="/tenant/onboarding"
+                        className="shrink-0 bg-neutral-900 text-white text-sm font-bold px-5 py-3 rounded-xl hover:bg-neutral-800 transition-colors text-center"
+                    >
+                        ✍️ Baca &amp; Tanda Tangani Sekarang
+                    </Link>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
