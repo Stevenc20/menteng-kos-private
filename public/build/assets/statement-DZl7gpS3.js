@@ -1,4 +1,4 @@
-var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumFractionDigits:0}).format(Number(e)||0),t=e=>(e||``).replace(/[&<>"']/g,e=>({"&":`&amp;`,"<":`&lt;`,">":`&gt;`,'"':`&quot;`,"'":`&#39;`})[e]),n=[`Januari`,`Februari`,`Maret`,`April`,`Mei`,`Juni`,`Juli`,`Agustus`,`September`,`Oktober`,`November`,`Desember`],r=()=>{let e=new Date;return`${String(e.getDate()).padStart(2,`0`)} ${n[e.getMonth()]} ${e.getFullYear()}`},i=e=>{if(!e)return``;let[t,n,r]=e.split(`-`).map(Number);return!t||!n||!r?``:String(r>1?r-1:new Date(t,n-1,0).getDate())},a=e=>{let t=parseInt(e,10);if(!isFinite(t))return``;let n=t-4;return String(n>=1?n:1)},o=(e,t,n,r=`ACTUAL`,i)=>{let a=Number(e)||0;if(a<=0||!t||!n)return{ready:!1,reason:n?`Data tanggal masuk atau tarif sewa belum lengkap.`:`Tanggal akhir periode pembayaran awal belum dikonfirmasi admin.`,moveInDate:t||``,monthlyRent:a,initialPaidUntil:n||``,prorataStartDate:``,prorataEndDate:``,prorataDays:0,basisMode:r,basisDays:30,dailyRate:0,prorataAmount:0,normalPeriodStartDate:``,segments:[]};let o=e=>{let[t,n,r]=e.split(`-`).map(Number);return new Date(Date.UTC(t,n-1,r))},s=e=>e.toISOString().slice(0,10),c=(e,t)=>new Date(Date.UTC(e,t+1,0)).getUTCDate(),l=o(t),u=o(n),d=u.getTime()>l.getTime()?new Date(u.getTime()):new Date(l.getTime()),f;if(f=i?o(i):d.getUTCDate()===1?new Date(d.getTime()):new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)),f.getTime()<=d.getTime()){let e=r===`30_DAYS`?30:c(d.getUTCFullYear(),d.getUTCMonth()),i=d.getUTCDate()===1?s(d):s(new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)));return{ready:!0,reason:null,moveInDate:t,monthlyRent:a,initialPaidUntil:n,prorataStartDate:s(d),prorataEndDate:s(d),prorataDays:0,basisMode:r,basisDays:e,dailyRate:Math.round(a/e*100)/100,prorataAmount:0,normalPeriodStartDate:i,segments:[]}}let p=[],m=new Date(d.getTime()),h=0,g=0;for(;m.getTime()<f.getTime();){let e=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+1,1)),t=e.getTime()<f.getTime()?e:new Date(f.getTime()),n=Math.round((t.getTime()-m.getTime())/864e5),i=r===`30_DAYS`?30:c(m.getUTCFullYear(),m.getUTCMonth()),o=a/i,l=o*n;p.push({month:s(m).slice(0,7),startDate:s(m),endDate:s(t),days:n,basisDays:i,dailyRate:Math.round(o*100)/100,subtotal:Math.round(l)}),h+=n,g+=l,m=t}let _=p.length===1?p[0].basisDays:r===`30_DAYS`?30:c(d.getUTCFullYear(),d.getUTCMonth()),v=p.length===1?Math.round(a/_*100)/100:h>0?Math.round(g/h*100)/100:0;return{ready:!0,reason:null,moveInDate:t,monthlyRent:a,initialPaidUntil:n,prorataStartDate:s(d),prorataEndDate:s(f),prorataDays:h,basisMode:r,basisDays:_,dailyRate:v,prorataAmount:Math.round(g),normalPeriodStartDate:s(f),segments:p}},s=e=>{let n=e.prorataInfo;if(!n||!n.initialPaidUntil&&(n.prorataDays===void 0||n.prorataDays===null))return``;let r=e.dueDay===`0`?`akhir bulan`:`tanggal ${t(e.dueDay||`1`)} setiap bulan`,i=[`<li>Harga sewa bulanan: <strong>Rp ${t(e.sewaNumeral)} / bulan</strong></li>`,`<li>Tanggal masuk: <strong>${t(n.moveInDate||`-`)}</strong> · Periode pembayaran awal dibayar s/d: <strong>${t(n.initialPaidUntil||`-`)}</strong></li>`];if((n.prorataDays||0)>0&&(n.prorataAmount||0)>0){let e=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dailyRate)||0),r=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.prorataAmount)||0);i.push(`<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>${t(n.prorataStartDate)} s/d ${t(n.prorataEndDate)}</strong> (<strong>${n.prorataDays} hari</strong> × tarif harian <strong>Rp ${e}</strong>) = <strong>Rp ${r}</strong></li>`)}else i.push(`<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>`);return n.normalPeriodStartDate&&i.push(`<li>Periode sewa bulanan normal dimulai: <strong>${t(n.normalPeriodStartDate)}</strong></li>`),i.push(`<li>Tanggal jatuh tempo sewa bulanan: <strong>${r}</strong></li>`),`<div data-payment-terms-block="1" style="border:1px solid #d4d4d0;background:#fafaf8;padding:8px 12px;margin:8px 0;font-size:12px;line-height:1.5;"><div style="font-weight:bold;margin-bottom:4px;">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo:</div><ul style="padding-left:18px;margin:0;">${i.join(``)}</ul></div>`},c=`
+var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumFractionDigits:0}).format(Number(e)||0),t=e=>(e||``).replace(/[&<>"']/g,e=>({"&":`&amp;`,"<":`&lt;`,">":`&gt;`,'"':`&quot;`,"'":`&#39;`})[e]),n=[`Januari`,`Februari`,`Maret`,`April`,`Mei`,`Juni`,`Juli`,`Agustus`,`September`,`Oktober`,`November`,`Desember`],r=()=>{let e=new Date;return`${String(e.getDate()).padStart(2,`0`)} ${n[e.getMonth()]} ${e.getFullYear()}`},i=e=>{if(!e)return``;let[t,n,r]=e.split(`-`).map(Number);return!t||!n||!r?``:String(r>1?r-1:new Date(t,n-1,0).getDate())},a=e=>{let t=parseInt(e,10);if(!isFinite(t))return``;let n=t-4;return String(n>=1?n:1)},o=(e,t=30)=>{if(!e)return``;let[n,r,i]=e.split(`-`).map(Number);if(!n||!r||!i)return``;let a=new Date(Date.UTC(n,r-1,i));return a.setUTCDate(a.getUTCDate()+t),a.toISOString().slice(0,10)},s=(e,t,n,r=`ACTUAL`,i)=>{let a=typeof e==`object`&&!!e,o=a?Number(e.monthlyRent)||0:Number(e)||0,s=a?e.moveInDate||null:t,c=a?e.initialPaidUntil||null:n,l=a?e.basisMode||`ACTUAL`:r,u=a?e.prorataEndDate||null:i;if(o<=0||!s||!c)return{ready:!1,reason:c?`Data tanggal masuk atau tarif sewa belum lengkap.`:`Tanggal akhir periode pembayaran awal belum dikonfirmasi admin.`,moveInDate:s||``,monthlyRent:o,initialPaidUntil:c||``,prorataStartDate:``,prorataEndDate:``,prorataDays:0,basisMode:l,prorataBasisMode:l,basisDays:30,prorataBasisDays:30,dailyRate:0,prorataDailyRate:0,prorataAmount:0,normalPeriodStartDate:``,segments:[]};let d=e=>{let[t,n,r]=e.split(`-`).map(Number);return new Date(Date.UTC(t,n-1,r))},f=e=>e.toISOString().slice(0,10),p=(e,t)=>new Date(Date.UTC(e,t+1,0)).getUTCDate(),m=d(s),h=d(c),g=h.getTime()>m.getTime()?new Date(h.getTime()):new Date(m.getTime()),_;if(_=u?d(u):g.getUTCDate()===1?new Date(g.getTime()):new Date(Date.UTC(g.getUTCFullYear(),g.getUTCMonth()+1,1)),_.getTime()<=g.getTime()){let e=l===`30_DAYS`?30:p(g.getUTCFullYear(),g.getUTCMonth()),t=Math.round(o/e*100)/100,n=g.getUTCDate()===1?f(g):f(new Date(Date.UTC(g.getUTCFullYear(),g.getUTCMonth()+1,1)));return{ready:!0,reason:null,moveInDate:s,monthlyRent:o,initialPaidUntil:c,prorataStartDate:f(g),prorataEndDate:f(g),prorataDays:0,basisMode:l,prorataBasisMode:l,basisDays:e,prorataBasisDays:e,dailyRate:t,prorataDailyRate:t,prorataAmount:0,normalPeriodStartDate:n,segments:[]}}let v=[],y=new Date(g.getTime()),b=0,x=0;for(;y.getTime()<_.getTime();){let e=new Date(Date.UTC(y.getUTCFullYear(),y.getUTCMonth()+1,1)),t=e.getTime()<_.getTime()?e:new Date(_.getTime()),n=Math.round((t.getTime()-y.getTime())/864e5),r=l===`30_DAYS`?30:p(y.getUTCFullYear(),y.getUTCMonth()),i=o/r,a=i*n;v.push({month:f(y).slice(0,7),startDate:f(y),endDate:f(t),days:n,basisDays:r,dailyRate:Math.round(i*100)/100,subtotal:Math.round(a)}),b+=n,x+=a,y=t}let S=v.length===1?v[0].basisDays:l===`30_DAYS`?30:p(g.getUTCFullYear(),g.getUTCMonth()),C=v.length===1?Math.round(o/S*100)/100:b>0?Math.round(x/b*100)/100:0;return{ready:!0,reason:null,moveInDate:s,monthlyRent:o,initialPaidUntil:c,prorataStartDate:f(g),prorataEndDate:f(_),prorataDays:b,basisMode:l,prorataBasisMode:l,basisDays:S,prorataBasisDays:S,dailyRate:C,prorataDailyRate:C,prorataAmount:Math.round(x),normalPeriodStartDate:f(_),segments:v}},c=e=>{let n=e.prorataInfo||e.prorata;if(!n||!n.initialPaidUntil&&(n.prorataDays===void 0||n.prorataDays===null))return``;let r=e.dueDay===`0`?`akhir bulan`:`tanggal ${t(e.dueDay||`1`)} setiap bulan`,i=[`<li>Harga sewa bulanan: <strong>Rp ${t(e.sewaNumeral)} / bulan</strong></li>`,`<li>Tanggal masuk: <strong>${t(n.moveInDate||`-`)}</strong> · Periode sewa bulan pertama (30 hari) s/d: <strong>${t(n.initialPaidUntil||`-`)}</strong></li>`];if((n.prorataDays||0)>0&&(n.prorataAmount||0)>0){let e=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dailyRate??n.prorataDailyRate)||0),r=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.prorataAmount)||0);i.push(`<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode harian <strong>${t(n.prorataStartDate)} s/d ${t(n.prorataEndDate)}</strong> (<strong>${n.prorataDays} hari</strong> × tarif harian <strong>Rp ${e}</strong>) = <strong>Rp ${r}</strong></li>`)}else i.push(`<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>`);return n.normalPeriodStartDate&&i.push(`<li>Periode sewa bulanan normal dimulai: <strong>${t(n.normalPeriodStartDate)}</strong> (bayar bulanan kembali setiap tanggal 1)</li>`),i.push(`<li>Tanggal jatuh tempo sewa bulanan: <strong>${r}</strong></li>`),`<div data-payment-terms-block="1" style="border:1px solid #d4d4d0;background:#fafaf8;padding:8px 12px;margin:8px 0;font-size:12px;line-height:1.5;"><div style="font-weight:bold;margin-bottom:4px;">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo:</div><ul style="padding-left:18px;margin:0;">${i.join(``)}</ul></div>`},l=`
 <style>
     .stmt { overflow-wrap: anywhere; }
     @media (max-width: 640px) {
@@ -7,7 +7,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         .stmt td { padding: 1px 0 !important; }
         .stmt ol, .stmt ul { padding-left: 16px !important; }
     }
-</style>`,l=e=>`
+</style>`,u=e=>`
     <table style="width:100%;border-collapse:collapse;">
         <tbody>
             ${e.map(([e,n])=>`
@@ -16,7 +16,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
                     <td style="padding:2px 0;">: ${t(n)}</td>
                 </tr>`).join(``)}
         </tbody>
-    </table>`,u=(e,t,n,r,i,a)=>`
+    </table>`,d=(e,t,n,r,i,a)=>`
     <div style="position:relative;width:100%;max-width:794px;margin:0 auto 22px;min-height:1122px;padding:22px 9% 56px;box-sizing:border-box;border:1px solid #ddd;background:#fff;font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <span style="font-style:italic;">Menteng Kost</span>
@@ -32,7 +32,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
                 ${a?`<img src="${a}" alt="Paraf (2)" style="max-height:64px;max-width:120px;border:1px solid #ccc;background:#fff;display:block;" />`:`<div style="font-size:11px;">Paraf (2)</div>`}
             </div>
         `:``}
-    </div>`,d=e=>`
+    </div>`,f=e=>`
     <div style="display:flex;gap:50px;margin-top:26px;">
         <div style="flex:1;max-width:300px;">
             <p>Tanda Tangan (1),</p>
@@ -48,7 +48,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
                 <p>No. KTP: <strong>${t(e.occ2.nik)}</strong>.</p>
             </div>
         `:``}
-    </div>`,f=e=>{let n=Number(e.waterAllowance??5)||5;return`
+    </div>`,p=e=>{let n=Number(e.waterAllowance??5)||5;return`
     <div style="border:1.5px solid #666;padding:5px 12px;text-align:center;font-size:11px;">
         <div style="font-weight:bold;white-space:nowrap;">START METERAN:</div>
         <div style="font-style:italic;font-size:9px;color:#666;white-space:nowrap;">WAJIB DIISI</div>
@@ -56,13 +56,13 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             ${e.kioskSeparateWater?`${e.meteran?`${t(e.meteran)}m³`:`..................`}<br style="letter-spacing:0;font-weight:normal;" /><span style="letter-spacing:0;font-weight:normal;">Pemakaian diakumulasi s/d tiap tanggal jatuh tempo</span>`:`${e.meteran?`${t(e.meteran)}m³ - ${Number(e.meteran)+n}m³`:`..................`}`}
         </div>
         ${e.notes?`<div data-meteran-notes="1" style="margin-top:3px;font-style:italic;font-size:9px;color:#555;text-align:left;white-space:normal;">${t(e.notes)}</div>`:``}
-    </div>`},p=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
+    </div>`},m=n=>{let r=Math.max(6,n.facilities.length),i=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return r===5&&!i?`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span> <em style="font-size:11px;color:#555;">!note: jika ada ac wajib mencuci ac 2 bulan sekali.</em></li>`:i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),a=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 18px;font-size:17px;">SURAT PERNYATAAN</h2>
         <p>Yang bertanda tangan di bawah ini:</p>
-        ${l([[`Nama (1)`,n.occ1.name],[`Tempat, Tgl Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
+        ${u([[`Nama (1)`,n.occ1.name],[`Tempat, Tgl Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
         ${n.hasSecond?`
             <p style="margin:10px 0 2px;">Dan pasangan saya,</p>
-            ${l([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}
+            ${u([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}
         `:``}
         <p style="margin-top:18px;">Dengan ini kami menyatakan dengan sebenar-benarnya bahwa:</p>
         <p style="font-weight:bold;">1. Menempati Kosan</p>
@@ -78,7 +78,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             <li style="margin:6px 0;text-align:justify;">Mematuhi peraturan <strong>HUKUM</strong> yang berlaku di <strong>Indonesia</strong> dan <strong>Menjaga norma kesopanan</strong> serta <strong>kesusilaan (TIDAK BOLEH OPEN BO)</strong>. Dan <strong>tidak menimbulkan kegaduhan bagi penghuni lain</strong>.</li>
             <li style="margin:6px 0;text-align:justify;">Keluar masuk <strong>gerbang utama wajib menutup dan mengunci Kembali</strong>, dan bila diatas <strong>pukul 22.00 WIB</strong>, <strong>wajib mengembok gerbang utama!</strong>.</li>
         </ul>
-        <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`,o=Number(n.waterAllowance??5)||5,p=`
+        <p style="text-align:justify;">Menjaga keamanan dan kenyaman Bersama, seperti:</p>`,o=Number(n.waterAllowance??5)||5,s=`
         <ul style="padding-left:24px;margin:0;">
             <li style="margin:8px 0;text-align:justify;">Selain penghuni kos-an dilarang membawa <strong>tamu</strong> kedalam <strong>kamar</strong> termasuk <strong>kurir</strong> dan <strong>tamu</strong> &ldquo;tidak dikenal&rdquo; hanya boleh diterima diluar kamar, kecuali ada <strong>izin</strong> dari <strong>PENGELOLA KOS</strong>.</li>
             <li style="margin:8px 0;text-align:justify;"><strong>Dilarang</strong> menyewakan kamar kepada orang lain selain nama yang sudah tertera dalam <strong>SURAT PERNYATAAN</strong>, jika melanggar maka <strong>pengelola kos BERHAK memutus SEWA/KONTRAK</strong> dan penghuni wajib mengosongkan kamar serta membersihkan kamar seperti semula dan tidak menerima <strong>KOMPENSASI</strong>.</li>
@@ -93,7 +93,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             <li style="margin:6px 0;text-align:justify;">Biaya tambahan air <strong>PDAM</strong> sebesar <strong>Rp14.000/m³</strong> untuk pemakaian lebih dari <strong>${o}m³</strong>, dihitung sesuai angka meteran permasing-masing kamar bersamaan tanggal pembayaran kos.</li>
             <li style="margin:6px 0;text-align:justify;"><strong>Pembacaan meteran air</strong> akan dilakukan <strong>setiap tanggal</strong> pembayaran kos untuk masing-masing kamar.</li>
         </ol>
-        ${s(n)}
+        ${c(n)}
         <p style="font-weight:bold;">5. Keterlambatan Pembayaran</p>
         <p style="text-align:justify;">
             saya menyatakan bahwa membayar biaya sewa kos sebesar <strong>Rp ${t(n.sewaNumeral)}</strong> per bulan.
@@ -116,17 +116,17 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         <p style="margin-top:14px;"><strong>Dibuat di:</strong> Jakarta</p>
         <p><strong>Pada tanggal:</strong> ${t(n.tanggal)}</p>
         <p style="margin-top:22px;"><strong>Yang Membuat Pernyataan,</strong></p>
-        ${d(n)}`;return`${c}
+        ${f(n)}`;return`${l}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
-        ${u(1,a,f(n),`63%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-        ${u(2,p,void 0,`35%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-        ${u(3,m)}
-    </div>`},m=n=>{let r=Math.max(8,n.facilities.length),i=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dendaPerDay)||0),a=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),o=n.hasSecond?`<p style="margin:10px 0 2px;">Dan pasangan saya,</p>
-           ${l([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}`:``,p=`
+        ${d(1,a,p(n),`63%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+        ${d(2,s,void 0,`35%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+        ${d(3,m)}
+    </div>`},h=n=>{let r=Math.max(8,n.facilities.length),i=new Intl.NumberFormat(`id-ID`,{maximumFractionDigits:0}).format(Number(n.dendaPerDay)||0),a=Array.from({length:r},(e,r)=>{let i=n.facilities[r]?.trim();return i?`<li style="margin:3px 0;">${t(i)}</li>`:`<li style="margin:3px 0;"><span style="text-decoration:underline;display:inline-block;min-width:55%;">____________</span></li>`}).join(``),o=n.hasSecond?`<p style="margin:10px 0 2px;">Dan pasangan saya,</p>
+           ${u([[`Nama (2)`,n.occ2.name],[`Tempat, Tgl Lahir`,n.occ2.birth],[`Pekerjaan`,n.occ2.job],[`Alamat`,n.occ2.address],[`Nomor KTP`,n.occ2.nik]])}`:``,s=`
         <h2 style="text-align:center;letter-spacing:1px;margin:14px 0 6px;font-size:17px;">SURAT PERNYATAAN</h2>
         <h2 style="text-align:center;margin:0 0 18px;font-size:15px;">KIOS</h2>
         <p>Yang bertanda tangan dibawah ini,</p>
-        ${l([[`Nama`,n.occ1.name],[`Tempat, Tanggal Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
+        ${u([[`Nama`,n.occ1.name],[`Tempat, Tanggal Lahir`,n.occ1.birth],[`Pekerjaan`,n.occ1.job],[`Alamat`,n.occ1.address],[`Nomor KTP`,n.occ1.nik]])}
         ${o}
         <p style="margin-top:18px;">Dengan ini saya menyatakan dengan sebenar-benarnya bahwa:</p>
 
@@ -140,7 +140,7 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
             <li style="margin:4px 0;">Biaya pemakaian air <strong>PAM</strong> dibayar <strong>terpisah</strong>, dihitung berdasarkan <strong>akumulasi pemakaian aktual</strong> dari <strong>start meteran</strong> sampai pembacaan pada <strong>setiap tanggal jatuh tempo</strong> sesuai <strong>meter air</strong> dengan tarif <strong>Rp ${e(14e3)}/m³</strong>. Biaya pemakaian air PAM akan <strong>ditambahkan pada tagihan pembayaran bulanan</strong>. Rumus: <em>pemakaian air (m³) × Rp ${e(14e3)}</em>.</li>`:`.</li>
             <li style="margin:4px 0;">Uang air sebanyak <strong>5m³</strong> dengan meteran dari <strong>${n.meteran?`${t(n.meteran)}m³ - ${Number(n.meteran)+5}m³`:`_______________`}</strong>, lewat dari itu saya akan membayar air per 1m³ kena <strong>Rp 14.000</strong>, sesuai pemakaiaan.</li>`}
         </ul>
-        ${s(n)}
+        ${c(n)}
 
         <p style="font-weight:bold;">3. Kepatuhan Terhadap Pembayaran</p>
         <p style="text-align:justify;">Saya menyadari apabila saya terlambat melakukan pembayaran setelah tanggal jatuh tempo, saya akan dikenakan denda sebesar <strong>Rp ${t(i)}</strong> per hari keterlambatan sesuai dengan ketentuan yang berlaku. Maksimal denda keterlambatan <strong>2 hari, diatas 2 hari wajib mengosongkan kios</strong>.</p>
@@ -174,8 +174,8 @@ var e=e=>new Intl.NumberFormat(`id-ID`,{style:`currency`,currency:`IDR`,maximumF
         <p style="margin-top:10px;"><strong>Dibuat di:</strong> Jakarta</p>
         <p><strong>Pada tanggal:</strong> ${t(n.tanggal)}</p>
         <p style="margin-top:20px;"><strong>Yang Membuat Pernyataan,</strong></p>
-        ${d(n)}`;return`${c}
+        ${f(n)}`;return`${l}
     <div class="stmt" style="font-family:Georgia,'Times New Roman',serif;color:#333;line-height:1.6;font-size:14px;">
-        ${u(1,p,f(n),`78%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-        ${u(2,m,void 0,`52%`,n.signatures?.paraf1,n.signatures?.paraf2)}
-    </div>`},h=(e,t)=>e?m(t):p(t);export{e as a,o as i,i as n,r as o,a as r,h as t};
+        ${d(1,s,p(n),`78%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+        ${d(2,m,void 0,`52%`,n.signatures?.paraf1,n.signatures?.paraf2)}
+    </div>`},g=(e,t)=>e?h(t):m(t);export{s as a,a as i,g as n,e as o,i as r,r as s,o as t};

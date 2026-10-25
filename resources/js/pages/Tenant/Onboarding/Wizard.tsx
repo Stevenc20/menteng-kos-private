@@ -3,7 +3,7 @@ import { Head, useForm, router } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatementDocument from '@/components/Tenant/StatementDocument';
 import KtpCaptureFlow from '@/components/KtpCaptureFlow';
-import { buildStatementHTML as buildStatementTemplateHTML, formatRupiah, indonesianToday, calcDueDay, calcReminderDay, calculateProrataClient, type StatementParams, type ProrataInfo } from '@/services/statement';
+import { buildStatementHTML as buildStatementTemplateHTML, formatRupiah, indonesianToday, calcDueDay, calcReminderDay, calculateProrataClient, addDaysISO, type StatementParams, type ProrataInfo } from '@/services/statement';
 
 interface Tenancy {
     id: number;
@@ -195,7 +195,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         // Field interaktif Surat Pernyataan & Pengaturan Pembayaran / Prorata
         agreed_price: String(Number(tenancy.agreed_price) || 0),
         move_in_date: moveInDate,
-        initial_paid_until: tenancy.initial_paid_until ?? '',
+        initial_paid_until: tenancy.initial_paid_until ?? (adminTenancyId ? addDaysISO(moveInDate, 30) : ''),
         initial_payment_status: (tenancy.initial_payment_status || 'UNPAID') as 'UNPAID' | 'PAID',
         prorata_basis_mode: (tenancy.prorata_basis_mode || 'ACTUAL') as 'ACTUAL' | '30_DAYS',
         prorata_end_date: tenancy.prorata_end_date ?? '',
@@ -823,7 +823,10 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                             <input
                                                 type="date"
                                                 value={data.move_in_date}
-                                                onChange={(e) => setData('move_in_date', e.target.value)}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    setData((prev) => ({ ...prev, move_in_date: v, initial_paid_until: addDaysISO(v, 30) }));
+                                                }}
                                                 className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
                                             />
                                         </div>

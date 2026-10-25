@@ -48,7 +48,8 @@ export interface StatementDocumentProps {
     kioskSeparateWater?: boolean;
     waterAllowance?: number | string;
     readOnlyFields?: boolean;
-    prorataInfo?: ProrataInfo;
+    prorataInfo?: ProrataInfo | null;
+    prorata?: ProrataInfo | null;
 }
 
 function SheetPage({ num, meteran, meteranValue, onMeteranChange, notesValue, onNotesChange, kioskSeparateWater, waterAllowance, readOnlyFields, children }: { num: number; meteran?: boolean; meteranValue?: string; onMeteranChange?: (v: string) => void; notesValue?: string; onNotesChange?: (v: string) => void; kioskSeparateWater?: boolean; waterAllowance?: number | string; readOnlyFields?: boolean; children: ReactNode }) {
@@ -248,7 +249,7 @@ function FacilitiesEditor({ items, onChange, lines, readOnly = false }: {
     );
 }
 
-function PaymentTermsBox({ sewaNumeral, dueDay, prorataInfo }: { sewaNumeral: string; dueDay: string; prorataInfo?: ProrataInfo }) {
+function PaymentTermsBox({ sewaNumeral, dueDay, prorataInfo }: { sewaNumeral: string; dueDay: string; prorataInfo?: ProrataInfo | null }) {
     if (!prorataInfo || (!prorataInfo.initialPaidUntil && (prorataInfo.prorataDays === undefined || prorataInfo.prorataDays === null))) {
         return null;
     }
@@ -260,17 +261,17 @@ function PaymentTermsBox({ sewaNumeral, dueDay, prorataInfo }: { sewaNumeral: st
             <div className="font-bold mb-1">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo:</div>
             <ul className="list-disc pl-4 space-y-0.5">
                 <li>Harga sewa bulanan: <strong>Rp {sewaNumeral} / bulan</strong></li>
-                <li>Tanggal masuk: <strong>{prorataInfo.moveInDate || '-'}</strong> · Periode pembayaran awal dibayar s/d: <strong>{prorataInfo.initialPaidUntil || '-'}</strong></li>
+                <li>Bulan pertama (bulanan): <strong>{prorataInfo.moveInDate || '-'} s/d {prorataInfo.initialPaidUntil || '-'}</strong></li>
                 {(prorataInfo.prorataDays || 0) > 0 && (prorataInfo.prorataAmount || 0) > 0 ? (
                     <li>
-                        Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>{prorataInfo.prorataStartDate} s/d {prorataInfo.prorataEndDate}</strong>{' '}
-                        (<strong>{prorataInfo.prorataDays} hari</strong> × tarif harian <strong>Rp {fmt(prorataInfo.dailyRate)}</strong>) = <strong>Rp {fmt(prorataInfo.prorataAmount)}</strong>
+                        Penyesuaian harian (prorata): <strong>{prorataInfo.prorataStartDate} s/d {prorataInfo.prorataEndDate}</strong>{' '}
+                        (<strong>{prorataInfo.prorataDays} hari</strong> × tarif harian <strong>Rp {fmt(prorataInfo.dailyRate ?? prorataInfo.prorataDailyRate)}</strong>) = <strong>Rp {fmt(prorataInfo.prorataAmount)}</strong>
                     </li>
                 ) : (
                     <li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>
                 )}
                 {prorataInfo.normalPeriodStartDate && (
-                    <li>Periode sewa bulanan normal dimulai: <strong>{prorataInfo.normalPeriodStartDate}</strong></li>
+                    <li>Bayar bulanan kembali mulai: <strong>{prorataInfo.normalPeriodStartDate}</strong></li>
                 )}
                 <li>Tanggal jatuh tempo sewa bulanan: <strong>{dueLabel}</strong></li>
             </ul>
@@ -284,7 +285,8 @@ export default function StatementDocument(props: StatementDocumentProps) {
         notes, setNotes,
         facilities, setFacilities, tanggal, paraf1Img, paraf2Img, onParafEnd,
         sig1Img, sig2Img, onSigEnd, sigRef1, parafRef1, sigRef2, parafRef2,
-        kioskSeparateWater, waterAllowance, readOnlyFields = false, prorataInfo } = props;
+        kioskSeparateWater, waterAllowance, readOnlyFields = false } = props;
+    const prorataInfo = props.prorataInfo ?? props.prorata ?? undefined;
 
     // Modal paraf / tanda tangan: 0 = tertutup, 1 = occupant 1, 2 = occupant 2.
     const [parafModal, setParafModal] = useState<0 | 1 | 2>(0);

@@ -4,7 +4,7 @@ import { router, useForm } from '@inertiajs/react';
 import { AdminModal, AdminModalHeader, AdminModalContent, AdminModalFooter } from '@/components/admin/AdminModal';
 import { AdminButton } from '@/components/admin/AdminButton';
 import { Loader2 } from 'lucide-react';
-import { calcDueDay, calculateProrataClient, type ProrataInfo } from '@/services/statement';
+import { calcDueDay, calculateProrataClient, addDaysISO, type ProrataInfo } from '@/services/statement';
 import { TenantDocumentation } from '@/components/admin/TenantDocumentation';
 
 interface ApprovalDetailProps {
@@ -59,7 +59,7 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
         move_in_date: effectiveMoveInDate || tenancy.move_in_date || '',
         agreed_price: String(Number(tenancy.agreed_price) || 0),
         due_day: String(dueDayNumber ?? 1),
-        initial_paid_until: tenancy.initial_paid_until ?? '',
+        initial_paid_until: tenancy.initial_paid_until ?? addDaysISO(effectiveMoveInDate || tenancy.move_in_date, 30),
         initial_payment_status: (tenancy.initial_payment_status || 'UNPAID') as 'UNPAID' | 'PAID',
         prorata_basis_mode: (tenancy.prorata_basis_mode || 'ACTUAL') as 'ACTUAL' | '30_DAYS',
         prorata_end_date: tenancy.prorata_end_date ?? '',
@@ -754,7 +754,10 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                                     <input
                                         type="date"
                                         value={prorataForm.data.move_in_date}
-                                        onChange={e => prorataForm.setData('move_in_date', e.target.value)}
+                                        onChange={e => {
+                                            const v = e.target.value;
+                                            prorataForm.setData(d => ({ ...d, move_in_date: v, initial_paid_until: addDaysISO(v, 30) }));
+                                        }}
                                         className="mt-1 w-full border border-neutral-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A1A18]"
                                         required
                                     />

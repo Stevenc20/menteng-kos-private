@@ -34,15 +34,34 @@ export const calcReminderDay = (dueDay: string): string => {
 };
 
 export interface ProrataInfo {
+    ready?: boolean;
+    reason?: string | null;
     moveInDate?: string;
+    monthlyRent?: number;
     initialPaidUntil?: string;
+    initialPaymentStatus?: string;
     prorataStartDate?: string;
     prorataEndDate?: string;
     prorataDays?: number;
+    prorataBasisMode?: 'ACTUAL' | '30_DAYS';
+    prorataBasisDays?: number;
+    prorataDailyRate?: number;
+    basisMode?: 'ACTUAL' | '30_DAYS';
+    basisDays?: number;
     dailyRate?: number;
     prorataAmount?: number;
+    prorataStatus?: string;
     normalPeriodStartDate?: string;
 }
+
+export const addDaysISO = (iso?: string | null, days = 30): string => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return dt.toISOString().slice(0, 10);
+};
 
 export interface StatementParams {
     hasSecond: boolean;
@@ -61,7 +80,8 @@ export interface StatementParams {
     // KIOSK: bila harga deal di bawah harga standar, air PAM ditagih terpisah
     // (tanpa jatah 5m³ gratis). Hanya relevan untuk template Kios.
     kioskSeparateWater?: boolean;
-    prorataInfo?: ProrataInfo;
+    prorataInfo?: ProrataInfo | null;
+    prorata?: ProrataInfo | null;
     // Gambar digital (data URL) disematkan saat submit sehingga dokumen tersimpan
     // menampilkan paraf & tanda tangan asli (bukan placeholder).
     signatures?: {
@@ -72,14 +92,30 @@ export interface StatementParams {
     };
 }
 
+export interface CalculateProrataInput {
+    moveInDate?: string | null;
+    monthlyRent?: number | string | null;
+    initialPaidUntil?: string | null;
+    initialPaymentStatus?: string | null;
+    basisMode?: 'ACTUAL' | '30_DAYS' | null;
+    prorataEndDate?: string | null;
+    prorataStatus?: string | null;
+}
+
 export const calculateProrataClient = (
-    monthlyRent: number | string,
-    moveInDate?: string | null,
-    initialPaidUntil?: string | null,
-    basisMode: 'ACTUAL' | '30_DAYS' = 'ACTUAL',
-    targetNormalStart?: string | null,
+    firstArg: number | string | CalculateProrataInput,
+    moveInDateArg?: string | null,
+    initialPaidUntilArg?: string | null,
+    basisModeArg: 'ACTUAL' | '30_DAYS' = 'ACTUAL',
+    targetNormalStartArg?: string | null,
 ) => {
-    const rent = Number(monthlyRent) || 0;
+    const isObj = typeof firstArg === 'object' && firstArg !== null;
+    const rent = isObj ? (Number(firstArg.monthlyRent) || 0) : (Number(firstArg) || 0);
+    const moveInDate = isObj ? (firstArg.moveInDate || null) : moveInDateArg;
+    const initialPaidUntil = isObj ? (firstArg.initialPaidUntil || null) : initialPaidUntilArg;
+    const basisMode: 'ACTUAL' | '30_DAYS' = isObj ? (firstArg.basisMode || 'ACTUAL') : basisModeArg;
+    const targetNormalStart = isObj ? (firstArg.prorataEndDate || null) : targetNormalStartArg;
+
     if (rent <= 0 || !moveInDate || !initialPaidUntil) {
         return {
             ready: false,
@@ -93,8 +129,11 @@ export const calculateProrataClient = (
             prorataEndDate: '',
             prorataDays: 0,
             basisMode,
+            prorataBasisMode: basisMode,
             basisDays: 30,
+            prorataBasisDays: 30,
             dailyRate: 0,
+            prorataDailyRate: 0,
             prorataAmount: 0,
             normalPeriodStartDate: '',
             segments: [] as Array<{ month: string; startDate: string; endDate: string; days: number; basisDays: number; dailyRate: number; subtotal: number }>,
@@ -123,6 +162,7 @@ export const calculateProrataClient = (
 
     if (endDt.getTime() <= startDt.getTime()) {
         const bDays = basisMode === '30_DAYS' ? 30 : daysInMonthUTC(startDt.getUTCFullYear(), startDt.getUTCMonth());
+        const dRate = Math.round((rent / bDays) * 100) / 100;
         const normalStart = startDt.getUTCDate() === 1
             ? toISO(startDt)
             : toISO(new Date(Date.UTC(startDt.getUTCFullYear(), startDt.getUTCMonth() + 1, 1)));
@@ -136,8 +176,11 @@ export const calculateProrataClient = (
             prorataEndDate: toISO(startDt),
             prorataDays: 0,
             basisMode,
+            prorataBasisMode: basisMode,
             basisDays: bDays,
-            dailyRate: Math.round((rent / bDays) * 100) / 100,
+            prorataBasisDays: bDays,
+            dailyRate: dRate,
+            prorataDailyRate: dRate,
             prorataAmount: 0,
             normalPeriodStartDate: normalStart,
             segments: [],
@@ -185,8 +228,11 @@ export const calculateProrataClient = (
         prorataEndDate: toISO(endDt),
         prorataDays: totalDays,
         basisMode,
+        prorataBasisMode: basisMode,
         basisDays: primaryBasis,
+        prorataBasisDays: primaryBasis,
         dailyRate: effRate,
+        prorataDailyRate: effRate,
         prorataAmount: Math.round(rawTotal),
         normalPeriodStartDate: toISO(endDt),
         segments,
@@ -194,26 +240,26 @@ export const calculateProrataClient = (
 };
 
 const paymentTermsBlockHTML = (p: StatementParams) => {
-    const info = p.prorataInfo;
+    const info = p.prorataInfo || p.prorata;
     if (!info || (!info.initialPaidUntil && (info.prorataDays === undefined || info.prorataDays === null))) {
         return '';
     }
     const dueLabel = p.dueDay === '0' ? 'akhir bulan' : `tanggal ${esc(p.dueDay || '1')} setiap bulan`;
     const rows: string[] = [
         `<li>Harga sewa bulanan: <strong>Rp ${esc(p.sewaNumeral)} / bulan</strong></li>`,
-        `<li>Tanggal masuk: <strong>${esc(info.moveInDate || '-')}</strong> · Periode pembayaran awal dibayar s/d: <strong>${esc(info.initialPaidUntil || '-')}</strong></li>`,
+        `<li>Tanggal masuk: <strong>${esc(info.moveInDate || '-')}</strong> · Periode sewa bulan pertama (30 hari) s/d: <strong>${esc(info.initialPaidUntil || '-')}</strong></li>`,
     ];
     if ((info.prorataDays || 0) > 0 && (info.prorataAmount || 0) > 0) {
-        const rateStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.dailyRate) || 0);
+        const rateStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.dailyRate ?? info.prorataDailyRate) || 0);
         const totalStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.prorataAmount) || 0);
         rows.push(
-            `<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>${esc(info.prorataStartDate)} s/d ${esc(info.prorataEndDate)}</strong> (<strong>${info.prorataDays} hari</strong> × tarif harian <strong>Rp ${rateStr}</strong>) = <strong>Rp ${totalStr}</strong></li>`
+            `<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode harian <strong>${esc(info.prorataStartDate)} s/d ${esc(info.prorataEndDate)}</strong> (<strong>${info.prorataDays} hari</strong> × tarif harian <strong>Rp ${rateStr}</strong>) = <strong>Rp ${totalStr}</strong></li>`
         );
     } else {
         rows.push(`<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>`);
     }
     if (info.normalPeriodStartDate) {
-        rows.push(`<li>Periode sewa bulanan normal dimulai: <strong>${esc(info.normalPeriodStartDate)}</strong></li>`);
+        rows.push(`<li>Periode sewa bulanan normal dimulai: <strong>${esc(info.normalPeriodStartDate)}</strong> (bayar bulanan kembali setiap tanggal 1)</li>`);
     }
     rows.push(`<li>Tanggal jatuh tempo sewa bulanan: <strong>${dueLabel}</strong></li>`);
 
