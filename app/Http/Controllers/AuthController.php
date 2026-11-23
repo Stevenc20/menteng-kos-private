@@ -30,7 +30,7 @@ class AuthController extends Controller
 
             if (! $user || $user->deleted_at !== null || $user->status !== User::STATUS_ACTIVE) {
                 // Return access denied / error page via Inertia
-                return redirect('/login')->with('error', 'Your account has not been registered by the administrator.');
+                return redirect('/login')->with('error', 'Akun Anda tidak aktif atau masa sewa telah selesai. Silakan hubungi pengelola kos.');
             }
 
             // Update google_id and mark email as verified if not already

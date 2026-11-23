@@ -648,18 +648,21 @@ class AdminController extends Controller
         $newStatus = $validated['status'];
         $tenancy->status = $newStatus;
 
-        // Jika dinonaktifkan / selesai sewa (INACTIVE / ARCHIVED), unit kamar otomatis tersedia kembali
-        if (in_array($newStatus, ['INACTIVE', 'ARCHIVED'], true)) {
-            if ($tenancy->property && $tenancy->property->status !== 'MAINTENANCE') {
-                $tenancy->property->update(['status' => 'AVAILABLE']);
+        // Jika dinonaktifkan / tidak lanjut / selesai sewa, kunci akun user agar tidak bisa login lagi
+        if (in_array($newStatus, ['NOT_CONTINUE', 'INACTIVE', 'ARCHIVED', 'SUSPENDED'], true)) {
+            if ($newStatus === 'NOT_CONTINUE') {
+                // Kamar disiapkan untuk disewakan ke penghuni baru (upcoming available)
+                if ($tenancy->property && $tenancy->property->status === 'OCCUPIED') {
+                    $tenancy->property->update(['status' => 'UPCOMING_AVAILABLE']);
+                }
+            } elseif ($newStatus === 'INACTIVE' || $newStatus === 'ARCHIVED') {
+                if ($tenancy->property && $tenancy->property->status !== 'MAINTENANCE') {
+                    $tenancy->property->update(['status' => 'AVAILABLE']);
+                }
             }
+
             if ($tenancy->user) {
                 $tenancy->user->update(['status' => 'INACTIVE']);
-            }
-        } elseif ($newStatus === 'NOT_CONTINUE') {
-            // Ditandai tidak lanjut (akan keluar di akhir periode), siapkan kamar sebagai upcoming available
-            if ($tenancy->property && $tenancy->property->status === 'OCCUPIED') {
-                $tenancy->property->update(['status' => 'UPCOMING_AVAILABLE']);
             }
         } elseif ($newStatus === 'ACTIVE') {
             // Diaktifkan kembali
