@@ -69,6 +69,14 @@ class WaterPeriodController extends Controller
             $hasPaid = isset($paidCounts[$property->id]) && $paidCounts[$property->id] > 0;
             $tenant = $activeTenancies->get($property->id);
 
+            // Cari pembacaan meter terakhir dari properti ini (dari meter_end atau meter_start)
+            $lastPeriod = WaterPeriod::where('property_id', $property->id)
+                ->orderByDesc('period_year')
+                ->orderByDesc('period_month')
+                ->orderByDesc('id')
+                ->first();
+            $lastMeterReading = $lastPeriod ? ($lastPeriod->meter_end ?? $lastPeriod->meter_start) : null;
+
             if ($open) {
                 if (WaterPeriodService::effectiveStatus($open) === WaterPeriod::STATUS_METER_DUE) {
                     $stats['perlu_update_meter']++;
@@ -88,7 +96,8 @@ class WaterPeriodController extends Controller
                 'name' => $property->name,
                 'type' => $property->type,
                 'status' => $property->status,
-                'tenant' => $tenant ? ['id' => $tenant->user_id, 'name' => $tenant->user?->name] : null,
+                'tenant' => $tenant ? ['id' => $tenant->user_id, 'name' => $tenant->user?->name, 'tenancy_id' => $tenant->id] : null,
+                'last_meter_reading' => $lastMeterReading,
                 'has_paid' => $hasPaid,
                 'billing_note' => $tenant
                     ? $this->billingNote(WaterBillingService::allowanceM3($tenant))
@@ -158,6 +167,10 @@ class WaterPeriodController extends Controller
             ? WaterBillingService::allowanceM3($tenancy)
             : WaterBillingService::allowanceForType($property->type);
 
+        // Cari pembacaan meter terakhir dari properti ini (dari meter_end atau meter_start)
+        $lastPeriod = $periods->first();
+        $lastMeterReading = $lastPeriod ? ($lastPeriod->meter_end ?? $lastPeriod->meter_start) : null;
+
         return Inertia::render('Admin/WaterDetail', [
             'property' => [
                 'id' => $property->id,
@@ -167,10 +180,12 @@ class WaterPeriodController extends Controller
                 'water_rate' => $property->water_rate !== null ? (float) $property->water_rate : null,
                 'allowance' => $allowance,
                 'billing_note' => $this->billingNote($allowance),
+                'last_meter_reading' => $lastMeterReading,
             ],
             'tenant' => $tenancy?->user
                 ? [
                     'id' => $tenancy->user_id,
+                    'tenancy_id' => $tenancy->id,
                     'name' => $tenancy->user->name,
                     'whatsapp' => TenantProfile::where('user_id', $tenancy->user_id)->value('whatsapp'),
                 ]
@@ -191,13 +206,28 @@ class WaterPeriodController extends Controller
             return redirect()->back()->withErrors(['meter_start' => 'Unit ini masih memiliki periode air yang aktif. Konfirmasi pembayaran atau tutup periode sebelumnya terlebih dahulu.']);
         }
 
-        $validated = $request->validate([
-            'meter_start' => 'required|integer|min:0',
+        // Cari pembacaan meter terakhir yang sah untuk unit ini
+        $lastPeriod = WaterPeriod::where('property_id', $property->id)
+            ->orderByDesc('period_year')
+            ->orderByDesc('period_month')
+            ->orderByDesc('id')
+            ->first();
+        $lastMeterReading = $lastPeriod ? ($lastPeriod->meter_end ?? $lastPeriod->meter_start) : null;
+
+        $rules = [
+            'meter_start' => ['required', 'integer', 'min:0'],
             'photo' => 'required|image|max:20480',
             'note' => 'nullable|string|max:255',
-            // Jatah sisa untuk periode pertama setelah penghuni pindah kamar di
-            // tengah siklus (mis. 5 − 3 = 2). Kosongkan untuk jatah normal.
             'allowance' => 'nullable|integer|min:0|max:'.WaterBillingService::WATER_ALLOWANCE_M3,
+        ];
+
+        // Strict Validation: Angka meter awal tidak boleh lebih kecil dari meteran terakhir
+        if ($lastMeterReading !== null) {
+            $rules['meter_start'][] = 'gte:'.$lastMeterReading;
+        }
+
+        $validated = $request->validate($rules, [
+            'meter_start.gte' => "Angka meter awal (:input m³) tidak boleh lebih kecil dari pembacaan meter terakhir unit ini ({$lastMeterReading} m³).",
         ]);
 
         $photoPath = null;

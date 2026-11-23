@@ -31,8 +31,17 @@ interface Period {
 }
 
 interface DetailProps {
-    property: { id: number; name: string; type: string; status: string; water_rate: number | null; allowance: number; billing_note: string };
-    tenant: { id: number; name: string; whatsapp: string | null } | null;
+    property: { 
+        id: number; 
+        name: string; 
+        type: string; 
+        status: string; 
+        water_rate: number | null; 
+        allowance: number; 
+        billing_note: string;
+        last_meter_reading?: number | null;
+    };
+    tenant: { id: number; name: string; whatsapp: string | null; tenancy_id?: number } | null;
     periods: Period[];
     settings: { rate_per_m3: number; reminder_days: number };
 }
@@ -85,7 +94,12 @@ const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep
 export default function WaterDetail({ property, tenant, periods, settings }: DetailProps) {
     const openPeriod = periods.find((p) => p.status !== 'PAID') ?? null;
 
-    const startForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
+    const startForm = useForm({ 
+        meter_start: property.last_meter_reading !== null && property.last_meter_reading !== undefined ? String(property.last_meter_reading) : '', 
+        photo: null as File | null, 
+        note: tenant?.name ? `Penghuni baru: ${tenant.name}` : '', 
+        allowance: '' 
+    });
     const recordForm = useForm({ meter_end: '', photo: null as File | null });
     const editForm = useForm({ meter_start: '', photo: null as File | null, note: '', allowance: '' });
 
@@ -180,11 +194,27 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                         </span>
                     </p>
                 </div>
-                {tenant && (
+                {tenant ? (
                     <div className="bg-white px-5 py-3 rounded-2xl border border-[#E8E7E3] shadow-sm">
                         <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Penghuni Aktif</p>
-                        <p className="font-bold text-[#1A1A18]">{tenant.name}</p>
+                        <Link
+                            href={`/admin/tenants/${tenant.tenancy_id || tenant.id}`}
+                            className="font-bold text-emerald-700 hover:text-emerald-900 hover:underline block text-base"
+                            title="Buka Data Sewa & Dokumen Tenant"
+                        >
+                            👤 {tenant.name}
+                        </Link>
                         {tenant.whatsapp && <p className="text-[12px] text-[#6B6B67]">{tenant.whatsapp}</p>}
+                    </div>
+                ) : (
+                    <div className="bg-white px-5 py-3 rounded-2xl border border-dashed border-[#E8E7E3] shadow-sm">
+                        <p className="text-[12px] font-semibold text-[#8A8A84] uppercase tracking-wider">Penghuni</p>
+                        <p className="text-sm text-neutral-500 font-medium">Kamar Kosong / Belum Ada Penyewa</p>
+                        {property.last_meter_reading !== null && property.last_meter_reading !== undefined && (
+                            <p className="text-[11px] text-amber-800 font-semibold mt-0.5">
+                                Meter Terakhir: {angka(property.last_meter_reading)} m³
+                            </p>
+                        )}
                     </div>
                 )}
             </div>
@@ -438,7 +468,12 @@ export default function WaterDetail({ property, tenant, periods, settings }: Det
                 ) : (
                     <>
                         <h3 className="font-bold text-[#1A1A18] mb-1">Mulai Periode Baru</h3>
-                        <p className="text-sm text-[#6B6B67] mb-4">Catat meter awal unit (photo wajib).</p>
+                        <p className="text-sm text-[#6B6B67] mb-3">Catat meter awal unit (photo wajib).</p>
+                        {property.last_meter_reading !== null && property.last_meter_reading !== undefined && (
+                            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                                📌 <strong>Meteran Terakhir Unit:</strong> {angka(property.last_meter_reading)} m³. Angka otomatis diambil dari catatan meteran penghuni sebelumnya. Anda cukup melampirkan foto fisik meteran terbaru.
+                            </div>
+                        )}
                         <form onSubmit={submitStart} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <FormLabel htmlFor="meter_start">Angka Meter (m³)</FormLabel>

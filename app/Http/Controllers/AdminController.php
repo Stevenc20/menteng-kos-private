@@ -14,6 +14,7 @@ use App\Models\Tenancy;
 use App\Models\TenantProfile;
 use App\Models\User;
 use App\Models\WaterMeter;
+use App\Models\WaterPeriod;
 use App\Services\AgreementStatementService;
 use App\Services\DueDateService;
 use App\Services\ImageWatermarkService;
@@ -954,6 +955,21 @@ class AdminController extends Controller
             $property = Property::find($tenancy->property_id);
             if ($property && $property->status !== 'OCCUPIED') {
                 $property->update(['status' => 'OCCUPIED']);
+            }
+
+            // OTOMATIS TAUTKAN / LINK WATER PERIOD UNIT KE TENANT BARU INI
+            if ($property) {
+                $openPeriod = WaterPeriod::where('property_id', $property->id)
+                    ->whereIn('status', [WaterPeriod::STATUS_METER_DUE, WaterPeriod::STATUS_WAITING_PAYMENT])
+                    ->latest('id')
+                    ->first();
+
+                if ($openPeriod && ($openPeriod->tenancy_id !== $tenancy->id || $openPeriod->tenant_id !== $tenancy->user_id)) {
+                    $openPeriod->update([
+                        'tenancy_id' => $tenancy->id,
+                        'tenant_id' => $tenancy->user_id,
+                    ]);
+                }
             }
         });
 

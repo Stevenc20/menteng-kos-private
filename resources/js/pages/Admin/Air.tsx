@@ -48,7 +48,8 @@ interface PropertyRow {
     name: string;
     type: string;
     status: string;
-    tenant: { id: number; name: string } | null;
+    tenant: { id: number; name: string; tenancy_id?: number } | null;
+    last_meter_reading?: number | null;
     has_paid: boolean;
     billing_note: string;
     water: WaterPeriod | null;
@@ -239,6 +240,12 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
 
     const openStart = (p: PropertyRow) => {
         setSelectedProperty(p);
+        startForm.setData({
+            meter_start: p.last_meter_reading !== null && p.last_meter_reading !== undefined ? String(p.last_meter_reading) : '',
+            photo: null,
+            note: p.tenant?.name ? `Penghuni baru: ${p.tenant.name}` : '',
+            allowance: '',
+        });
         setModal('start');
     };
 
@@ -516,7 +523,23 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                         </Link>
                                         <p className="text-[12px] text-[#8A8A84] mt-0.5">{row.type === 'KIOSK' ? 'Kios' : 'Kamar'} · {row.status.replace(/_/g, ' ')}</p>
                                     </div>
-                                    <div className="text-sm text-[#2A2A27] truncate">{row.tenant?.name ?? '-'}</div>
+                                    <div className="text-sm text-[#2A2A27] truncate">
+                                        {row.tenant ? (
+                                            <Link
+                                                href={`/admin/tenants/${row.tenant.tenancy_id || row.tenant.id}`}
+                                                className="font-medium text-emerald-700 hover:text-emerald-900 hover:underline inline-flex items-center gap-1"
+                                                title="Lihat Detail Penyewaan Tenant"
+                                            >
+                                                👤 {row.tenant.name}
+                                            </Link>
+                                        ) : row.last_meter_reading !== null && row.last_meter_reading !== undefined ? (
+                                            <span className="text-xs text-neutral-400 font-medium">
+                                                (Kosong · Meter Terakhir: {angka(row.last_meter_reading)} m³)
+                                            </span>
+                                        ) : (
+                                            <span className="text-neutral-400">-</span>
+                                        )}
+                                    </div>
                                     <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water ? meterLabel(row.water) : '-'}</div>
                                     <div className="text-sm text-[#2A2A27] tabular-nums whitespace-nowrap">{row.water?.usage !== null && row.water?.usage !== undefined ? `${angka(row.water.usage)} m³` : '-'}</div>
                                     <div className="min-w-0">
@@ -603,7 +626,23 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold border ${status.cls}`}>{status.label}</span>
                             </div>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[13px] text-[#6B6B67]">
-                                <span>Penghuni: <b className="text-[#1A1A18]">{row.tenant?.name ?? '-'}</b></span>
+                                <span>
+                                    Penghuni:{' '}
+                                    {row.tenant ? (
+                                        <Link
+                                            href={`/admin/tenants/${row.tenant.tenancy_id || row.tenant.id}`}
+                                            className="font-bold text-emerald-700 hover:underline"
+                                        >
+                                            {row.tenant.name}
+                                        </Link>
+                                    ) : row.last_meter_reading !== null && row.last_meter_reading !== undefined ? (
+                                        <span className="text-xs text-neutral-400 font-normal">
+                                            (Kosong · Meter: {angka(row.last_meter_reading)} m³)
+                                        </span>
+                                    ) : (
+                                        <b className="text-[#1A1A18]">-</b>
+                                    )}
+                                </span>
                                 <span>Meter: <b className="text-[#1A1A18]">{row.water ? meterLabel(row.water) : '-'}</b></span>
                                 <span>Periode: <b className="text-[#1A1A18]">{row.water ? `${MONTHS[row.water.period_month] ?? row.water.period_month} ${row.water.period_year}` : '-'}</b></span>
                             </div>
@@ -674,6 +713,11 @@ export default function Air({ properties, stats, activeFilter, settings, logs }:
                 <form onSubmit={submitStart} className="flex flex-col flex-1 min-h-0">
                     <AdminModalContent>
                         <FormSection title="Meter Awal" />
+                        {selectedProperty?.last_meter_reading !== null && selectedProperty?.last_meter_reading !== undefined && (
+                            <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                                📌 <strong>Meteran Terakhir Unit:</strong> {angka(selectedProperty.last_meter_reading)} m³. Angka otomatis terisi dari penghuni sebelumnya. Anda cukup melampirkan foto fisik meteran terbaru.
+                            </div>
+                        )}
                         <FormLabel htmlFor="meter_start">Angka Meter (m³)</FormLabel>
                         <TextInput
                             id="meter_start"
