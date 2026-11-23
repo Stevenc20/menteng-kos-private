@@ -116,7 +116,8 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
     const moveInDate = givenMoveIn || todayStr;
     const initDueDay = tenancy.due_day ? String(tenancy.due_day) : (adminTenancyId ? '1' : calcDueDay(moveInDate));
     const initDenda = String(tenancy.denda_per_day ?? (Math.round(Number(tenancy.agreed_price) / 30) || 0));
-    const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.facilities?.[i] ?? tenancy.property?.facilities?.[i] ?? '');
+    // Jangan auto-fill dari fasilitas iklan property. Gunakan tenancy.facilities jika sebelumnya sudah pernah disimpan, atau mulai dari daftar kosong
+    const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.facilities?.[i] ?? '');
     const sewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(tenancy.agreed_price) || 0);
 
     const [captureOccupant, setCaptureOccupant] = useState<1 | 2 | null>(null);
@@ -513,6 +514,11 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
             alert("Harap isi START METERAN (WAJIB DIISI) pada halaman pertama surat.");
             return;
         }
+        const filledFacilities = data.facilities.filter(f => f && f.trim().length > 0);
+        if (filledFacilities.length === 0) {
+            alert("Fasilitas kamar / kios pada Surat Pernyataan WAJIB DIISI minimal 1 fasilitas (contoh: Kunci Kamar, Kasur, AC, dll).");
+            return;
+        }
         const dueNum = Number(data.due_date_day);
         const dendaNum = Number(data.denda_per_day);
         if (!Number.isInteger(dueNum) || dueNum < 1 || dueNum > 31) {
@@ -556,6 +562,11 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         if (!adminTenancyId) return;
         if (!data.meteran_air.trim()) {
             alert("Harap isi START METERAN (WAJIB DIISI) pada halaman pertama surat sebelum menyimpan.");
+            return;
+        }
+        const filledFacilities = data.facilities.filter(f => f && f.trim().length > 0);
+        if (filledFacilities.length === 0) {
+            alert("Fasilitas kamar / kios pada Surat Pernyataan WAJIB DIISI minimal 1 fasilitas (contoh: Kunci Kamar, Kasur, AC, dll).");
             return;
         }
         const dueNum = Number(data.due_date_day);

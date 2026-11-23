@@ -54,7 +54,7 @@ export default function SignStatement({ tenancy, profile, agreement }: SignState
     const waterAllowance = tenancy?.water_allowance ?? 5;
     const facilities: string[] = Array.isArray(tenancy?.facilities) && tenancy.facilities.length > 0
         ? tenancy.facilities
-        : (Array.isArray(tenancy?.property?.facilities) ? tenancy.property.facilities : []);
+        : [];
 
     const prorataInfo: ProrataInfo | undefined = (tenancy?.initial_paid_until || tenancy?.prorata_days != null)
         ? {
