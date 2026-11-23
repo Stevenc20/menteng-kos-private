@@ -74,6 +74,8 @@ function badgeInfo(t: Tenancy) {
 }
 
 export default function Tenants({ tenancies, counts, activeFilter, availableProperties }: TenantsProps) {
+    const [showModal, setShowModal] = useState(false);
+    const [editTenancy, setEditTenancy] = useState<Tenancy | null>(null);
     const [statusModalTenancy, setStatusModalTenancy] = useState<Tenancy | null>(null);
     const statusForm = useForm({
         status: 'INACTIVE',
