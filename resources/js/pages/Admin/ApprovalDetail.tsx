@@ -52,6 +52,22 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
     const isPending = tenancy.status === 'PENDING_ADMIN_APPROVAL' && tenancy.approval_status !== 'REJECTED';
     const isRejected = tenancy.approval_status === 'REJECTED';
     const isApproved = tenancy.status === 'ACTIVE';
+    const isInactive = ['INACTIVE', 'ARCHIVED', 'NOT_CONTINUE', 'SUSPENDED'].includes(tenancy.status);
+
+    // Modal Ubah Status Sewa (Nonaktifkan / Selesai Sewa)
+    const [statusModal, setStatusModal] = useState(false);
+    const statusForm = useForm({
+        status: tenancy.status || 'INACTIVE',
+        reason: '',
+    });
+
+    const submitStatusChange = (e: React.FormEvent) => {
+        e.preventDefault();
+        statusForm.put(`/admin/tenants/${tenancy.id}/status`, {
+            preserveScroll: true,
+            onSuccess: () => setStatusModal(false),
+        });
+    };
 
     // Pengaturan Pembayaran Awal & Prorata Modal
     const [prorataModal, setProrataModal] = useState(false);
@@ -321,7 +337,7 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                 </Card>
 
                 {/* Approval Status */}
-                {(isPending || isRejected || isApproved) && (
+                {(isPending || isRejected || isApproved || isInactive) && (
                     <Card className={`flex flex-col justify-between ${
                         isRejected ? 'ring-1 ring-red-200' : isApproved ? 'ring-1 ring-emerald-200' : ''
                     }`}>
@@ -356,6 +372,15 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                                     <p className="text-sm text-neutral-500 leading-relaxed">Akun tenant aktif dan unit sudah berstatus Occupied.</p>
                                 </>
                             )}
+                            {isInactive && (
+                                <>
+                                    <div className="w-12 h-12 bg-neutral-100 text-neutral-600 rounded-full flex items-center justify-center mb-4">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                                    </div>
+                                    <h2 className="text-lg font-bold text-neutral-800 mb-2">Status: {tenancy.status.replace(/_/g, ' ')}</h2>
+                                    <p className="text-sm text-neutral-500 leading-relaxed">Penyewaan telah selesai / nonaktif. Seluruh arsip Surat Pernyataan dan foto KTP tetap tersimpan lengkap di bawah.</p>
+                                </>
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-2 mt-6">
@@ -371,7 +396,20 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                                 </AdminButton>
                             )}
                             {isApproved && (
-                                <AdminButton variant="secondary" onClick={() => router.get('/admin/tenants')}>Kembali ke Daftar</AdminButton>
+                                <>
+                                    <AdminButton variant="secondary" onClick={() => setStatusModal(true)}>
+                                        Ubah Status Sewa (Nonaktifkan)
+                                    </AdminButton>
+                                    <AdminButton variant="secondary" onClick={() => router.get('/admin/tenants')}>Kembali ke Daftar</AdminButton>
+                                </>
+                            )}
+                            {isInactive && (
+                                <>
+                                    <AdminButton variant="secondary" onClick={() => setStatusModal(true)}>
+                                        Ubah / Aktifkan Kembali
+                                    </AdminButton>
+                                    <AdminButton variant="secondary" onClick={() => router.get('/admin/tenants')}>Kembali ke Daftar</AdminButton>
+                                </>
                             )}
                         </div>
                     </Card>
@@ -895,6 +933,67 @@ export default function ApprovalDetail({ tenancy, profile, agreement, signatures
                     <AdminModalFooter>
                         <AdminButton type="button" variant="secondary" onClick={() => setProrataModal(false)} disabled={prorataForm.processing}>Batal</AdminButton>
                         <AdminButton type="submit" isLoading={prorataForm.processing}>Simpan Ketentuan Pembayaran</AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
+
+            {/* Modal Ubah Status Sewa Tenant */}
+            <AdminModal
+                isOpen={statusModal}
+                onClose={() => !statusForm.processing && setStatusModal(false)}
+                maxWidth="md"
+            >
+                <form onSubmit={submitStatusChange} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalHeader
+                        title="Ubah Status Sewa Tenant"
+                        description={`Atur status sewa untuk ${tenancy.user?.name || ''} (${tenancy.property?.name || ''}). Seluruh arsip surat pernyataan dan foto KTP tetap tersimpan aman.`}
+                        onClose={() => !statusForm.processing && setStatusModal(false)}
+                    />
+                    <AdminModalContent>
+                        <div className="mb-4 p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 leading-relaxed">
+                            💡 <strong>Catatan Arsip:</strong> Menyetel status menjadi <em>Nonaktif</em> atau <em>Tidak Lanjut</em> <u>tidak akan menghapus</u> data penghuni. Surat Pernyataan yang telah ditandatangani, data KTP, dan bukti pembayaran tetap tersimpan di arsip sistem.
+                        </div>
+
+                        <div className="mb-5">
+                            <label className="block text-xs font-semibold text-neutral-700 mb-1.5">Pilih Status Penyewaan</label>
+                            <select
+                                className="w-full bg-white border border-neutral-300 rounded-xl px-4 py-2.5 text-sm text-neutral-900 focus:outline-none focus:border-neutral-900"
+                                value={statusForm.data.status}
+                                onChange={e => statusForm.setData('status', e.target.value)}
+                            >
+                                <option value="ACTIVE">🟢 Aktif (Masih Tinggal / Perpanjang)</option>
+                                <option value="NOT_CONTINUE">🟡 Tidak Lanjut (Keluar di Akhir Periode)</option>
+                                <option value="INACTIVE">🔴 Nonaktif / Selesai Sewa (Kamar Tersedia)</option>
+                                <option value="ARCHIVED">⚪ Arsipkan (Selesai Penuh)</option>
+                                <option value="SUSPENDED">🟠 Ditangguhkan (Dibekukan Sementara)</option>
+                            </select>
+                            <p className="text-xs text-neutral-500 mt-1.5">
+                                {statusForm.data.status === 'INACTIVE' || statusForm.data.status === 'ARCHIVED'
+                                    ? 'Kamar otomatis ditandai TERSEDIA (Available) untuk disewakan ke tenant baru.'
+                                    : statusForm.data.status === 'NOT_CONTINUE'
+                                    ? 'Kamar ditandai Segera Tersedia (Upcoming Available).'
+                                    : 'Status sewa berjalan normal.'}
+                            </p>
+                        </div>
+
+                        <div className="mb-2">
+                            <label className="block text-xs font-semibold text-neutral-700 mb-1.5">Keterangan / Alasan (Opsional)</label>
+                            <input
+                                type="text"
+                                placeholder="Contoh: Kontrak selesai, pindah tugas keluar kota"
+                                value={statusForm.data.reason}
+                                onChange={e => statusForm.setData('reason', e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded-xl px-4 py-2.5 text-sm text-neutral-900 focus:outline-none focus:border-neutral-900"
+                            />
+                        </div>
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton type="button" variant="secondary" onClick={() => setStatusModal(false)} disabled={statusForm.processing}>
+                            Batal
+                        </AdminButton>
+                        <AdminButton type="submit" isLoading={statusForm.processing}>
+                            Simpan Status
+                        </AdminButton>
                     </AdminModalFooter>
                 </form>
             </AdminModal>

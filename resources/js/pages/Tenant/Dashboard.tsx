@@ -27,20 +27,56 @@ export default function Dashboard({
         new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(val));
 
     const allowance = Number(waterRule?.allowance_m3) > 0;
+    const isInactiveTenancy = ['INACTIVE', 'ARCHIVED'].includes(tenancy?.status);
+    const isNotContinue = tenancy?.status === 'NOT_CONTINUE';
 
     const quickLinks = [
         { href: '/tenant/payments', icon: '💳', label: 'Pembayaran', desc: 'Riwayat & Bukti Bayar' },
         { href: '/tenant/water-usage', icon: '💧', label: 'Air (PAM)', desc: 'Pemakaian Air Bulanan' },
-        { href: '/tenant/agreement', icon: '📄', label: 'Surat Pernyataan', desc: 'Dokumen Sewa Anda' },
+        { href: '/tenant/agreement', icon: '📄', label: 'Surat Pernyataan', desc: 'Arsip Dokumen Sewa' },
         { href: '/tenant/agreement', icon: '📸', label: 'Dokumentasi Kamar', desc: 'Kondisi Kamar (Move-in)' },
     ];
 
     return (
         <TenantLayout title="Dashboard Tenant">
             <div className="mb-6 sm:mb-8">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome Home.</h1>
-                <p className="text-neutral-500 mt-1">Kelola kebutuhan kos Anda dalam satu tempat.</p>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {isInactiveTenancy ? 'Masa Sewa Berakhir.' : isNotContinue ? 'Pemberitahuan Selesai Sewa.' : 'Welcome Home.'}
+                </h1>
+                <p className="text-neutral-500 mt-1">
+                    {isInactiveTenancy 
+                        ? 'Akun penyewaan unit Anda telah dinonaktifkan. Anda tetap dapat mengakses arsip Surat Pernyataan dan riwayat sewa Anda di sini.'
+                        : isNotContinue
+                        ? 'Anda telah menyatakan tidak memperpanjang masa sewa unit ini. Terima kasih telah menjadi bagian dari keluarga Menteng Kos.'
+                        : 'Kelola kebutuhan kos Anda dalam satu tempat.'}
+                </p>
             </div>
+
+            {/* Banner Khusus Akun Nonaktif / Selesai Sewa */}
+            {isInactiveTenancy && (
+                <div className="mb-6 bg-neutral-50 border-2 border-neutral-300 rounded-2xl p-5 sm:p-6 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                            <span className="text-3xl sm:text-4xl">📁</span>
+                            <div>
+                                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-neutral-200 text-neutral-800 uppercase tracking-wider mb-1">
+                                    Arsip Penyewaan Selesai
+                                </span>
+                                <h3 className="font-bold text-neutral-900 text-base sm:text-lg">Akun Penyewaan Telah Nonaktif</h3>
+                                <p className="text-sm text-neutral-600 mt-1 max-w-xl">
+                                    Masa sewa Anda untuk unit <strong>{tenancy?.property?.name ?? '-'}</strong> telah selesai. Seluruh dokumen penting seperti <strong>Surat Pernyataan yang telah Anda tanda tangani</strong> dan riwayat pembayaran tetap tersimpan aman di arsip akun Anda.
+                                </p>
+                            </div>
+                        </div>
+                        <Link
+                            href="/tenant/agreement"
+                            className="shrink-0 bg-neutral-900 text-white text-sm font-bold px-5 py-3 rounded-xl hover:bg-neutral-800 transition-colors text-center"
+                        >
+                            📄 Lihat Arsip Surat Pernyataan
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             {needsSignature && (
                 <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">

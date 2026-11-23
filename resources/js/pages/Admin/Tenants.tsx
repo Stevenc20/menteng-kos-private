@@ -42,6 +42,7 @@ interface Counts {
     total: number;
     pending: number;
     active: number;
+    inactive?: number;
     rejected: number;
 }
 
@@ -56,6 +57,7 @@ const FILTERS = [
     { key: 'all', label: 'Semua' },
     { key: 'pending', label: 'Menunggu Approval' },
     { key: 'active', label: 'Aktif' },
+    { key: 'inactive', label: 'Tidak Aktif / Selesai' },
     { key: 'rejected', label: 'Perlu Perbaikan / Ditolak' },
 ];
 
@@ -64,12 +66,39 @@ function badgeInfo(t: Tenancy) {
     if (t.status === 'PENDING_ADMIN_APPROVAL') return { label: 'Menunggu Approval', cls: 'bg-amber-50 text-amber-800' };
     if (t.status === 'ACTIVE') return { label: 'Aktif', cls: 'bg-emerald-50 text-emerald-700' };
     if (t.status === 'INVITED') return { label: 'Diundang', cls: 'bg-purple-50 text-purple-700' };
+    if (t.status === 'NOT_CONTINUE') return { label: 'Tidak Lanjut', cls: 'bg-amber-100 text-amber-900 font-semibold' };
+    if (t.status === 'INACTIVE') return { label: 'Nonaktif', cls: 'bg-neutral-200 text-neutral-700 font-semibold' };
+    if (t.status === 'ARCHIVED') return { label: 'Selesai (Diarsipkan)', cls: 'bg-neutral-200 text-neutral-700 font-semibold' };
+    if (t.status === 'SUSPENDED') return { label: 'Ditangguhkan', cls: 'bg-rose-100 text-rose-800 font-semibold' };
     return { label: t.status.replace(/_/g, ' '), cls: 'bg-gray-100 text-gray-600' };
 }
 
 export default function Tenants({ tenancies, counts, activeFilter, availableProperties }: TenantsProps) {
-    const [showModal, setShowModal] = useState(false);
-    const [editTenancy, setEditTenancy] = useState<Tenancy | null>(null);
+    const [statusModalTenancy, setStatusModalTenancy] = useState<Tenancy | null>(null);
+    const statusForm = useForm({
+        status: 'INACTIVE',
+        reason: '',
+    });
+
+    const openStatusModal = (t: Tenancy) => {
+        setStatusModalTenancy(t);
+        statusForm.setData({
+            status: ['INACTIVE', 'ARCHIVED', 'NOT_CONTINUE', 'SUSPENDED'].includes(t.status) ? t.status : 'INACTIVE',
+            reason: '',
+        });
+    };
+
+    const submitStatus = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!statusModalTenancy) return;
+        statusForm.put(`/admin/tenants/${statusModalTenancy.id}/status`, {
+            onSuccess: () => {
+                setStatusModalTenancy(null);
+                toast.success('Status tenant berhasil diperbarui. Arsip surat pernyataan & KTP tetap tersimpan.');
+            },
+            onError: () => toast.error('Gagal memperbarui status tenant'),
+        });
+    };
 
     // Admin fills the onboarding wizard for these states (data not yet complete).
     const onboardingStates = ['INVITED', 'ONBOARDING_IN_PROGRESS', 'AGREEMENT_PENDING'];
@@ -145,7 +174,7 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
     const stats = [
         { label: 'Menunggu Approval', value: counts?.pending ?? 0, cls: 'bg-amber-50 border-amber-100 text-amber-800' },
         { label: 'Aktif', value: counts?.active ?? 0, cls: 'bg-emerald-50 border-emerald-100 text-emerald-700' },
-        { label: 'Perlu Perbaikan', value: counts?.rejected ?? 0, cls: 'bg-red-50 border-red-100 text-red-700' },
+        { label: 'Tidak Aktif / Selesai', value: counts?.inactive ?? 0, cls: 'bg-neutral-100 border-neutral-200 text-neutral-800' },
         { label: 'Total Tenant', value: counts?.total ?? 0, cls: 'bg-neutral-50 border-neutral-100 text-neutral-700' },
     ];
 
@@ -259,6 +288,13 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                                     Edit
                                                 </button>
                                                 <button
+                                                    onClick={() => openStatusModal(t)}
+                                                    className="ml-2 px-3.5 py-1.5 text-xs font-medium rounded-lg border border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-colors"
+                                                    title="Ubah status sewa (aktif / tidak lanjut / nonaktif)"
+                                                >
+                                                    Status Sewa
+                                                </button>
+                                                <button
                                                     onClick={() => deleteTenant(t)}
                                                     className="ml-2 px-4 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
                                                 >
@@ -334,6 +370,12 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                                         className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-[#E8E7E3] text-[#1A1A18] hover:border-[#1A1A18] transition-colors"
                                     >
                                         Edit Data
+                                    </button>
+                                    <button
+                                        onClick={() => openStatusModal(t)}
+                                        className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold border border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-colors"
+                                    >
+                                        Ubah Status Sewa
                                     </button>
                                     <button
                                         onClick={() => deleteTenant(t)}
@@ -509,6 +551,67 @@ export default function Tenants({ tenancies, counts, activeFilter, availableProp
                         </AdminButton>
                         <AdminButton type="submit" isLoading={editForm.processing}>
                             Simpan Perubahan
+                        </AdminButton>
+                    </AdminModalFooter>
+                </form>
+            </AdminModal>
+
+            {/* Modal Ubah Status Sewa (Nonaktifkan / Tidak Lanjut / Aktifkan) */}
+            <AdminModal
+                isOpen={Boolean(statusModalTenancy)}
+                onClose={() => !statusForm.processing && setStatusModalTenancy(null)}
+                maxWidth="md"
+            >
+                <form onSubmit={submitStatus} className="flex flex-col flex-1 min-h-0">
+                    <AdminModalHeader
+                        title="Ubah Status Sewa Tenant"
+                        description={statusModalTenancy ? `Atur status sewa untuk ${statusModalTenancy.user?.name || ''} (${statusModalTenancy.property?.name || ''}). Seluruh arsip surat pernyataan dan foto KTP tetap tersimpan aman.` : ''}
+                        onClose={() => !statusForm.processing && setStatusModalTenancy(null)}
+                    />
+                    <AdminModalContent>
+                        <div className="mb-4 p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 leading-relaxed">
+                            💡 <strong>Catatan Arsip:</strong> Menyetel status menjadi <em>Nonaktif</em> atau <em>Tidak Lanjut</em> <u>tidak akan menghapus</u> data penghuni. Surat Pernyataan yang telah ditandatangani, data KTP, dan bukti pembayaran tetap tersimpan di arsip sistem.
+                        </div>
+
+                        <div className="mb-5">
+                            <FormLabel>Pilih Status Penyewaan</FormLabel>
+                            <SelectInput
+                                value={statusForm.data.status}
+                                onChange={e => statusForm.setData('status', e.target.value)}
+                            >
+                                <option value="ACTIVE">🟢 Aktif (Masih Tinggal / Perpanjang)</option>
+                                <option value="NOT_CONTINUE">🟡 Tidak Lanjut (Keluar di Akhir Periode)</option>
+                                <option value="INACTIVE">🔴 Nonaktif / Selesai Sewa (Kamar Tersedia)</option>
+                                <option value="ARCHIVED">⚪ Arsipkan (Selesai Penuh)</option>
+                                <option value="SUSPENDED">🟠 Ditangguhkan (Dibekukan Sementara)</option>
+                            </SelectInput>
+                            <FormHelper>
+                                {statusForm.data.status === 'INACTIVE' || statusForm.data.status === 'ARCHIVED'
+                                    ? 'Kamar otomatis ditandai TERSEDIA (Available) untuk disewakan ke tenant baru.'
+                                    : statusForm.data.status === 'NOT_CONTINUE'
+                                    ? 'Kamar ditandai Segera Tersedia (Upcoming Available).'
+                                    : 'Status sewa berjalan normal.'}
+                            </FormHelper>
+                            <FormError>{statusForm.errors.status}</FormError>
+                        </div>
+
+                        <div className="mb-2">
+                            <FormLabel>Keterangan / Alasan (Opsional)</FormLabel>
+                            <TextInput
+                                type="text"
+                                placeholder="Contoh: Kontrak selesai, pindah tugas keluar kota"
+                                value={statusForm.data.reason}
+                                onChange={e => statusForm.setData('reason', e.target.value)}
+                            />
+                            <FormError>{statusForm.errors.reason}</FormError>
+                        </div>
+                    </AdminModalContent>
+                    <AdminModalFooter>
+                        <AdminButton type="button" variant="secondary" onClick={() => setStatusModalTenancy(null)} disabled={statusForm.processing}>
+                            Batal
+                        </AdminButton>
+                        <AdminButton type="submit" isLoading={statusForm.processing}>
+                            Simpan Status
                         </AdminButton>
                     </AdminModalFooter>
                 </form>

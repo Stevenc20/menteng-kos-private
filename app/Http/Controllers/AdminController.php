@@ -315,7 +315,7 @@ class AdminController extends Controller
      */
     public function tenants(Request $request)
     {
-        // Filter status via ?status= (all|pending|active|rejected)
+        // Filter status via ?status= (all|pending|active|inactive|rejected)
         $filter = $request->query('status', 'all');
 
         $query = Tenancy::with(['user', 'property'])->orderBy('created_at', 'desc');
@@ -331,6 +331,9 @@ class AdminController extends Controller
             case 'active':
                 $query->where('status', 'ACTIVE');
                 break;
+            case 'inactive':
+                $query->whereIn('status', ['INACTIVE', 'ARCHIVED', 'NOT_CONTINUE', 'SUSPENDED']);
+                break;
             case 'rejected':
                 $query->where('approval_status', 'REJECTED');
                 break;
@@ -344,6 +347,7 @@ class AdminController extends Controller
                 ->where('approval_status', 'PENDING')
                 ->count(),
             'active' => Tenancy::where('status', 'ACTIVE')->count(),
+            'inactive' => Tenancy::whereIn('status', ['INACTIVE', 'ARCHIVED', 'NOT_CONTINUE', 'SUSPENDED'])->count(),
             'rejected' => Tenancy::where('approval_status', 'REJECTED')->count(),
         ];
 
@@ -626,6 +630,50 @@ class AdminController extends Controller
         );
 
         return redirect()->back()->with('success', 'Data penyewaan dan ketentuan pembayaran berhasil diperbarui.');
+    }
+
+    /**
+     * Admin toggle / update status tenancy (e.g. nonaktifkan sewa, tidak lanjut, aktifkan kembali).
+     * Surat pernyataan, foto KTP, dan riwayat billing tetap utuh tersimpan sebagai arsip.
+     */
+    public function updateTenancyStatus(Request $request, $id)
+    {
+        $tenancy = Tenancy::with(['property', 'user'])->findOrFail($id);
+
+        $validated = $request->validate([
+            'status' => 'required|in:ACTIVE,NOT_CONTINUE,INACTIVE,ARCHIVED,SUSPENDED',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $newStatus = $validated['status'];
+        $tenancy->status = $newStatus;
+
+        // Jika dinonaktifkan / selesai sewa (INACTIVE / ARCHIVED), unit kamar otomatis tersedia kembali
+        if (in_array($newStatus, ['INACTIVE', 'ARCHIVED'], true)) {
+            if ($tenancy->property && $tenancy->property->status !== 'MAINTENANCE') {
+                $tenancy->property->update(['status' => 'AVAILABLE']);
+            }
+            if ($tenancy->user) {
+                $tenancy->user->update(['status' => 'INACTIVE']);
+            }
+        } elseif ($newStatus === 'NOT_CONTINUE') {
+            // Ditandai tidak lanjut (akan keluar di akhir periode), siapkan kamar sebagai upcoming available
+            if ($tenancy->property && $tenancy->property->status === 'OCCUPIED') {
+                $tenancy->property->update(['status' => 'UPCOMING_AVAILABLE']);
+            }
+        } elseif ($newStatus === 'ACTIVE') {
+            // Diaktifkan kembali
+            if ($tenancy->property && $tenancy->property->status !== 'OCCUPIED') {
+                $tenancy->property->update(['status' => 'OCCUPIED']);
+            }
+            if ($tenancy->user) {
+                $tenancy->user->update(['status' => 'ACTIVE']);
+            }
+        }
+
+        $tenancy->save();
+
+        return redirect()->back()->with('success', 'Status akun dan penyewaan tenant berhasil diperbarui.');
     }
 
     /**
