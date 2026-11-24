@@ -250,7 +250,8 @@ function FacilitiesEditor({ items, onChange, lines, readOnly = false }: {
 }
 
 function PaymentTermsBox({ sewaNumeral, dueDay, prorataInfo }: { sewaNumeral: string; dueDay: string; prorataInfo?: ProrataInfo | null }) {
-    if (!prorataInfo || (!prorataInfo.initialPaidUntil && (prorataInfo.prorataDays === undefined || prorataInfo.prorataDays === null))) {
+    // Prorata hanya ditampilkan jika ada penyesuaian prorata aktif (prorataDays > 0 dan prorataAmount > 0)
+    if (!prorataInfo || !prorataInfo.prorataDays || Number(prorataInfo.prorataDays) <= 0 || !prorataInfo.prorataAmount || Number(prorataInfo.prorataAmount) <= 0) {
         return null;
     }
     const fmt = (n?: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(n) || 0);
@@ -258,18 +259,16 @@ function PaymentTermsBox({ sewaNumeral, dueDay, prorataInfo }: { sewaNumeral: st
 
     return (
         <div className="my-2 rounded-lg border border-neutral-300 bg-neutral-50 p-3 text-xs leading-relaxed text-neutral-800">
-            <div className="font-bold mb-1">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo:</div>
+            <div className="font-bold mb-1">Rincian Ketentuan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo (Prorata):</div>
             <ul className="list-disc pl-4 space-y-0.5">
                 <li>Harga sewa bulanan: <strong>Rp {sewaNumeral} / bulan</strong></li>
-                <li>Bulan pertama (bulanan): <strong>{prorataInfo.moveInDate || '-'} s/d {prorataInfo.initialPaidUntil || '-'}</strong></li>
-                {(prorataInfo.prorataDays || 0) > 0 && (prorataInfo.prorataAmount || 0) > 0 ? (
-                    <li>
-                        Penyesuaian harian (prorata): <strong>{prorataInfo.prorataStartDate} s/d {prorataInfo.prorataEndDate}</strong>{' '}
-                        (<strong>{prorataInfo.prorataDays} hari</strong> × tarif harian <strong>Rp {fmt(prorataInfo.dailyRate ?? prorataInfo.prorataDailyRate)}</strong>) = <strong>Rp {fmt(prorataInfo.prorataAmount)}</strong>
-                    </li>
-                ) : (
-                    <li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>
+                {prorataInfo.initialPaidUntil && (
+                    <li>Bulan pertama (bulanan): <strong>{prorataInfo.moveInDate || '-'} s/d {prorataInfo.initialPaidUntil || '-'}</strong></li>
                 )}
+                <li>
+                    Penyesuaian harian (prorata): <strong>{prorataInfo.prorataStartDate} s/d {prorataInfo.prorataEndDate}</strong>{' '}
+                    (<strong>{prorataInfo.prorataDays} hari</strong> × tarif harian <strong>Rp {fmt(prorataInfo.dailyRate ?? prorataInfo.prorataDailyRate)}</strong>) = <strong>Rp {fmt(prorataInfo.prorataAmount)}</strong>
+                </li>
                 {prorataInfo.normalPeriodStartDate && (
                     <li>Bayar bulanan kembali mulai: <strong>{prorataInfo.normalPeriodStartDate}</strong></li>
                 )}

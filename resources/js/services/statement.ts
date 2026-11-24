@@ -241,23 +241,22 @@ export const calculateProrataClient = (
 
 const paymentTermsBlockHTML = (p: StatementParams) => {
     const info = p.prorataInfo || p.prorata;
-    if (!info || (!info.initialPaidUntil && (info.prorataDays === undefined || info.prorataDays === null))) {
+    // Prorata hanya dicantumkan dalam surat jika memang ada penyesuaian prorata aktif (prorataDays > 0 dan prorataAmount > 0)
+    if (!info || !info.prorataDays || Number(info.prorataDays) <= 0 || !info.prorataAmount || Number(info.prorataAmount) <= 0) {
         return '';
     }
     const dueLabel = p.dueDay === '0' ? 'akhir bulan' : `tanggal ${esc(p.dueDay || '1')} setiap bulan`;
     const rows: string[] = [
         `<li>Harga sewa bulanan: <strong>Rp ${esc(p.sewaNumeral)} / bulan</strong></li>`,
-        `<li>Tanggal masuk: <strong>${esc(info.moveInDate || '-')}</strong> · Periode sewa bulan pertama (30 hari) s/d: <strong>${esc(info.initialPaidUntil || '-')}</strong></li>`,
     ];
-    if ((info.prorataDays || 0) > 0 && (info.prorataAmount || 0) > 0) {
-        const rateStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.dailyRate ?? info.prorataDailyRate) || 0);
-        const totalStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.prorataAmount) || 0);
-        rows.push(
-            `<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode harian <strong>${esc(info.prorataStartDate)} s/d ${esc(info.prorataEndDate)}</strong> (<strong>${info.prorataDays} hari</strong> × tarif harian <strong>Rp ${rateStr}</strong>) = <strong>Rp ${totalStr}</strong></li>`
-        );
-    } else {
-        rows.push(`<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>`);
+    if (info.initialPaidUntil) {
+        rows.push(`<li>Tanggal masuk: <strong>${esc(info.moveInDate || '-')}</strong> · Periode sewa bulan pertama s/d: <strong>${esc(info.initialPaidUntil || '-')}</strong></li>`);
     }
+    const rateStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.dailyRate ?? info.prorataDailyRate) || 0);
+    const totalStr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(info.prorataAmount) || 0);
+    rows.push(
+        `<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode harian <strong>${esc(info.prorataStartDate)} s/d ${esc(info.prorataEndDate)}</strong> (<strong>${info.prorataDays} hari</strong> × tarif harian <strong>Rp ${rateStr}</strong>) = <strong>Rp ${totalStr}</strong></li>`
+    );
     if (info.normalPeriodStartDate) {
         rows.push(`<li>Periode sewa bulanan normal dimulai: <strong>${esc(info.normalPeriodStartDate)}</strong> (bayar bulanan kembali setiap tanggal 1)</li>`);
     }

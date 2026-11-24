@@ -114,7 +114,7 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
     const givenMoveIn = tenancy.move_in_date;
     const todayStr = todayISO();
     const moveInDate = givenMoveIn || todayStr;
-    const initDueDay = tenancy.due_day ? String(tenancy.due_day) : (adminTenancyId ? '1' : calcDueDay(moveInDate));
+    const initDueDay = tenancy.due_day ? String(tenancy.due_day) : calcDueDay(moveInDate);
     const initDenda = String(tenancy.denda_per_day ?? (Math.round(Number(tenancy.agreed_price) / 30) || 0));
     // Jangan auto-fill dari fasilitas iklan property. Gunakan tenancy.facilities jika sebelumnya sudah pernah disimpan, atau mulai dari daftar kosong
     const initFacilities = Array.from({ length: isKiosk ? 8 : 6 }, (_, i) => tenancy.facilities?.[i] ?? '');
@@ -196,7 +196,8 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         // Field interaktif Surat Pernyataan & Pengaturan Pembayaran / Prorata
         agreed_price: String(Number(tenancy.agreed_price) || 0),
         move_in_date: moveInDate,
-        initial_paid_until: tenancy.initial_paid_until ?? (adminTenancyId ? addDaysISO(moveInDate, 30) : ''),
+        enable_prorata: Boolean(tenancy.prorata_days && Number(tenancy.prorata_days) > 0),
+        initial_paid_until: tenancy.initial_paid_until ?? '',
         initial_payment_status: (tenancy.initial_payment_status || 'UNPAID') as 'UNPAID' | 'PAID',
         prorata_basis_mode: (tenancy.prorata_basis_mode || 'ACTUAL') as 'ACTUAL' | '30_DAYS',
         prorata_end_date: tenancy.prorata_end_date ?? '',
@@ -437,15 +438,17 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
         });
     };
 
-    const liveProrataPreview: ProrataInfo | null = calculateProrataClient({
-        moveInDate: data.move_in_date || moveInDate,
-        monthlyRent: Number(data.agreed_price) || Number(tenancy.agreed_price) || 0,
-        initialPaidUntil: data.initial_paid_until || null,
-        initialPaymentStatus: data.initial_payment_status || 'UNPAID',
-        basisMode: data.prorata_basis_mode || 'ACTUAL',
-        prorataEndDate: data.prorata_end_date || null,
-        prorataStatus: data.prorata_status || 'PENDING_PAYMENT',
-    });
+    const liveProrataPreview: ProrataInfo | null = (data.enable_prorata && data.initial_paid_until)
+        ? calculateProrataClient({
+            moveInDate: data.move_in_date || moveInDate,
+            monthlyRent: Number(data.agreed_price) || Number(tenancy.agreed_price) || 0,
+            initialPaidUntil: data.initial_paid_until || null,
+            initialPaymentStatus: data.initial_payment_status || 'UNPAID',
+            basisMode: data.prorata_basis_mode || 'ACTUAL',
+            prorataEndDate: data.prorata_end_date || null,
+            prorataStatus: data.prorata_status || 'PENDING_PAYMENT',
+        })
+        : null;
 
     const activeSewaNumeral = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(
         Number(data.agreed_price) || Number(tenancy.agreed_price) || 0
@@ -819,13 +822,31 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                             {/* Pengaturan Pembayaran Awal & Penyesuaian Jatuh Tempo (Prorata) — Admin */}
                             {adminTenancyId && (
                                 <div className="mt-4 pt-4 border-t border-neutral-200 space-y-4">
-                                    <div>
-                                        <h3 className="font-bold text-neutral-900 text-sm">
-                                            Pengaturan Pembayaran Awal &amp; Penyesuaian Jatuh Tempo (Prorata)
-                                        </h3>
-                                        <p className="text-xs text-neutral-500 mt-0.5">
-                                            Sesuaikan periode pembayaran awal agar jatuh tempo sewa bulanan seluruh tenant seragam pada <strong>tanggal 1 setiap bulan</strong>.
-                                        </p>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <label className="font-bold text-neutral-900 text-sm flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(data.enable_prorata)}
+                                                    onChange={(e) => {
+                                                        const checked = e.target.checked;
+                                                        setData((prev) => ({
+                                                            ...prev,
+                                                            enable_prorata: checked,
+                                                            initial_paid_until: checked ? (prev.initial_paid_until || addDaysISO(data.move_in_date || moveInDate, 30)) : '',
+                                                        }));
+                                                    }}
+                                                    className="w-4 h-4 rounded text-neutral-900 focus:ring-neutral-900 border-neutral-300"
+                                                />
+                                                <span>Aktifkan Penyesuaian Jatuh Tempo (Prorata)</span>
+                                            </label>
+                                            <p className="text-xs text-neutral-500 mt-0.5">
+                                                Centang HANYA jika ingin menyesuaikan tanggal jatuh tempo sewa (misal ke tanggal 1) dengan hitungan prorata. Jika tidak dicentang, sewa berjalan normal bulanan tanpa ada tagihan prorata di surat pernyataan.
+                                            </p>
+                                        </div>
+                                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase ${data.enable_prorata ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-600'}`}>
+                                            {data.enable_prorata ? 'Prorata Aktif' : 'Bulanan Normal'}
+                                        </span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -836,7 +857,12 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                                 value={data.move_in_date}
                                                 onChange={(e) => {
                                                     const v = e.target.value;
-                                                    setData((prev) => ({ ...prev, move_in_date: v, initial_paid_until: addDaysISO(v, 30) }));
+                                                    setData((prev) => ({
+                                                        ...prev,
+                                                        move_in_date: v,
+                                                        due_date_day: calcDueDay(v),
+                                                        initial_paid_until: prev.enable_prorata ? addDaysISO(v, 30) : '',
+                                                    }));
                                                 }}
                                                 className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
                                             />
@@ -871,91 +897,95 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                                                Periode yang Sudah Dibayar s/d Tanggal
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={data.initial_paid_until}
-                                                onChange={(e) => setData('initial_paid_until', e.target.value)}
-                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
-                                            />
-                                            <span className="block text-[11px] text-neutral-500 mt-1">
-                                                Isi tanggal berakhirnya periode pembayaran awal yang sudah dibayar tenant (contoh: 2026-11-24).
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                                                Status Pembayaran Awal
-                                            </label>
-                                            <select
-                                                value={data.initial_payment_status}
-                                                onChange={(e) => setData('initial_payment_status', e.target.value as 'UNPAID' | 'PAID')}
-                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
-                                            >
-                                                <option value="UNPAID">Belum Lunas (UNPAID)</option>
-                                                <option value="PAID">Lunas (PAID)</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                                                Dasar Jumlah Hari Perhitungan Prorata
-                                            </label>
-                                            <select
-                                                value={data.prorata_basis_mode}
-                                                onChange={(e) => setData('prorata_basis_mode', e.target.value as 'ACTUAL' | '30_DAYS')}
-                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
-                                            >
-                                                <option value="ACTUAL">Hari Aktual Kalender Bulan Berjalan</option>
-                                                <option value="30_DAYS">Standar 30 Hari per Bulan</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                                                Status Pembayaran Prorata
-                                            </label>
-                                            <select
-                                                value={data.prorata_status}
-                                                onChange={(e) => setData('prorata_status', e.target.value as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID')}
-                                                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
-                                            >
-                                                <option value="PENDING_PAYMENT">Menunggu Pembayaran (PENDING_PAYMENT)</option>
-                                                <option value="UNPAID">Belum Lunas (UNPAID)</option>
-                                                <option value="PAID">Lunas (PAID)</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Ringkasan Perhitungan Prorata Transparan */}
-                                    {!data.initial_paid_until ? (
-                                        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                                            <strong>Perhatian:</strong> Periode pembayaran awal yang sudah dibayar belum diisi. Sistem tidak akan membuat tagihan prorata otomatis sebelum Anda mengonfirmasi tanggal akhir periode yang sudah dibayar.
-                                        </div>
-                                    ) : liveProrataPreview && (
-                                        <div className="p-4 rounded-xl bg-white border border-neutral-300 space-y-2 text-xs">
-                                            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
-                                                <span className="font-bold text-neutral-900 uppercase tracking-wider">
-                                                    Ringkasan Perhitungan Prorata
-                                                </span>
-                                                <span className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-700 font-semibold">
-                                                    {liveProrataPreview.prorataDays && liveProrataPreview.prorataDays > 0
-                                                        ? `${liveProrataPreview.prorataDays} Hari Penyesuaian`
-                                                        : 'Tanpa Prorata (0 Hari)'}
-                                                </span>
+                                    {data.enable_prorata && (
+                                        <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                        Periode yang Sudah Dibayar s/d Tanggal
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={data.initial_paid_until}
+                                                        onChange={(e) => setData('initial_paid_until', e.target.value)}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                                    />
+                                                    <span className="block text-[11px] text-neutral-500 mt-1">
+                                                        Isi tanggal berakhirnya periode pembayaran awal yang sudah dibayar tenant (contoh: 2026-11-24).
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                        Status Pembayaran Awal
+                                                    </label>
+                                                    <select
+                                                        value={data.initial_payment_status}
+                                                        onChange={(e) => setData('initial_payment_status', e.target.value as 'UNPAID' | 'PAID')}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                                    >
+                                                        <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                                        <option value="PAID">Lunas (PAID)</option>
+                                                    </select>
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-neutral-600">
-                                                <div>Periode Sudah Dibayar s/d: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.initialPaidUntil || '')}</strong></div>
-                                                <div>Periode Prorata: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.prorataStartDate || '')} s/d {formatDisplayDate(liveProrataPreview.prorataEndDate || '')}</strong></div>
-                                                <div>Jumlah Hari Prorata: <strong className="text-neutral-900">{liveProrataPreview.prorataDays ?? 0} hari</strong></div>
-                                                <div>Tarif Harian: <strong className="text-neutral-900">{formatRupiah(liveProrataPreview.prorataDailyRate ?? 0)} / hari</strong> ({liveProrataPreview.prorataBasisDays} hari)</div>
-                                                <div>Total Biaya Prorata: <strong className="text-emerald-700 text-sm">{formatRupiah(liveProrataPreview.prorataAmount ?? 0)}</strong></div>
-                                                <div>Jatuh Tempo Normal Berikutnya: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.normalPeriodStartDate || '')} (Tgl 1)</strong></div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                        Dasar Jumlah Hari Perhitungan Prorata
+                                                    </label>
+                                                    <select
+                                                        value={data.prorata_basis_mode}
+                                                        onChange={(e) => setData('prorata_basis_mode', e.target.value as 'ACTUAL' | '30_DAYS')}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                                    >
+                                                        <option value="ACTUAL">Hari Aktual Kalender Bulan Berjalan</option>
+                                                        <option value="30_DAYS">Standar 30 Hari per Bulan</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                                                        Status Pembayaran Prorata
+                                                    </label>
+                                                    <select
+                                                        value={data.prorata_status}
+                                                        onChange={(e) => setData('prorata_status', e.target.value as 'PENDING_PAYMENT' | 'UNPAID' | 'PAID')}
+                                                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-neutral-900"
+                                                    >
+                                                        <option value="PENDING_PAYMENT">Menunggu Pembayaran (PENDING_PAYMENT)</option>
+                                                        <option value="UNPAID">Belum Lunas (UNPAID)</option>
+                                                        <option value="PAID">Lunas (PAID)</option>
+                                                    </select>
+                                                </div>
                                             </div>
+
+                                            {/* Ringkasan Perhitungan Prorata Transparan */}
+                                            {!data.initial_paid_until ? (
+                                                <div className="p-3 rounded-lg bg-white border border-amber-300 text-xs text-amber-800">
+                                                    <strong>Perhatian:</strong> Periode pembayaran awal yang sudah dibayar belum diisi.
+                                                </div>
+                                            ) : liveProrataPreview && (
+                                                <div className="p-3.5 rounded-lg bg-white border border-neutral-300 space-y-2 text-xs">
+                                                    <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+                                                        <span className="font-bold text-neutral-900 uppercase tracking-wider">
+                                                            Ringkasan Perhitungan Prorata
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-700 font-semibold">
+                                                            {liveProrataPreview.prorataDays && liveProrataPreview.prorataDays > 0
+                                                                ? `${liveProrataPreview.prorataDays} Hari Penyesuaian`
+                                                                : 'Tanpa Prorata (0 Hari)'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-neutral-600">
+                                                        <div>Periode Sudah Dibayar s/d: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.initialPaidUntil || '')}</strong></div>
+                                                        <div>Periode Prorata: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.prorataStartDate || '')} s/d {formatDisplayDate(liveProrataPreview.prorataEndDate || '')}</strong></div>
+                                                        <div>Jumlah Hari Prorata: <strong className="text-neutral-900">{liveProrataPreview.prorataDays ?? 0} hari</strong></div>
+                                                        <div>Tarif Harian: <strong className="text-neutral-900">{formatRupiah(liveProrataPreview.prorataDailyRate ?? 0)} / hari</strong> ({liveProrataPreview.prorataBasisDays} hari)</div>
+                                                        <div>Total Biaya Prorata: <strong className="text-emerald-700 text-sm">{formatRupiah(liveProrataPreview.prorataAmount ?? 0)}</strong></div>
+                                                        <div>Jatuh Tempo Normal Berikutnya: <strong className="text-neutral-900">{formatDisplayDate(liveProrataPreview.normalPeriodStartDate || '')} (Tgl 1)</strong></div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

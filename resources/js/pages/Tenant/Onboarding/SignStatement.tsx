@@ -5,6 +5,7 @@ import {
     buildStatementHTML as buildStatementTemplateHTML,
     indonesianToday,
     calcReminderDay,
+    calcDueDay,
     type StatementParams,
     type ProrataInfo,
 } from '@/services/statement';
@@ -43,7 +44,7 @@ export default function SignStatement({ tenancy, profile, agreement }: SignState
     };
     const birthLine = (place?: string, date?: string) => [place, formatDisplayDate(date)].filter(Boolean).join(', ');
 
-    const dueDay = tenancy?.due_day != null ? String(tenancy.due_day) : '1';
+    const dueDay = tenancy?.due_day != null ? String(tenancy.due_day) : calcDueDay(tenancy?.move_in_date);
     const dendaPerDay = tenancy?.denda_per_day != null
         ? String(Math.round(Number(tenancy.denda_per_day)))
         : String(Math.round((Number(tenancy?.agreed_price) || 0) / 30));
@@ -56,15 +57,16 @@ export default function SignStatement({ tenancy, profile, agreement }: SignState
         ? tenancy.facilities
         : [];
 
-    const prorataInfo: ProrataInfo | undefined = (tenancy?.initial_paid_until || tenancy?.prorata_days != null)
+    const hasActiveProrata = tenancy?.prorata_days != null && Number(tenancy.prorata_days) > 0 && Number(tenancy.prorata_amount) > 0;
+    const prorataInfo: ProrataInfo | undefined = hasActiveProrata
         ? {
             moveInDate: tenancy?.move_in_date,
             initialPaidUntil: tenancy?.initial_paid_until,
             prorataStartDate: tenancy?.prorata_start_date,
             prorataEndDate: tenancy?.prorata_end_date,
-            prorataDays: tenancy?.prorata_days != null ? Number(tenancy.prorata_days) : undefined,
+            prorataDays: Number(tenancy.prorata_days),
             dailyRate: tenancy?.prorata_daily_rate != null ? Number(tenancy.prorata_daily_rate) : undefined,
-            prorataAmount: tenancy?.prorata_amount != null ? Number(tenancy.prorata_amount) : undefined,
+            prorataAmount: Number(tenancy.prorata_amount),
             normalPeriodStartDate: tenancy?.normal_period_start_date,
         }
         : undefined;
