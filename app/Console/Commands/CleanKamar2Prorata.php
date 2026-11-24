@@ -21,7 +21,7 @@ class CleanKamar2Prorata extends Command
     {
         $this->info('Mencari data Kamar 2...');
 
-        $tenancies = Tenancy::with(['property', 'statementAgreement'])
+        $tenancies = Tenancy::with('property')
             ->whereHas('property', function ($q) {
                 $q->where('name', 'like', '%2%');
             })
@@ -29,8 +29,8 @@ class CleanKamar2Prorata extends Command
             ->get();
 
         if ($tenancies->isEmpty()) {
-            $this->warn('Tidak ditemukan tenancy dengan kamar bernama "2". Menampilkan 5 tenancy terbaru:');
-            $tenancies = Tenancy::with(['property', 'statementAgreement'])->latest()->take(5)->get();
+            $this->warn('Tidak ditemukan tenancy dengan kamar bernama "2". Mengambil semua tenancy terbaru:');
+            $tenancies = Tenancy::with('property')->latest()->take(10)->get();
         }
 
         foreach ($tenancies as $tenancy) {
