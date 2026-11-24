@@ -34,10 +34,11 @@ class AgreementStatementService
     /**
      * Build the HTML summary block for confirmed initial payment, prorata adjustment,
      * and monthly due date (tanggal 1) to be displayed in the Surat Pernyataan.
+     * Prorata terms are strictly optional and ONLY shown when prorata is actually active.
      */
     public static function buildPaymentTermsBlockHtml(Tenancy $tenancy): string
     {
-        if (! $tenancy->initial_paid_until && $tenancy->prorata_days === null) {
+        if (! $tenancy->prorata_days || (int) $tenancy->prorata_days <= 0 || ! $tenancy->prorata_amount || (float) $tenancy->prorata_amount <= 0) {
             return '';
         }
 
@@ -49,20 +50,19 @@ class AgreementStatementService
 
         $rows = [
             '<li>Harga sewa bulanan: <strong>Rp '.$rentFormatted.' / bulan</strong></li>',
-            '<li>Tanggal masuk: <strong>'.e($moveIn).'</strong> · Periode pembayaran awal dibayar s/d: <strong>'.e($paidUntil).'</strong></li>',
         ];
 
-        if ((int) $tenancy->prorata_days > 0 && (float) $tenancy->prorata_amount > 0) {
-            $prorataStart = e((string) $tenancy->prorata_start_date);
-            $prorataEnd = e((string) $tenancy->prorata_end_date);
-            $days = (int) $tenancy->prorata_days;
-            $dailyRate = number_format((float) $tenancy->prorata_daily_rate, 0, ',', '.');
-            $prorataTotal = number_format((float) $tenancy->prorata_amount, 0, ',', '.');
-
-            $rows[] = '<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>'.$prorataStart.' s/d '.$prorataEnd.'</strong> (<strong>'.$days.' hari</strong> × tarif harian <strong>Rp '.$dailyRate.'</strong>) = <strong>Rp '.$prorataTotal.'</strong></li>';
-        } else {
-            $rows[] = '<li>Ketentuan biaya prorata: <strong>Tidak ada biaya prorata tambahan (Rp 0)</strong></li>';
+        if ($tenancy->initial_paid_until) {
+            $rows[] = '<li>Tanggal masuk: <strong>'.e($moveIn).'</strong> · Periode pembayaran awal dibayar s/d: <strong>'.e($paidUntil).'</strong></li>';
         }
+
+        $prorataStart = e((string) $tenancy->prorata_start_date);
+        $prorataEnd = e((string) $tenancy->prorata_end_date);
+        $days = (int) $tenancy->prorata_days;
+        $dailyRate = number_format((float) $tenancy->prorata_daily_rate, 0, ',', '.');
+        $prorataTotal = number_format((float) $tenancy->prorata_amount, 0, ',', '.');
+
+        $rows[] = '<li>Ketentuan biaya prorata (penyesuaian jatuh tempo): periode <strong>'.$prorataStart.' s/d '.$prorataEnd.'</strong> (<strong>'.$days.' hari</strong> × tarif harian <strong>Rp '.$dailyRate.'</strong>) = <strong>Rp '.$prorataTotal.'</strong></li>';
 
         if ($tenancy->normal_period_start_date) {
             $rows[] = '<li>Periode sewa bulanan normal dimulai: <strong>'.e((string) $tenancy->normal_period_start_date).'</strong></li>';
@@ -87,14 +87,16 @@ class AgreementStatementService
 
         $blockHtml = self::buildPaymentTermsBlockHtml($tenancy);
 
+        // Strip any existing payment terms block first
         if (str_contains($html, self::PAYMENT_TERMS_MARKER)) {
-            $pos = strpos($html, '<div '.self::PAYMENT_TERMS_MARKER);
-            if ($pos !== false) {
-                $endPos = strpos($html, '</div></div>', $pos);
-                if ($endPos !== false) {
-                    return substr($html, 0, $pos).$blockHtml.substr($html, $endPos + strlen('</div></div>'));
-                }
-            }
+            $pattern = '/<div\s+[^>]*'.preg_quote(self::PAYMENT_TERMS_MARKER, '/').'[^>]*>.*?<\/div>\s*<\/div>/is';
+            $html = preg_replace($pattern, '', $html);
+        }
+
+        // Also clean up any lingering old-style / untagged block if present
+        $altPattern = '/<div\s+style="[^"]*border:[^"]*"[^>]*>\s*<div[^>]*>Rincian Ketentuan Pembayaran Awal[^<]*<\/div>.*?<\/div>/is';
+        if (preg_match($altPattern, $html)) {
+            $html = preg_replace($altPattern, '', $html);
         }
 
         if ($blockHtml === '') {

@@ -1154,12 +1154,12 @@ export default function Wizard({ tenancy, profile, adminTenancyId, agreement }: 
                         {statementMode === 'digital' ? (
                             <>
                                 <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-sm overflow-x-hidden text-sm"
-                                     dangerouslySetInnerHTML={{ __html: data.document_html || buildStatementHTML() }}
+                                     dangerouslySetInnerHTML={{ __html: buildStatementHTML() }}
                                 />
 
                                 <div className="flex gap-3 pt-4">
                                     <button onClick={() => setStep(6)} className="px-6 py-3 rounded-lg font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 w-1/3">Kembali</button>
-                                    <button onClick={() => { if(!data.document_html) generateAgreementHTML(); nextStep(); }} className="px-6 py-3 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 w-2/3">Setuju &amp; Lanjut</button>
+                                    <button onClick={() => { generateAgreementHTML(); nextStep(); }} className="px-6 py-3 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 w-2/3">Setuju &amp; Lanjut</button>
                                 </div>
                             </>
                         ) : (

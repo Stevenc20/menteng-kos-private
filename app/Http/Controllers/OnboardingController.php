@@ -482,6 +482,7 @@ class OnboardingController extends Controller
             'facilities' => 'nullable|array',
             'facilities.*' => 'nullable|string',
             'initial_paid_until' => 'nullable|date',
+            'enable_prorata' => 'nullable|boolean',
             'initial_payment_status' => 'nullable|string|in:UNPAID,PAID,PENDING_PAYMENT',
             'prorata_basis_mode' => 'nullable|string|in:ACTUAL,30_DAYS',
             'prorata_end_date' => 'nullable|date',
@@ -490,7 +491,7 @@ class OnboardingController extends Controller
 
         // Admin-only Save (Simpan Data Awal & Surat Pernyataan untuk Ditandatangani Tenant)
         if ($saveOnly) {
-            DB::transaction(function () use ($tenancy, $validated) {
+            DB::transaction(function () use ($tenancy, $validated, $request) {
                 $previousTerms = AgreementStatementService::snapshotTerms($tenancy);
 
                 $cleanFacilities = isset($validated['facilities']) && is_array($validated['facilities'])
@@ -519,8 +520,9 @@ class OnboardingController extends Controller
                     $tenancy->property->update(['facilities' => $cleanFacilities]);
                 }
 
-                // Sync prorata & initial payment if initial_paid_until is provided
-                if (array_key_exists('initial_paid_until', $validated) && ! empty($validated['initial_paid_until'])) {
+                // Sync prorata & initial payment ONLY if explicitly provided and enable_prorata is true
+                $enableProrata = $request->boolean('enable_prorata');
+                if ($enableProrata && ! empty($validated['initial_paid_until'])) {
                     ProrataBillingService::syncTenancyProrata($tenancy, [
                         'agreed_price' => $tenancy->agreed_price,
                         'move_in_date' => $tenancy->move_in_date,
@@ -530,6 +532,18 @@ class OnboardingController extends Controller
                         'prorata_basis_mode' => $validated['prorata_basis_mode'] ?? 'ACTUAL',
                         'prorata_end_date' => $validated['prorata_end_date'] ?? null,
                         'prorata_status' => $validated['prorata_status'] ?? 'PENDING_PAYMENT',
+                    ]);
+                } else {
+                    // Normal tenancy without prorata: clear any stale prorata settings
+                    $tenancy->update([
+                        'initial_paid_until' => null,
+                        'prorata_start_date' => null,
+                        'prorata_end_date' => null,
+                        'prorata_days' => null,
+                        'prorata_daily_rate' => null,
+                        'prorata_amount' => null,
+                        'prorata_status' => 'NOT_APPLICABLE',
+                        'normal_period_start_date' => null,
                     ]);
                 }
 
@@ -573,7 +587,8 @@ class OnboardingController extends Controller
         }
 
         // If admin context also sent prorata fields during direct sign-and-activate
-        if ($isAdminContext && ! empty($validated['initial_paid_until'])) {
+        $enableProrata = $request->boolean('enable_prorata');
+        if ($isAdminContext && $enableProrata && ! empty($validated['initial_paid_until'])) {
             ProrataBillingService::syncTenancyProrata($tenancy, [
                 'agreed_price' => $validated['agreed_price'] ?? $tenancy->agreed_price,
                 'move_in_date' => $validated['move_in_date'] ?? $tenancy->move_in_date,
@@ -583,6 +598,18 @@ class OnboardingController extends Controller
                 'prorata_basis_mode' => $validated['prorata_basis_mode'] ?? 'ACTUAL',
                 'prorata_end_date' => $validated['prorata_end_date'] ?? null,
                 'prorata_status' => $validated['prorata_status'] ?? 'PENDING_PAYMENT',
+            ]);
+            $tenancy->refresh();
+        } elseif ($isAdminContext && ! $enableProrata) {
+            $tenancy->update([
+                'initial_paid_until' => null,
+                'prorata_start_date' => null,
+                'prorata_end_date' => null,
+                'prorata_days' => null,
+                'prorata_daily_rate' => null,
+                'prorata_amount' => null,
+                'prorata_status' => 'NOT_APPLICABLE',
+                'normal_period_start_date' => null,
             ]);
             $tenancy->refresh();
         }
